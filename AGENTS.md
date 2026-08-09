@@ -1,0 +1,1 @@
+If a failure of the environment (for example, a missing tool, permissions issues, or lack of access to a web resouce) prevents you from following a plan, do NOT continue. Stop and inform the user of the problem.
