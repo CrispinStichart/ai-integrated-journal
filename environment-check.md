@@ -46,9 +46,9 @@ provider decision is made.
 Report each check using this table shape in the agent response; do not edit the
 table into this file.
 
-| Check | Status | Version or evidence | Notes |
-| --- | --- | --- | --- |
-| Example: Docker engine | PASS | `29.6.2`, Linux | Daemon reachable |
+| Check                  | Status | Version or evidence | Notes            |
+| ---------------------- | ------ | ------------------- | ---------------- |
+| Example: Docker engine | PASS   | `29.6.2`, Linux     | Daemon reachable |
 
 Use only `PASS`, `FAIL`, `NOT RUN`, or `DEFERRED`. On failure, include:
 
@@ -191,6 +191,23 @@ Create a minimal `package.json` in that directory with the following content:
 }
 ```
 
+Create `pnpm-workspace.yaml` alongside it with explicit lifecycle-script
+decisions for the dependencies used by this smoke test:
+
+```yaml
+allowBuilds:
+  argon2: true
+  cpu-features: false
+  protobufjs: true
+  ssh2: false
+```
+
+`argon2` must install its required native binary, and `protobufjs` must run its
+postinstall step. The `cpu-features` and `ssh2` packages are optional native
+accelerators in the Testcontainers dependency graph; this test uses their
+JavaScript fallbacks instead of requiring a host compiler toolchain. Do not use
+`approve-builds --all` or globally weaken pnpm's lifecycle-script policy.
+
 Run `corepack pnpm --version`. It must report exactly `11.21.0`. Downloading and
 caching the pinned package manager is part of this test, but do not activate it
 globally.
@@ -203,9 +220,10 @@ From the disposable directory, prove registry access and package installation:
 npm view lodash-es version
 corepack pnpm view lodash-es version
 corepack pnpm add lodash-es argon2 pg
-corepack pnpm add --save-dev typescript @types/node @types/pg \
+corepack pnpm add --save-dev typescript @types/node @types/pg @types/lodash-es \
   eslint @eslint/js prettier vitest \
   @testcontainers/postgresql playwright
+corepack pnpm ignored-builds
 ```
 
 On PowerShell, put the command on one line or replace each POSIX `\` line
@@ -216,6 +234,8 @@ Pass criteria:
 - Both registries return package metadata.
 - pnpm creates a lockfile and installs all dependencies in the disposable
   directory.
+- `corepack pnpm ignored-builds` reports no automatically ignored builds; it
+  reports only the explicitly denied optional `cpu-features` and `ssh2` builds.
 - There are no certificate, proxy, DNS, permissions, lifecycle-script, or
   native-binary errors.
 - `corepack pnpm audit` completes. Report advisories; treat an advisory as a
@@ -318,6 +338,8 @@ In the disposable Vitest project, add a test that:
 3. connects using `pg` and the container's returned connection URI;
 4. creates the `vector` extension and evaluates a vector-distance query;
 5. closes the client and stops the container in `finally` blocks.
+6. sets a 60-second test timeout so container startup is not constrained by
+   Vitest's 5-second unit-test default.
 
 Run only that test:
 
