@@ -20,7 +20,7 @@ The first supported deployment is a private, single-user installation on localho
 
 | Area | Decision | Reason |
 | --- | --- | --- |
-| Repository | pnpm workspaces with Turborepo | Mature TypeScript monorepo workflow, shared caching, and simple package boundaries. |
+| Repository | pnpm workspaces | Keeps the small, single-developer monorepo simple while supporting shared packages and filtered/recursive scripts without a separate task runner. |
 | Runtime | Current Node.js active LTS, pinned per repository | Common runtime for the API, worker, tooling, and shared TypeScript. |
 | Frontend | Vue 3, TypeScript, Vite, Vue Router, Pinia, TanStack Vue Query, VueUse | Required Vue/Vite stack; explicit separation of route, local, and server state. |
 | UI | Tailwind CSS with daisyUI | Required component system; semantic daisyUI theme tokens support accessible themes. |
@@ -100,6 +100,8 @@ Shared packages contain behavior or contracts genuinely used by more than one pr
 ## 5. Engineering conventions
 
 - TypeScript uses `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and `useUnknownInCatchVariables`.
+- Root package scripts use pnpm workspace filtering and recursive execution to run development, build, typecheck, lint, and test tasks across applications and packages. Independent watch-mode tasks run in parallel; dependency-sensitive build tasks follow workspace dependency order.
+- CI caches the pnpm package store but does not add build-output/task caching initially. A dedicated monorepo task runner may be reconsidered only if measured build or test times justify it.
 - ESLint, Prettier, and dependency-boundary rules run from the repository root. No `any` is allowed without a localized explanation.
 - `lodash-es` is used for well-tested collection/object operations when it improves clarity; native primitives remain appropriate for trivial operations. Server builds preserve ESM tree-shaking.
 - Vue code uses Composition API and `<script setup>`. VueUse is the first choice for browser events, connectivity, media queries, storage, focus, visibility, and lifecycle helpers.
