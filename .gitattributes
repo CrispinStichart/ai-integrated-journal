@@ -1,0 +1,5 @@
+.gitattributes text eol=lf
+.devcontainer/*.sh text eol=lf
+.devcontainer/Dockerfile text eol=lf
+.devcontainer/.dockerignore text eol=lf
+.devcontainer/*.json text eol=lf
