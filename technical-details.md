@@ -11,3 +11,5 @@ The frontend can target the latest browser APIs, so long as they work on Firefox
 The frontend should take advantage of VueUse whenever possible, rather than rolling your own helpers.
 
 Both the frontend and backend should take advantage of `lodash` (via the `lodash-es` package) wherever possible.
+
+Good software engineering practices should always be used. Don't take shortcuts.
