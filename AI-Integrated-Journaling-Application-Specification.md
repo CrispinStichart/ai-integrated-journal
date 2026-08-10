@@ -456,21 +456,19 @@ Journal Day
 
 **SEC-002** The system SHALL require strong authentication and SHALL support secure session management. Network-level access restriction MAY be used as an additional control but SHALL NOT be treated as the sole protection unless the deployment is explicitly designed as isolated and the risk is accepted.
 
-**SEC-003** Data SHALL be protected in transit and at rest.
+**SEC-003** Model and integration credentials SHALL be kept separate from journal content and SHALL never be exposed in client-visible logs or exports.
 
-**SEC-004** Model and integration credentials SHALL be kept separate from journal content and SHALL never be exposed in client-visible logs or exports.
+**SEC-004** The user SHALL be informed which provider receives which content for processing and SHALL be able to disable a provider or processor.
 
-**SEC-005** The user SHALL be informed which provider receives which content for processing and SHALL be able to disable a provider or processor.
+**SEC-005** The system SHOULD minimize content sent to external models to what is necessary for the declared operation.
 
-**SEC-006** The system SHOULD minimize content sent to external models to what is necessary for the declared operation.
+**SEC-006** Provider data-retention/training implications SHALL be disclosed at configuration time where known.
 
-**SEC-007** Provider data-retention/training implications SHALL be disclosed at configuration time where known.
+**SEC-007** Logs and diagnostics SHALL avoid journal text and audio by default and SHALL use redaction where content is necessary for troubleshooting.
 
-**SEC-008** Logs and diagnostics SHALL avoid journal text and audio by default and SHALL use redaction where content is necessary for troubleshooting.
+**SEC-008** Administrative and destructive actions SHALL be auditable.
 
-**SEC-009** Administrative and destructive actions SHALL be auditable.
-
-**SEC-010** Memories about third parties SHALL receive the same privacy protections as journal content.
+**SEC-009** Memories about third parties SHALL receive the same privacy protections as journal content.
 
 ## 19. Backup, export, and portability
 
