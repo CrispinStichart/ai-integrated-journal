@@ -29,7 +29,7 @@ The first supported deployment is a private, single-user installation on localho
 | Validation/contracts | Zod schemas shared by web, API, and worker; generated OpenAPI 3.1 | One runtime-valid contract rather than duplicated TypeScript-only types. |
 | Metadata store | PostgreSQL with Drizzle ORM and SQL migrations | Transactions, JSONB, full-text search, provenance relationships, and vector support fit the domain. |
 | Semantic index | `pgvector`, enabled only when an embedding provider is configured | Keeps semantic and relational deletion semantics in one durable store. |
-| Job queue | Redis and BullMQ | Durable asynchronous stages, retries, concurrency limits, and scheduled work. PostgreSQL remains the source of truth for run state. |
+| Job queue | `pg-boss` on PostgreSQL | Durable asynchronous stages, retries, concurrency limits, and scheduled work without a second infrastructure service. Jobs can be created atomically with application changes. |
 | Blob storage | `BlobStore` interface; local filesystem implementation initially, Azure Blob implementation later | Meets the required storage portability while retaining immutable object semantics. |
 | API style | Versioned REST JSON, streaming binary routes, and server-sent events (SSE) | Simple browser integration; SSE is sufficient for one-way processing updates. |
 | IDs | UUIDv7 generated before persistence where practical | Stable, globally unique, time-sortable identities that work offline. |
@@ -48,10 +48,10 @@ Firefox Mobile / desktop browser
               │ REST, streamed chunks, SSE
               ▼
         Express API process
-          ├─ PostgreSQL ── metadata, revisions, provenance, search
+          ├─ PostgreSQL ── metadata, revisions, provenance, search,
+          │                 and pg-boss jobs
           ├─ BlobStore ─── local files initially; Azure Blob later
-          ├─ Redis ─────── BullMQ queues and ephemeral coordination
-          └─ transactional outbox
+          └─ pg-boss client
                          │
                          ▼
                    Worker process
@@ -62,9 +62,9 @@ Firefox Mobile / desktop browser
                        retention, and indexing jobs
 ```
 
-The API and worker are separate processes but use the same domain and persistence packages. The API never waits synchronously for transcription or processor completion. Capture and durable storage remain usable when Redis or an AI provider is unavailable (ARCH-005, STATE-002, STATE-006, STATE-007).
+The API and worker are separate processes but use the same domain and persistence packages. The API never waits synchronously for transcription or processor completion. Browser capture continues to save locally when the API is unavailable, and durable sources remain usable when workers or an AI provider are unavailable (ARCH-005, STATE-002, STATE-006, STATE-007).
 
-PostgreSQL is the authority for journal state and processing lifecycle. Redis messages are work notifications, not the only record that work exists. A transactional outbox written in the same database transaction as a state change is dispatched to BullMQ; a periodic reconciler republishes undispatched or stranded work.
+PostgreSQL is the authority for journal state, processing lifecycle, and queued work. The API inserts a `pg-boss` job within the same PostgreSQL transaction as the state change that requires it, using the official Drizzle integration. A commit makes both visible; a rollback creates neither. `pg-boss` is used directly as the concrete queue implementation—there is no application-level queue abstraction. Queue names and job option constants are shared to prevent producer/consumer drift.
 
 ## 4. Monorepo layout
 
@@ -73,7 +73,7 @@ PostgreSQL is the authority for journal state and processing lifecycle. Redis me
 ├─ apps/
 │  ├─ web/                 Vue/Vite PWA
 │  ├─ api/                 Express HTTP/SSE application
-│  └─ worker/              BullMQ consumers and scheduled jobs
+│  └─ worker/              pg-boss consumers and scheduled jobs
 ├─ packages/
 │  ├─ contracts/           Zod API schemas, DTOs, enums, OpenAPI generation
 │  ├─ domain/              entities, value objects, policies, state machines
@@ -85,7 +85,7 @@ PostgreSQL is the authority for journal state and processing lifecycle. Redis me
 │  ├─ config/              environment parsing and typed configuration
 │  └─ test-support/        factories, fixtures, fake providers, containers
 ├─ infrastructure/
-│  ├─ compose.yaml         local PostgreSQL and Redis
+│  ├─ compose.yaml         local PostgreSQL with pgvector
 │  └─ local/               local data-directory bootstrap and backup scripts
 ├─ docs/
 │  └─ adr/                 consequential decision records
@@ -182,7 +182,6 @@ Built-in payload contracts include:
 | `requirement_evaluations` | Day, processor version, one of the required semantic states, supporting run, revision. |
 | `nudges` / `nudge_items` | Consolidated digest, schedule, status, day, linked evaluations, response contribution. |
 | `audit_events` | Actor, action, target identifiers, before/after hashes or non-sensitive metadata, correlation ID, time. |
-| `outbox_events` | Event type, aggregate/version, payload, dispatch state and attempts. |
 
 Occurrence-only corrections update only the selected revision. Creating a global memory/rule is a distinct, explicit command and approval flow. Suggested memories remain inactive until approved. Memory content and changes are visible through the settings UI (MEM-001–MEM-007, FB-001–FB-004).
 
@@ -273,7 +272,9 @@ The API returns source material and generated synthesis in distinct fields/types
 
 ### 10.1 Job model
 
-Queues are separated by capability: `transcription`, `cleanup`, `processor`, `embedding`, `export`, and `maintenance`. Each job contains identifiers only; the worker reloads canonical inputs from PostgreSQL and blob storage. Provider concurrency, timeout, and rate limits are configurable per adapter.
+`pg-boss` queues are separated by capability: `transcription`, `cleanup`, `processor`, `embedding`, `export`, and `maintenance`. Each job contains identifiers only; the worker reloads canonical inputs from PostgreSQL and blob storage. Provider concurrency, timeout, and rate limits are configurable per adapter. Queue tables live in the dedicated `pgboss` schema, with retention policies that bound completed-job growth and a connection budget that leaves capacity for interactive journal traffic.
+
+API services and workers import `pg-boss` directly. Job creation that follows an application mutation uses the active Drizzle/PostgreSQL transaction so canonical state and its queued work commit atomically. Maintenance and scheduled jobs use `pg-boss` cron/scheduling directly. Queue dependencies, retries with exponential backoff, priorities, dead-letter behavior, singleton/debounce policies, and worker concurrency use native `pg-boss` options rather than parallel application mechanisms.
 
 A stage's idempotency fingerprint is a hash of stage type, exact input revision IDs/hashes, processor/prompt version, provider/model configuration, and relevant memory/context version. A successful matching run can be reused. Retry creates a new attempt linked to the original run while preserving its audit record. Exponential backoff with jitter applies only to classified transient errors; validation, unsupported media, and authentication errors require intervention (STATE-001–STATE-005).
 
@@ -404,7 +405,7 @@ Exports are asynchronous, point-in-time jobs that stream a ZIP archive without l
 
 The export schema is documented and versioned. Unknown/none/neutral/not-applicable states and authority/manual overrides remain tagged, not flattened. Export downloads are authenticated, time-limited, and audited (PORT-003–PORT-008, AC-050–AC-052).
 
-Local backup tooling takes a consistent PostgreSQL dump, Redis-independent application state, blob objects, configuration metadata without secrets, and checksums into an encrypted archive. Default schedule is daily incremental/logical backup with a documented retention policy; exact scheduling is configurable because the initial application runs only when the local host is available. Restore runs into an empty target, validates checksums and referential integrity, and rebuilds derived search indexes. CI tests backup/restore on representative fixtures; an operator-facing restore drill is documented (PORT-001, PORT-002).
+Local backup tooling takes a consistent PostgreSQL dump—including required `pg-boss` schema state—blob objects, configuration metadata without secrets, and checksums into an encrypted archive. Default schedule is daily incremental/logical backup with a documented retention policy; exact scheduling is configurable because the initial application runs only when the local host is available. Restore runs into an empty target, validates checksums and referential integrity, rebuilds derived search indexes, and resumes only non-terminal jobs whose run state still requires work. CI tests backup/restore on representative fixtures; an operator-facing restore drill is documented (PORT-001, PORT-002).
 
 ## 16. Observability and operations
 
@@ -414,25 +415,25 @@ Health endpoints are split:
 
 - `/health/live`: process event loop is responsive;
 - `/health/ready`: required PostgreSQL/storage dependencies are available; API readiness does not require an AI provider;
-- `/health/details`: authenticated owner view of Redis, queue backlog, storage, migrations, and configured provider capability status.
+- `/health/details`: authenticated owner view of PostgreSQL and `pg-boss`, queue backlog, storage, migrations, and configured provider capability status.
 
 Metrics include capture/finalization success, staging age, job queue age, stage outcomes/retries, stale artifact count, provider latency/rate-limit failures, search indexing lag, and backup/export outcomes. Metrics use IDs and counts, never content.
 
-Graceful shutdown stops new HTTP requests/jobs, completes or safely abandons active chunk writes, returns in-progress jobs to the queue, and closes database/Redis connections. Worker stages use leases/heartbeats so a crashed worker can be retried safely.
+Graceful shutdown stops new HTTP requests/jobs, completes or safely abandons active chunk writes, asks `pg-boss` workers to stop within a bounded grace period, and then closes PostgreSQL connections. Job expiration, retries, and worker heartbeats allow work abandoned by a crashed worker to be recovered safely.
 
 ## 17. Local development and deployment
 
 The initial environment is localhost only:
 
 1. pnpm runs the web, API, and worker in watch mode.
-2. Docker Compose runs PostgreSQL with `pgvector` and Redis in named local volumes.
+2. Docker Compose runs PostgreSQL with `pgvector` in a named local volume; no separate queue service is required.
 3. Blob data is stored in a configured application-data directory outside Git.
 4. Vite proxies `/api` to Express so the browser uses one origin.
 5. Localhost's browser secure-context exception supports service workers, media capture, and WebAuthn; non-localhost access requires HTTPS.
 
-Configuration is parsed once at process startup by the shared config package. A checked-in `.env.example` documents non-secret settings. Production/staging environment assumptions are intentionally deferred until deployment is selected; deployment-specific work must add an ADR covering TLS termination, network boundaries, secret management, database/Redis service levels, Azure storage, backup destination, and disaster recovery.
+Configuration is parsed once at process startup by the shared config package. A checked-in `.env.example` documents non-secret settings. Production/staging environment assumptions are intentionally deferred until deployment is selected; deployment-specific work must add an ADR covering TLS termination, network boundaries, secret management, PostgreSQL service levels and queue connection budget, Azure storage, backup destination, and disaster recovery.
 
-Schema migrations run as an explicit command before application rollout, never automatically from every replica. Seed commands create built-in processor definitions and development fixtures idempotently.
+Application and `pg-boss` schema migrations run as an explicit, single deployment step before application rollout, never concurrently from every replica. Workers start only after the expected application and `pg-boss` schema versions are present. Seed commands create queues, schedules, built-in processor definitions, and development fixtures idempotently.
 
 ## 18. Testing and quality gates
 
@@ -443,9 +444,9 @@ Schema migrations run as an explicit command before application rollout, never a
 | Static | TypeScript, ESLint, Prettier check, dependency-boundary and OpenAPI generation checks. |
 | Unit/domain | Vitest; state machines, semantic value types, temporal rules, reconciliation, staleness, idempotency, prompt assembly, redaction. |
 | Component | Vitest, Vue Test Utils, Testing Library, axe; daisyUI-rendered workflows, offline/status/error UI, accessibility. |
-| API integration | Vitest, Supertest, Testcontainers PostgreSQL/Redis; transactions, migrations, auth, range requests, queue outbox. |
+| API integration | Vitest, Supertest, Testcontainers PostgreSQL; transactions, migrations, auth, range requests, and atomic application/job insertion. |
 | Adapter contract | Shared suites for blob stores and fake/real-shape AI adapters; immutable writes, ranges, checksums, missing capability behavior. |
-| Worker integration | BullMQ with Testcontainers and deterministic fake providers; retries, crash recovery, fingerprints, dependency invalidation. |
+| Worker integration | `pg-boss` with Testcontainers PostgreSQL and deterministic fake providers; retries, scheduling, crash recovery, fingerprints, dependency invalidation. |
 | PWA/offline | Playwright with network state and browser context controls; reload recovery, outbox replay, cache isolation, service-worker upgrade. |
 | End-to-end | Playwright; source-to-result workflows, corrections, search citations, export, deletion, and recovery. Firefox is mandatory; Chromium may run additionally. |
 
@@ -504,7 +505,7 @@ Each increment preserves source data without depending on later AI features. No 
 The following are deliberately deferred because the high-level overview does not select a hosted deployment:
 
 - cloud/runtime host and network topology;
-- managed PostgreSQL and Redis products;
+- managed PostgreSQL product, capacity, and connection-pooling topology;
 - final Azure container/account layout and managed-identity configuration;
 - backup destination and hosted retention service-level objectives;
 - specific AI vendors and default model identifiers;
