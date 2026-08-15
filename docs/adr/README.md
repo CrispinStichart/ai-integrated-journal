@@ -23,3 +23,4 @@ Changing an accepted decision requires a new ADR that identifies the record it s
 | [0006](0006-first-usable-release-boundary.md)           | Accepted | First usable release boundary                                     |
 | [0007](0007-atomic-queue-job-insertion.md)              | Accepted | Atomic queue job insertion through Drizzle                        |
 | [0008](0008-recoverable-audio-finalization.md)          | Accepted | Recoverable audio finalization across PostgreSQL and blob storage |
+| [0009](0009-privacy-evidence-and-retention-defaults.md) | Accepted | Privacy, evidence, retention, and local backup defaults           |
