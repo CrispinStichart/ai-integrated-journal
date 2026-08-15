@@ -54,6 +54,7 @@ No row is `Verified` in this Phase 0 baseline.
 | ADR-0004 | `DOMAIN-KERNEL` and `PROCESSOR` directly cover field/whole-artifact overrides, manual deletion, staleness, conflicts, relinquishment, and export/restore authority. |
 | ADR-0005 | `PROCESSOR` covers immutable publication, semantic labels, exact dependencies, DAG rejection, fingerprints, targeted invalidation, history, and version-basis reporting. |
 | ADR-0006 | `RELEASE-E2E` applies the source-only release gates and retains partial status for the audio-dependent portions of AC-001 and AC-003. |
+| ADR-0007 | `spikes/queue-transactionality/queue-transactionality.test.mjs` proves that an application mutation and `pg-boss` job commit and roll back together through the official Drizzle adapter. |
 
 ## Architectural and data requirements
 

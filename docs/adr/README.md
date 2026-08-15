@@ -21,3 +21,4 @@ Changing an accepted decision requires a new ADR that identifies the record it s
 | [0004](0004-manual-and-generated-authority.md) | Accepted | Manual and generated authority |
 | [0005](0005-processor-dependencies-and-versioning.md) | Accepted | Processor dependencies and versioning |
 | [0006](0006-first-usable-release-boundary.md) | Accepted | First usable release boundary |
+| [0007](0007-atomic-queue-job-insertion.md) | Accepted | Atomic queue job insertion through Drizzle |
