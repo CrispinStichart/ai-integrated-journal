@@ -1,0 +1,4 @@
+ALTER TABLE "journal"."audit_event" ADD CONSTRAINT "audit_event_id_uuid_v7" CHECK (substring("journal"."audit_event"."id"::text from 15 for 1) = '7');--> statement-breakpoint
+ALTER TABLE "journal"."audit_event" ADD CONSTRAINT "audit_event_actor_id_uuid_v7" CHECK ("journal"."audit_event"."actor_id" is null or substring("journal"."audit_event"."actor_id"::text from 15 for 1) = '7');--> statement-breakpoint
+ALTER TABLE "journal"."audit_event" ADD CONSTRAINT "audit_event_entity_id_uuid_v7" CHECK ("journal"."audit_event"."entity_id" is null or substring("journal"."audit_event"."entity_id"::text from 15 for 1) = '7');--> statement-breakpoint
+ALTER TABLE "journal"."processor_installation" ADD CONSTRAINT "processor_installation_id_uuid_v7" CHECK (substring("journal"."processor_installation"."id"::text from 15 for 1) = '7');

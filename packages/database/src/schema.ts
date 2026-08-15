@@ -1,0 +1,217 @@
+import { sql } from 'drizzle-orm';
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+export const journalSchema = pgSchema('journal');
+
+export const processorRequirementMode = pgEnum('processor_requirement_mode', [
+  'optional',
+  'required',
+]);
+
+export const queueConfigurations = journalSchema.table(
+  'queue_configuration',
+  {
+    name: text('name').primaryKey(),
+    payloadSchemaVersion: integer('payload_schema_version').notNull(),
+    retryLimit: integer('retry_limit').notNull(),
+    retryDelaySeconds: integer('retry_delay_seconds').notNull(),
+    retryBackoff: boolean('retry_backoff').notNull(),
+    expireInSeconds: integer('expire_in_seconds').notNull(),
+    retentionSeconds: integer('retention_seconds').notNull(),
+    deadLetterQueue: text('dead_letter_queue'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.deadLetterQueue],
+      foreignColumns: [table.name],
+      name: 'queue_configuration_dead_letter_queue_fk',
+    })
+      .onDelete('restrict')
+      .onUpdate('cascade'),
+    check('queue_configuration_name_not_blank', sql`length(${table.name}) > 0`),
+    check(
+      'queue_configuration_payload_schema_version_positive',
+      sql`${table.payloadSchemaVersion} > 0`,
+    ),
+    check(
+      'queue_configuration_retry_limit_valid',
+      sql`${table.retryLimit} >= 0`,
+    ),
+    check(
+      'queue_configuration_retry_delay_valid',
+      sql`${table.retryDelaySeconds} >= 0`,
+    ),
+    check(
+      'queue_configuration_expiration_positive',
+      sql`${table.expireInSeconds} > 0`,
+    ),
+    check(
+      'queue_configuration_retention_valid',
+      sql`${table.retentionSeconds} >= 0`,
+    ),
+  ],
+);
+
+export const schedules = journalSchema.table(
+  'schedule',
+  {
+    key: text('key').primaryKey(),
+    queueName: text('queue_name')
+      .notNull()
+      .references(() => queueConfigurations.name, {
+        onDelete: 'restrict',
+        onUpdate: 'cascade',
+      }),
+    cronExpression: text('cron_expression').notNull(),
+    timeZone: text('time_zone').notNull(),
+    payloadSchemaVersion: integer('payload_schema_version').notNull(),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('schedule_queue_name_idx').on(table.queueName),
+    check('schedule_key_not_blank', sql`length(${table.key}) > 0`),
+    check('schedule_cron_not_blank', sql`length(${table.cronExpression}) > 0`),
+    check('schedule_time_zone_not_blank', sql`length(${table.timeZone}) > 0`),
+    check(
+      'schedule_payload_schema_version_positive',
+      sql`${table.payloadSchemaVersion} > 0`,
+    ),
+  ],
+);
+
+export const processorInstallations = journalSchema.table(
+  'processor_installation',
+  {
+    id: uuid('id').primaryKey(),
+    key: text('key').notNull(),
+    displayName: text('display_name').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    requirementMode: processorRequirementMode('requirement_mode')
+      .notNull()
+      .default('optional'),
+    builtIn: boolean('built_in').notNull().default(true),
+    installedAt: timestamp('installed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_installation_key_unique').on(table.key),
+    check(
+      'processor_installation_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_installation_key_not_blank',
+      sql`length(${table.key}) > 0`,
+    ),
+    check(
+      'processor_installation_display_name_not_blank',
+      sql`length(${table.displayName}) > 0`,
+    ),
+  ],
+);
+
+export const developmentFixtures = journalSchema.table(
+  'development_fixture',
+  {
+    key: text('key').primaryKey(),
+    fixtureType: text('fixture_type').notNull(),
+    payloadSchemaVersion: integer('payload_schema_version').notNull(),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check('development_fixture_key_not_blank', sql`length(${table.key}) > 0`),
+    check(
+      'development_fixture_type_not_blank',
+      sql`length(${table.fixtureType}) > 0`,
+    ),
+    check(
+      'development_fixture_payload_schema_version_positive',
+      sql`${table.payloadSchemaVersion} > 0`,
+    ),
+  ],
+);
+
+export const auditEvents = journalSchema.table(
+  'audit_event',
+  {
+    id: uuid('id').primaryKey(),
+    action: text('action').notNull(),
+    actorId: uuid('actor_id'),
+    entityType: text('entity_type').notNull(),
+    entityId: uuid('entity_id'),
+    correlationId: uuid('correlation_id').notNull(),
+    metadata: jsonb('metadata')
+      .$type<Readonly<Record<string, string | number | boolean | null>>>()
+      .notNull()
+      .default({}),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('audit_event_occurred_at_id_idx').on(table.occurredAt, table.id),
+    index('audit_event_entity_idx').on(table.entityType, table.entityId),
+    check(
+      'audit_event_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'audit_event_actor_id_uuid_v7',
+      sql`${table.actorId} is null or substring(${table.actorId}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'audit_event_entity_id_uuid_v7',
+      sql`${table.entityId} is null or substring(${table.entityId}::text from 15 for 1) = '7'`,
+    ),
+    check('audit_event_action_not_blank', sql`length(${table.action}) > 0`),
+    check(
+      'audit_event_entity_type_not_blank',
+      sql`length(${table.entityType}) > 0`,
+    ),
+  ],
+);
+
+export const databaseSchema = {
+  auditEvents,
+  developmentFixtures,
+  processorInstallations,
+  queueConfigurations,
+  schedules,
+};

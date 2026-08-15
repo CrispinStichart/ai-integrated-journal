@@ -1,3 +1,13 @@
-console.log(
-  'No application migrations are registered yet; the explicit migration entry point is ready for Phase 1 task 11.',
-);
+import { createDatabaseClient } from '../client.js';
+import { parseDatabaseCommandEnvironment } from '../environment.js';
+import { migrateDatabase } from '../migrations.js';
+
+const { databaseUrl } = parseDatabaseCommandEnvironment(process.env);
+const client = createDatabaseClient({ connectionString: databaseUrl });
+
+try {
+  await migrateDatabase(client.database);
+  console.log('Database migrations completed.');
+} finally {
+  await client.close();
+}

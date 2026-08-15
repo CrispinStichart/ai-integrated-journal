@@ -1,0 +1,1 @@
+ALTER TABLE "journal"."queue_configuration" ADD CONSTRAINT "queue_configuration_dead_letter_queue_fk" FOREIGN KEY ("dead_letter_queue") REFERENCES "journal"."queue_configuration"("name") ON DELETE restrict ON UPDATE cascade;
