@@ -1,0 +1,16 @@
+{
+  "name": "audio-finalization-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.22"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 audio-finalization.test.mjs"
+  },
+  "dependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "pg": "8.23.0"
+  }
+}
