@@ -75,20 +75,8 @@ Define and test the recovery protocol between blob finalization and PostgreSQL c
 - Conflicting chunks or manifests.
 - Orphan discovery and safe sweeping.
 
-### 4. Firefox Mobile deployment spike
 
-Decide how a physical mobile browser accesses the initially local application. A phone cannot reach the host through its own `localhost`, and LAN access requires HTTPS for microphone capture, service workers, and WebAuthn.
-
-Test on Firefox Android:
-
-- Local HTTPS and WebAuthn origin behavior.
-- MediaRecorder MIME support and timeslices.
-- Suspension, route changes, reload, and recovery.
-- IndexedDB quota behavior.
-- Service-worker upgrades during capture.
-- Ranged audio playback.
-
-### 5. Privacy, evidence, and retention decisions
+### 4. Privacy, evidence, and retention decisions
 
 Record decisions for:
 
@@ -102,7 +90,7 @@ Record decisions for:
 - Default deletion grace periods, backup retention, nudge limits, quiet hours, and enabled processors.
 - Concrete local backup and encryption technology.
 
-### 6. Recording resource policy
+### 5. Recording resource policy
 
 Formalize “no maximum recording length” as no application-imposed final duration or size cap. Individual chunks and HTTP requests remain bounded. The system must monitor browser quota and disk space, surface exhaustion immediately, preserve already captured chunks, and never assemble an entire logical recording in memory.
 
