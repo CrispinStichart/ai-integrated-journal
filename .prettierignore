@@ -10,3 +10,4 @@ docs
 spikes
 *.md
 skills-lock.json
+packages/contracts/openapi/openapi.json

@@ -1,0 +1,516 @@
+{
+  "openapi": "3.1.1",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "AI-Integrated Journal API",
+    "version": "1.0.0",
+    "description": "Shared foundational contracts for the versioned local journal API."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1"
+    }
+  ],
+  "paths": {},
+  "components": {
+    "schemas": {
+      "ConditionalMutationHeaders": {
+        "type": "object",
+        "properties": {
+          "idempotency-key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 255,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "description": "Opaque key scoped to the authenticated actor and operation."
+          },
+          "if-match": {
+            "type": "string",
+            "pattern": "^\"(?:[\\u0021\\u0023-\\u007e]|[\\u0080-\\u00ff])+\"$",
+            "description": "Strong HTTP entity tag; weak W/ validators are rejected."
+          }
+        },
+        "required": [
+          "idempotency-key",
+          "if-match"
+        ],
+        "additionalProperties": false
+      },
+      "CursorPageMetadata": {
+        "type": "object",
+        "properties": {
+          "hasMore": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque, server-issued deterministic pagination cursor."
+          }
+        },
+        "required": [
+          "hasMore"
+        ],
+        "additionalProperties": false
+      },
+      "CursorPaginationRequest": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque, server-issued deterministic pagination cursor."
+          },
+          "limit": {
+            "default": 50,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "EditableResponseHeaders": {
+        "type": "object",
+        "properties": {
+          "etag": {
+            "type": "string",
+            "pattern": "^\"(?:[\\u0021\\u0023-\\u007e]|[\\u0080-\\u00ff])+\"$",
+            "description": "Strong HTTP entity tag; weak W/ validators are rejected."
+          }
+        },
+        "required": [
+          "etag"
+        ],
+        "additionalProperties": false
+      },
+      "IdempotencyResponseMetadata": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 255,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "description": "Opaque key scoped to the authenticated actor and operation."
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "replayed"
+        ],
+        "additionalProperties": false
+      },
+      "IdempotentMutationHeaders": {
+        "type": "object",
+        "properties": {
+          "idempotency-key": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 255,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "description": "Opaque key scoped to the authenticated actor and operation."
+          }
+        },
+        "required": [
+          "idempotency-key"
+        ],
+        "additionalProperties": false
+      },
+      "PersistedExtensibleValue": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Version of the containing durable or event payload schema."
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "description": "An explicitly extensible JSON object."
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "payload"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1
+          },
+          "instance": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+            "description": "Stable snake-case application code. This extension point is open so additive v1 errors remain compatible."
+          },
+          "correlationId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "invalidParameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "location": {
+                  "type": "string",
+                  "enum": [
+                    "body",
+                    "header",
+                    "path",
+                    "query"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "location",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code",
+          "correlationId"
+        ],
+        "additionalProperties": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "description": "RFC 9457 problem details. Consumers branch on status and code, not title or detail.",
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "SemanticJsonValue": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "known"
+              },
+              "value": {
+                "$ref": "#/$defs/__schema0"
+              }
+            },
+            "required": [
+              "state",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "none"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "neutral"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "not_applicable"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "uncertain"
+              },
+              "value": {
+                "$ref": "#/$defs/__schema0"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "SseEventEnvelope": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "eventType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "description": "Extensible event type. Unknown types are handled through polling fallback."
+          },
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "description": "An explicitly extensible JSON object."
+          }
+        },
+        "required": [
+          "eventId",
+          "eventType",
+          "schemaVersion",
+          "occurredAt",
+          "payload"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

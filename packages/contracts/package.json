@@ -15,6 +15,15 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "openapi:check": "tsx scripts/generate-openapi.ts --check",
+    "openapi:generate": "tsx scripts/generate-openapi.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "tsx": "4.23.12"
   }
 }

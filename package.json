@@ -20,13 +20,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
+    "openapi:check": "corepack pnpm --filter @journal/contracts openapi:check",
+    "openapi:generate": "corepack pnpm --filter @journal/contracts openapi:generate",
     "prepare": "simple-git-hooks",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "corepack pnpm --filter @journal/web build && playwright test",
     "test:infrastructure": "vitest run --config vitest.infrastructure.config.ts",
     "typecheck": "corepack pnpm -r --parallel run typecheck",
-    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm build && corepack pnpm test:e2e"
+    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm openapi:check && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm build && corepack pnpm test:e2e"
   },
   "simple-git-hooks": {
     "pre-commit": "corepack pnpm validate"
