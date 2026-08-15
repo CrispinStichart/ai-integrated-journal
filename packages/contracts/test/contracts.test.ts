@@ -13,6 +13,8 @@ import {
   cursorPaginationRequestSchema,
   editableResponseHeadersSchema,
   ERROR_CODES,
+  eventPollResponseSchema,
+  healthDetailsResponseSchema,
   idempotencyResponseMetadataSchema,
   idempotentMutationHeadersSchema,
   lastEventIdSchema,
@@ -150,6 +152,28 @@ describe('CONTRACT ADR-0002 shared API contracts', () => {
     expect(unsupportedSseEventEnvelopeSchema.safeParse(event).success).toBe(
       false,
     );
+    expect(
+      eventPollResponseSchema.parse({ events: [event], nextEventId: UUID_V7 }),
+    ).toEqual({ events: [event], nextEventId: UUID_V7 });
+  });
+
+  it('API-OPS distinguishes dependency state from overall readiness', () => {
+    const details = {
+      status: 'healthy',
+      checkedAt: INSTANT,
+      dependencies: {
+        postgresql: { status: 'healthy' },
+        providers: { status: 'not_configured' },
+      },
+    };
+
+    expect(healthDetailsResponseSchema.parse(details)).toEqual(details);
+    expect(
+      healthDetailsResponseSchema.safeParse({
+        ...details,
+        dependencies: { storage: { status: 'maybe' } },
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -217,7 +241,7 @@ describe('CONTRACT ADR-0002 generated OpenAPI 3.1', () => {
   it('publishes all foundational component schemas under /api/v1', () => {
     const document = createOpenApiDocument();
     expect(document.openapi).toBe('3.1.1');
-    expect(document.servers).toEqual([{ url: 'http://localhost:3000/api/v1' }]);
+    expect(document.servers).toEqual([{ url: 'http://localhost:3000' }]);
     expect(document.components).toMatchObject({
       schemas: {
         ProblemDetails: expect.any(Object),

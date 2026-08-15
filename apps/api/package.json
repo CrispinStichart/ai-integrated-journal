@@ -10,8 +10,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@journal/config": "workspace:*",
+    "@journal/contracts": "workspace:*",
+    "@journal/database": "workspace:*",
     "@journal/domain": "workspace:*",
-    "express": "5.2.1"
+    "@journal/observability": "workspace:*",
+    "express": "5.2.1",
+    "helmet": "8.1.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",

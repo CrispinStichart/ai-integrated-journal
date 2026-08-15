@@ -3,6 +3,7 @@ export const contractsPackageName = '@journal/contracts' as const;
 
 export * from './events.js';
 export * from './http-metadata.js';
+export * from './operations.js';
 export * from './openapi.js';
 export * from './pagination.js';
 export * from './persisted-values.js';
