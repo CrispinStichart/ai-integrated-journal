@@ -11,7 +11,12 @@
   "scripts": {
     "boundaries": "node scripts/check-boundaries.mjs",
     "build": "corepack pnpm -r --workspace-concurrency=1 run build",
+    "data:bootstrap": "node infrastructure/bootstrap-local-data.mjs",
+    "db:migrate": "corepack pnpm --filter @journal/database migrate",
+    "db:seed": "corepack pnpm --filter @journal/database seed",
     "dev": "corepack pnpm --parallel --filter './apps/**' run dev",
+    "infra:down": "docker compose -f infrastructure/compose.yaml down",
+    "infra:up": "docker compose -f infrastructure/compose.yaml up -d --wait",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
@@ -19,6 +24,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "corepack pnpm --filter @journal/web build && playwright test",
+    "test:infrastructure": "vitest run --config vitest.infrastructure.config.ts",
     "typecheck": "corepack pnpm -r --parallel run typecheck",
     "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm build && corepack pnpm test:e2e"
   },

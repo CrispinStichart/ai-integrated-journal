@@ -15,6 +15,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "migrate": "tsx src/commands/migrate.ts",
+    "seed": "tsx src/commands/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "4.23.12"
   }
 }

@@ -14,6 +14,22 @@ packages for the journaling application.
 corepack pnpm install --frozen-lockfile
 ```
 
+Start the local PostgreSQL/pgvector service and create local blob directories:
+
+```sh
+cp .env.example .env
+# Replace the password placeholders and set BLOB_DATA_DIR to an absolute path.
+set -a
+. ./.env
+set +a
+corepack pnpm infra:up
+corepack pnpm data:bootstrap
+corepack pnpm db:migrate
+corepack pnpm db:seed
+```
+
+See `infrastructure/README.md` for storage and shutdown details.
+
 Run every local quality gate, production build, and Firefox end-to-end test:
 
 ```sh
@@ -29,4 +45,3 @@ Start the three application shells in watch mode with:
 ```sh
 corepack pnpm dev
 ```
-
