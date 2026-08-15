@@ -1,0 +1,12 @@
+coverage
+dist
+node_modules
+playwright-report
+test-results
+pnpm-lock.yaml
+.agents
+.devcontainer
+docs
+spikes
+*.md
+skills-lock.json

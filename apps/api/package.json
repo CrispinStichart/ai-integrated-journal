@@ -1,0 +1,21 @@
+{
+  "name": "@journal/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@journal/domain": "workspace:*",
+    "express": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/supertest": "7.2.1",
+    "supertest": "7.2.2"
+  }
+}
