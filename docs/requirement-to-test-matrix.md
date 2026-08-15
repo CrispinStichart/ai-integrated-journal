@@ -55,7 +55,9 @@ No row is `Verified` in this Phase 0 baseline.
 | ADR-0005 | `PROCESSOR` covers immutable publication, semantic labels, exact dependencies, DAG rejection, fingerprints, targeted invalidation, history, and version-basis reporting. |
 | ADR-0006 | `RELEASE-E2E` applies the source-only release gates and retains partial status for the audio-dependent portions of AC-001 and AC-003. |
 | ADR-0007 | `spikes/queue-transactionality/queue-transactionality.test.mjs` proves that an application mutation and `pg-boss` job commit and roll back together through the official Drizzle adapter. |
+| ADR-0008 | `AUDIO` verifies prepare/finalize/confirm recovery, immutable conflict handling, and conservative orphan discovery and sweeping. |
 | ADR-0009 | `UI-PWA`, `TRANSCRIPT`, `PROCESSOR`, `NUDGE`, `RETENTION`, `PORTABILITY`, `SECURITY`, and `MANUAL-OPS` verify encrypted bounded caches, exact evidence coordinates, raw-response policy, snapshot exports, anti-resurrection tombstones, private processor/nudge defaults, and encrypted backup/restore. |
+| ADR-0010 | `AUDIO`, `PORTABILITY`, `RELEASE-E2E`, `MANUAL-FIREFOX`, and `MANUAL-OPS` verify bounded units and requests, incremental manifests and I/O, flat-memory long recordings, quota/disk exhaustion, preserved checkpoints, range playback, and streamed export/backup/restore. |
 
 ## Architectural and data requirements
 
@@ -84,7 +86,7 @@ No row is `Verified` in this Phase 0 baseline.
 | CAP-001 | `AUDIO`, `RELEASE-E2E`: multiple typed/recorded contributions coexist independently on one day. | 22–25 | Audio journal | Planned |
 | CAP-002–003 | `AUDIO`: IndexedDB remains recovery authority across interruption, suspension, closure, and reconnect until durable confirmation. | 23–25 | Audio journal | Planned |
 | CAP-004 | `AUDIO`: duplicate create/chunk/finalize retries reuse identity and reject conflicting bytes. | 22, 24, 25 | Audio journal | Planned |
-| CAP-005 | `AUDIO`, `MANUAL-FIREFOX`: timesliced long capture preserves earlier chunks under interruption/storage pressure. | 23, 25, 54 | Audio journal | Planned |
+| CAP-005 | `AUDIO`, `PORTABILITY`, `MANUAL-FIREFOX`: timesliced long capture has no aggregate cap; bounded-memory upload/finalization/playback/export/backup preserves earlier chunks under interruption and quota/disk pressure. | 21–25, 48, 49, 52, 54 | Audio journal; portability repeated later | Planned |
 | CAP-006 | `AUDIO`: component/E2E tests distinguish each local, upload, durable, pending, and failure state accessibly. | 23–25 | Audio journal | Planned |
 | CAP-007 | `AUDIO`: alternate-day assignment preserves actual capture time and timezone. | 22–25 | Audio journal | Planned |
 | STT-001–002 | `TRANSCRIPT`, `WORKER`: durable audio schedules async STT; failure preserves audio and safe retry. | 27, 30 | Transcript journal | Planned |

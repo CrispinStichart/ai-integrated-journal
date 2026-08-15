@@ -24,3 +24,4 @@ Changing an accepted decision requires a new ADR that identifies the record it s
 | [0007](0007-atomic-queue-job-insertion.md)              | Accepted | Atomic queue job insertion through Drizzle                        |
 | [0008](0008-recoverable-audio-finalization.md)          | Accepted | Recoverable audio finalization across PostgreSQL and blob storage |
 | [0009](0009-privacy-evidence-and-retention-defaults.md) | Accepted | Privacy, evidence, retention, and local backup defaults           |
+| [0010](0010-recording-resource-policy.md)               | Accepted | Bounded resources per operation, not per recording                |

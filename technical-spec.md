@@ -226,14 +226,14 @@ The browser creates the recording and contribution UUIDs before capture begins. 
 
 IndexedDB, not component memory, is the recovery authority until server finalization succeeds. The PWA registers background sync when available but also resumes the outbox on app startup, connectivity restoration, and visibility changes because Firefox support for background sync is not assumed. The user may leave or close the app once the UI confirms the latest chunk is saved locally.
 
-There is no application-level maximum recording length or final byte size. Fixed-size/time chunks bound memory and request size. Storage availability is monitored, browser quota errors are surfaced immediately, and long capture never requires building the full recording in RAM (CAP-005).
+There is no application-level maximum recording length or final byte size. ADR-0010 defines the versioned per-operation bounds, browser quota and host disk watermarks, exhaustion behavior, and bounded-memory verification. Bounded-size transport units with a fixed checkpoint cadence bound memory and request size. Storage availability is monitored, browser quota errors are surfaced immediately, and long capture never requires building the full recording in RAM (CAP-005).
 
 ### 8.2 Resumable upload
 
 1. `POST /api/v1/recordings` idempotently creates or returns the server record for the client UUID.
 2. `PUT /api/v1/recordings/{id}/chunks/{index}` streams one chunk with its checksum and idempotency key. Re-uploading identical bytes succeeds; conflicting bytes returns `409`.
 3. `GET /api/v1/recordings/{id}/upload` returns accepted indexes so a client can resume.
-4. `POST /api/v1/recordings/{id}/finalize` submits the ordered manifest. The server validates every chunk, streams assembly/final hashing through `BlobStore`, and atomically marks the original durable.
+4. `POST /api/v1/recordings/{id}/finalize` submits the bounded manifest summary defined by ADR-0010. The server cursor-validates it against the incrementally persisted ordered chunk manifest, streams assembly/final hashing through `BlobStore`, and recoverably confirms the original under ADR-0008.
 5. Only after durable confirmation does the client mark local chunks eligible for cache cleanup and the API enqueue transcription.
 
 Express routes stream bodies directly and apply a per-chunk limit only; JSON body limits do not constrain the logical recording size. Finalization is idempotent. Abandoned staging chunks are retained for a recovery interval and then swept only when no active upload references them (CAP-003, CAP-004, AC-002).
