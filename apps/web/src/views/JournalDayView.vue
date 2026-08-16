@@ -147,11 +147,11 @@ watch(
 watch(
   () => offline.pendingCount.value,
   async () => {
-    await loadPending();
-    await queryClient.invalidateQueries({
-      queryKey: ['journal-day', journalDate.value],
-    });
-    await queryClient.invalidateQueries({ queryKey: ['journal-days'] });
+    // The active mutation reconciles its own optimistic state. Starting a
+    // second refresh here can return the pre-mutation day, remove the outbox
+    // item from the timeline, and make it flash out until the final refresh.
+    if (submitting.value) return;
+    await refresh();
   },
 );
 
