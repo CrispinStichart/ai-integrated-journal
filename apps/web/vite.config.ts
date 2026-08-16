@@ -53,5 +53,9 @@ export default defineConfig(({ command }) => ({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://127.0.0.1:3000' } },
+  server: {
+    host: '0.0.0.0',
+    strictPort: true,
+    proxy: { '/api': 'http://127.0.0.1:3000' },
+  },
 }));
