@@ -3,11 +3,12 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     vue(),
     tailwindcss(),
     VitePWA({
+      devOptions: { enabled: command === 'serve' },
       injectRegister: false,
       manifest: {
         name: 'Journal',
@@ -34,6 +35,7 @@ export default defineConfig({
         ],
       },
       registerType: 'prompt',
+      selfDestroying: command === 'serve',
       workbox: {
         cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
@@ -52,4 +54,4 @@ export default defineConfig({
     }),
   ],
   server: { proxy: { '/api': 'http://127.0.0.1:3000' } },
-});
+}));
