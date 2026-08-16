@@ -18,6 +18,11 @@
       "dockerDashComposeVersion": "v2"
     }
   },
+  "customizations": {
+    "vscode": {
+      "extensions": ["openai.chatgpt"]
+    }
+  },
   "remoteUser": "pwuser",
   "onCreateCommand": [
     "sudo",
