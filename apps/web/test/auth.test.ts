@@ -15,10 +15,11 @@ vi.mock('@simplewebauthn/browser', () => ({
 }));
 
 vi.mock('../src/storage/indexed-db', () => ({
-  browserMetadata: { destroy: vi.fn(async () => undefined) },
+  browserMetadata: { clear: vi.fn(async () => undefined) },
 }));
 
 const session = {
+  ownerId: '018f0000-0000-7000-8000-000000000001',
   displayName: 'Owner',
   csrfToken: 'c'.repeat(43),
   sessionExpiresAt: '2026-08-17T12:00:00.000Z',
@@ -81,7 +82,7 @@ describe('browser authentication workflow (SEC-001, SEC-002)', () => {
     });
 
     await auth.logout();
-    expect(browserMetadata.destroy).toHaveBeenCalledOnce();
+    expect(browserMetadata.clear).toHaveBeenCalledOnce();
     expect(cacheDelete).toHaveBeenCalledWith('journal-navigation');
     expect(auth.authenticated.value).toBe(false);
   });

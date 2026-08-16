@@ -10,15 +10,11 @@ import { useRouter } from 'vue-router';
 import ContributionCard from '../components/ContributionCard.vue';
 import { useAuthentication } from '../auth';
 import {
-  createContribution,
   createUuidV7,
-  editContribution,
-  getContribution,
-  getJournalDay,
-  JournalApiError,
   listContributionRevisions,
   setContributionDeleted,
 } from '../journal/api';
+import { type TextMutation, useOfflineJournal } from '../journal/offline';
 import {
   displayJournalDate,
   localJournalDate,
@@ -32,7 +28,12 @@ const router = useRouter();
 const queryClient = useQueryClient();
 const auth = useAuthentication();
 const ui = useUiStore();
+const offline = useOfflineJournal();
+const ownerId = auth.status.value?.ownerId;
+if (ownerId !== undefined) await offline.initialize(ownerId);
 const newText = ref('');
+const localSecret = ref('');
+const localStorageError = ref('');
 const selectedDate = ref(journalDate.value);
 const submitting = ref(false);
 const errorMessage = ref('');
@@ -44,12 +45,63 @@ const conflict = ref<{
   draft: string;
   reason: string;
 }>();
+const pendingMutations = ref<readonly TextMutation[]>([]);
 
 const dayQuery = useQuery({
   queryKey: computed(() => ['journal-day', journalDate.value]),
-  queryFn: () => getJournalDay(journalDate.value),
+  queryFn: () => offline.readDay(journalDate.value),
 });
-const contributions = computed(() => dayQuery.data.value?.contributions ?? []);
+const contributions = computed(() => {
+  const byId = new Map(
+    (dayQuery.data.value?.contributions ?? []).map((item) => [item.id, item]),
+  );
+  for (const mutation of pendingMutations.value) {
+    if (mutation.kind === 'create') {
+      const input = mutation.input;
+      byId.set(input.contributionId, {
+        id: input.contributionId,
+        journalDayId: input.proposedJournalDayId,
+        journalDate: input.journalDate,
+        authorId: auth.status.value?.ownerId ?? input.contributionId,
+        sourceType: input.sourceType,
+        capturedAt: input.capturedAt,
+        capturedTimezone: input.capturedTimezone,
+        journalTimezone: input.journalTimezone,
+        journalDateAssignment: input.journalDateAssignment,
+        ...(input.elicitingNudgeId === undefined
+          ? {}
+          : { elicitingNudgeId: input.elicitingNudgeId }),
+        currentRevision: {
+          id: input.revisionId,
+          contributionId: input.contributionId,
+          revision: 1,
+          text: input.text,
+          authority: 'manual',
+          authorId: auth.status.value?.ownerId ?? input.contributionId,
+          createdAt: input.capturedAt,
+        },
+      });
+    } else {
+      const current = byId.get(mutation.contributionId);
+      if (current?.currentRevision !== undefined)
+        byId.set(mutation.contributionId, {
+          ...current,
+          currentRevision: {
+            ...current.currentRevision,
+            id: mutation.revisionId,
+            revision: mutation.baseRevision + 1,
+            text: mutation.text,
+            ...(mutation.editReason === undefined
+              ? {}
+              : { editReason: mutation.editReason }),
+          },
+        });
+    }
+  }
+  return [...byId.values()].sort((left, right) =>
+    left.capturedAt.localeCompare(right.capturedAt),
+  );
+});
 const activeCount = computed(
   () =>
     contributions.value.filter((item) => item.deletedAt === undefined).length,
@@ -57,12 +109,49 @@ const activeCount = computed(
 const dayTitle = computed(() =>
   props.date === undefined ? 'Today' : displayJournalDate(journalDate.value),
 );
+const cacheSize = computed(() => {
+  const bytes = offline.cacheBytes.value;
+  return bytes < 1024 * 1024
+    ? `${Math.ceil(bytes / 1024)} KiB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+});
+
+function localStatus(id: string): 'pending' | 'conflict' | undefined {
+  if (offline.conflict.value?.current.id === id) return 'conflict';
+  return pendingMutations.value.some((mutation) =>
+    mutation.kind === 'create'
+      ? mutation.input.contributionId === id
+      : mutation.contributionId === id,
+  )
+    ? 'pending'
+    : undefined;
+}
 
 watch(journalDate, (value) => {
   selectedDate.value = value;
   errorMessage.value = '';
   conflict.value = undefined;
+  void loadPending();
 });
+
+watch(
+  () => offline.conflict.value,
+  (value) => {
+    conflict.value = value;
+  },
+  { immediate: true },
+);
+
+watch(
+  () => offline.pendingCount.value,
+  async () => {
+    await loadPending();
+    await queryClient.invalidateQueries({
+      queryKey: ['journal-day', journalDate.value],
+    });
+    await queryClient.invalidateQueries({ queryKey: ['journal-days'] });
+  },
+);
 
 function csrfToken(): string {
   const token = auth.status.value?.csrfToken;
@@ -78,6 +167,11 @@ async function refresh(): Promise<void> {
     }),
     queryClient.invalidateQueries({ queryKey: ['journal-days'] }),
   ]);
+  await loadPending();
+}
+
+async function loadPending(): Promise<void> {
+  pendingMutations.value = await offline.pendingForDay(journalDate.value);
 }
 
 function showError(error: unknown): void {
@@ -95,27 +189,24 @@ async function addContribution(): Promise<void> {
   try {
     const capturedAt = new Date().toISOString();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    await createContribution(
-      {
-        contributionId: createUuidV7(),
-        revisionId: createUuidV7(),
-        proposedJournalDayId: createUuidV7(),
-        sourceType: 'typed_text',
-        text,
-        capturedAt,
-        capturedTimezone: timezone,
-        journalTimezone: timezone,
-        journalDate: journalDate.value,
-        journalDateAssignment:
-          journalDate.value === localJournalDate()
-            ? 'default'
-            : 'user_override',
-      },
-      csrfToken(),
-      `create-${createUuidV7()}`,
-    );
+    const input = {
+      contributionId: createUuidV7(),
+      revisionId: createUuidV7(),
+      proposedJournalDayId: createUuidV7(),
+      sourceType: 'typed_text',
+      text,
+      capturedAt,
+      capturedTimezone: timezone,
+      journalTimezone: timezone,
+      journalDate: journalDate.value,
+      journalDateAssignment:
+        journalDate.value === localJournalDate() ? 'default' : 'user_override',
+    } as const;
+    await offline.enqueueCreate(input, `create-${createUuidV7()}`);
     newText.value = '';
-    ui.announce('Contribution added');
+    ui.announce('Contribution saved locally');
+    await loadPending();
+    await offline.replay(csrfToken());
     await refresh();
   } catch (error) {
     showError(error);
@@ -133,39 +224,60 @@ async function saveEdit(
   errorMessage.value = '';
   conflict.value = undefined;
   try {
-    await editContribution(
-      contribution,
+    const revision = contribution.currentRevision?.revision;
+    if (revision === undefined)
+      throw new Error('This contribution cannot be edited.');
+    await offline.enqueueEdit({
+      contributionId: contribution.id,
+      journalDate: contribution.journalDate,
+      baseRevision: revision,
+      revisionId: createUuidV7(),
       text,
-      reason,
-      createUuidV7(),
-      csrfToken(),
-      `edit-${createUuidV7()}`,
-    );
-    ui.announce('A new contribution revision was saved');
+      ...(reason.trim() === '' ? {} : { editReason: reason.trim() }),
+      idempotencyKey: `edit-${createUuidV7()}`,
+    });
+    ui.announce('Revision saved locally');
+    await loadPending();
+    await offline.replay(csrfToken());
     await refresh();
   } catch (error) {
-    if (error instanceof JournalApiError && error.code === 'etag_mismatch') {
-      try {
-        conflict.value = {
-          current: await getContribution(contribution.id),
-          draft: text,
-          reason,
-        };
-      } catch (refreshError) {
-        showError(refreshError);
-      }
-    } else {
-      showError(error);
-    }
+    showError(error);
   } finally {
     submitting.value = false;
   }
 }
 
 async function retryConflict(): Promise<void> {
-  const value = conflict.value;
-  if (value === undefined) return;
-  await saveEdit(value.current, value.draft, value.reason);
+  await offline.resolveConflict(csrfToken(), true);
+  await refresh();
+}
+
+async function discardConflict(): Promise<void> {
+  await offline.resolveConflict(csrfToken(), false);
+  conflict.value = undefined;
+  await refresh();
+}
+
+async function configureOfflineStorage(): Promise<void> {
+  localStorageError.value = '';
+  try {
+    if (offline.configured.value) await offline.unlock(localSecret.value);
+    else await offline.setup(localSecret.value);
+    localSecret.value = '';
+    await offline.replay(csrfToken());
+    await dayQuery.refetch();
+    await loadPending();
+  } catch (error) {
+    localStorageError.value =
+      error instanceof Error
+        ? error.message
+        : 'Offline storage could not be unlocked.';
+  }
+}
+
+async function clearOfflineCache(): Promise<void> {
+  await offline.clearReadCache();
+  ui.announce('Offline read cache cleared');
 }
 
 async function changeDeletion(
@@ -204,6 +316,8 @@ async function loadHistory(contribution: ContributionResource): Promise<void> {
 async function selectDate(): Promise<void> {
   await router.push(`/journal/${selectedDate.value}`);
 }
+
+await loadPending();
 </script>
 
 <template>
@@ -319,12 +433,79 @@ async function selectDate(): Promise<void> {
           <button
             class="btn btn-ghost btn-sm"
             type="button"
-            @click="conflict = undefined"
+            @click="discardConflict"
           >
             Keep latest saved version
           </button>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="!offline.unlocked.value"
+      class="card card-border mt-7 bg-base-200"
+    >
+      <form
+        class="card-body gap-3 p-4 sm:p-5"
+        @submit.prevent="configureOfflineStorage"
+      >
+        <h2 class="card-title">
+          {{
+            offline.configured.value
+              ? 'Unlock offline journal'
+              : 'Enable offline journal'
+          }}
+        </h2>
+        <p class="text-sm text-base-content/70">
+          Journal text is encrypted on this device with a separate local secret.
+          It is never sent to the server or saved by the browser.
+          <template v-if="!offline.configured.value">
+            If you lose it, unsynced local notes cannot be recovered.
+          </template>
+        </p>
+        <label class="fieldset">
+          <span class="fieldset-legend">Local unlock secret</span>
+          <input
+            v-model="localSecret"
+            class="input w-full"
+            type="password"
+            minlength="8"
+            autocomplete="off"
+            required
+          />
+        </label>
+        <p v-if="localStorageError" class="text-sm text-error" role="alert">
+          {{ localStorageError }}
+        </p>
+        <div class="card-actions justify-end">
+          <button class="btn" type="submit">
+            {{ offline.configured.value ? 'Unlock' : 'Enable and unlock' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div
+      v-else
+      role="status"
+      class="alert alert-info alert-soft mt-7 sm:alert-horizontal"
+    >
+      <span>
+        Offline journal unlocked · {{ offline.pendingCount.value }} pending ·
+        {{ offline.cacheDays.value }} cached days ({{ cacheSize }}) · cached
+        copies expire 30 days after refresh
+        <template v-if="offline.lastReadFromCache.value">
+          · viewing cached copy</template
+        >
+      </span>
+      <button
+        v-if="offline.cacheDays.value > 0"
+        class="btn btn-ghost btn-sm"
+        type="button"
+        @click="clearOfflineCache"
+      >
+        Clear cached reads
+      </button>
     </div>
 
     <form
@@ -346,7 +527,11 @@ async function selectDate(): Promise<void> {
           <button
             class="btn btn-primary"
             type="submit"
-            :disabled="submitting || !newText.trim()"
+            :disabled="
+              submitting ||
+              !newText.trim() ||
+              !offline.readyForLocalCapture.value
+            "
           >
             <span
               v-if="submitting"
@@ -368,7 +553,7 @@ async function selectDate(): Promise<void> {
       <span class="sr-only">Loading Journal Day</span>
     </div>
     <div
-      v-else-if="dayQuery.isError.value"
+      v-else-if="dayQuery.isError.value && contributions.length === 0"
       role="alert"
       class="alert alert-error mt-7"
     >
@@ -403,6 +588,7 @@ async function selectDate(): Promise<void> {
             :contribution="contribution"
             :revisions="revisions[contribution.id]"
             :busy="submitting"
+            :local-status="localStatus(contribution.id)"
             @edit="saveEdit"
             @delete="changeDeletion($event, true)"
             @restore="changeDeletion($event, false)"

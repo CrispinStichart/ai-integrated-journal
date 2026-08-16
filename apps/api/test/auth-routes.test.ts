@@ -13,13 +13,14 @@ import { createInMemoryEventFeed } from '../src/events.js';
 
 const CORRELATION_ID = '019c5b90-0000-7000-8000-000000000001';
 const active: ActiveSession = {
-  ownerId: 'owner',
+  ownerId: '018f0000-0000-7000-8000-000000000001',
   sessionId: 'session',
   displayName: 'Owner',
   csrfToken: 'c'.repeat(43),
   expiresAt: new Date('2026-08-17T12:00:00.000Z'),
 };
 const issued: IssuedSession = {
+  ownerId: active.ownerId,
   token: 'session-token',
   csrfToken: active.csrfToken,
   displayName: 'Owner',
@@ -76,7 +77,11 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
 
     const status = await request(api).get('/api/v1/auth/status').expect(200);
     expect(status.headers['cache-control']).toBe('no-store');
-    expect(status.body).toMatchObject({ authenticated: true, passkeyCount: 1 });
+    expect(status.body).toMatchObject({
+      authenticated: true,
+      ownerId: active.ownerId,
+      passkeyCount: 1,
+    });
 
     const bootstrap = await request(api)
       .post('/api/v1/auth/bootstrap')
@@ -87,6 +92,7 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
       })
       .expect(201);
     expect(bootstrap.headers['set-cookie']).toHaveLength(2);
+    expect(bootstrap.body.ownerId).toBe(active.ownerId);
 
     await request(api)
       .post('/api/v1/auth/password/login')
@@ -135,9 +141,7 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
       .expect(200);
 
     expect(service.logout).toHaveBeenCalledWith(active);
-    expect(response.headers['clear-site-data']).toBe(
-      '"cache", "cookies", "storage"',
-    );
+    expect(response.headers['clear-site-data']).toBe('"cache", "cookies"');
     expect(response.headers['set-cookie']).toHaveLength(2);
   });
 

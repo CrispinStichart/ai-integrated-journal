@@ -49,6 +49,7 @@ function applySession(session: AuthenticatedResponse): void {
   status.value = {
     bootstrapRequired: false,
     authenticated: true,
+    ownerId: session.ownerId,
     displayName: session.displayName,
     csrfToken: session.csrfToken,
     sessionExpiresAt: session.sessionExpiresAt,
@@ -161,7 +162,7 @@ export function useAuthentication() {
         headers: { 'x-csrf-token': csrfToken },
       });
     }
-    await browserMetadata.destroy();
+    await browserMetadata.clear();
     if ('caches' in window) {
       await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
     }

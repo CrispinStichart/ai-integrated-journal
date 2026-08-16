@@ -26,6 +26,7 @@ export const passwordRecoveryRequestSchema = z.strictObject({
 export const authStatusResponseSchema = z.strictObject({
   bootstrapRequired: z.boolean(),
   authenticated: z.boolean(),
+  ownerId: z.string().uuid().optional(),
   displayName: z.string().optional(),
   csrfToken: z.string().min(32).optional(),
   sessionExpiresAt: utcInstantSchema.optional(),
@@ -33,6 +34,7 @@ export const authStatusResponseSchema = z.strictObject({
 });
 
 export const authenticatedResponseSchema = z.strictObject({
+  ownerId: z.string().uuid(),
   displayName: z.string(),
   csrfToken: z.string().min(32),
   sessionExpiresAt: utcInstantSchema,

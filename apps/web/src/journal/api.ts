@@ -158,6 +158,26 @@ export async function editContribution(
   const revision = contribution.currentRevision?.revision;
   if (revision === undefined)
     throw new Error('This contribution cannot be edited.');
+  return editContributionAtRevision(
+    contribution.id,
+    revision,
+    text,
+    editReason,
+    revisionId,
+    csrfToken,
+    idempotencyKey,
+  );
+}
+
+export async function editContributionAtRevision(
+  contributionId: string,
+  revision: number,
+  text: string,
+  editReason: string | undefined,
+  revisionId: string,
+  csrfToken: string,
+  idempotencyKey: string,
+): Promise<ContributionResource> {
   const body = editContributionRequestSchema.parse({
     revisionId,
     text,
@@ -166,7 +186,7 @@ export async function editContribution(
       : { editReason: editReason.trim() }),
   });
   const result = contributionMutationResponseSchema.parse(
-    await jsonRequest(`/api/v1/contributions/${contribution.id}`, {
+    await jsonRequest(`/api/v1/contributions/${contributionId}`, {
       method: 'PATCH',
       headers: mutationHeaders(csrfToken, idempotencyKey, revision),
       body: JSON.stringify(body),

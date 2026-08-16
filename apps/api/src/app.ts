@@ -56,6 +56,7 @@ function issueSession(
     response,
     authenticatedResponseSchema,
     {
+      ownerId: session.ownerId,
       displayName: session.displayName,
       csrfToken: session.csrfToken,
       sessionExpiresAt: session.expiresAt.toISOString(),
@@ -211,6 +212,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
         ...(principal === undefined
           ? {}
           : {
+              ownerId: principal.ownerId,
               displayName: principal.displayName,
               csrfToken: principal.csrfToken,
               sessionExpiresAt: principal.expiresAt.toISOString(),
@@ -304,7 +306,9 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       service.assertCsrf(request, session);
       await service.logout(session);
       response.setHeader('set-cookie', service.clearCookies());
-      response.set('clear-site-data', '"cache", "cookies", "storage"');
+      // Pending encrypted outbox records are recovery data. Clearing all site
+      // storage here would silently destroy offline work (ADR-0009).
+      response.set('clear-site-data', '"cache", "cookies"');
       sendValidated(response, logoutResponseSchema, { loggedOut: true });
     });
   }

@@ -36,6 +36,7 @@ export interface AuthenticationOptions {
 }
 
 export interface IssuedSession {
+  readonly ownerId: string;
   readonly token: string;
   readonly csrfToken: string;
   readonly displayName: string;
@@ -447,6 +448,7 @@ export class AuthenticationService implements RequestAuthenticator {
       absoluteExpiresAt,
     });
     return {
+      ownerId: userId,
       token,
       csrfToken,
       displayName,

@@ -11,6 +11,7 @@ async function authenticateShell(page: Page) {
             JSON.stringify({
               bootstrapRequired: false,
               authenticated: true,
+              ownerId: '018f0000-0000-7000-8000-000000000001',
               displayName: 'Test owner',
               csrfToken: 'c'.repeat(43),
               sessionExpiresAt: '2026-08-17T12:00:00.000Z',
@@ -67,7 +68,8 @@ test('exposes an installable manifest and reloads the shell offline', async ({
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 });
 
-test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][STATE-006–STATE-007][AC-001] manages a source-preserving Journal Day and calendar', async ({
+test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][STATE-006–STATE-007][SEC-001–SEC-003][AC-001][AC-003] manages a source-preserving Journal Day with an encrypted offline outbox and cache', async ({
+  context,
   page,
 }) => {
   const date = '2026-08-16';
@@ -144,6 +146,7 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
       await respond({
         bootstrapRequired: false,
         authenticated: true,
+        ownerId: ids.author,
         displayName: 'Test owner',
         csrfToken: 'c'.repeat(43),
         sessionExpiresAt: '2026-08-17T12:00:00.000Z',
@@ -272,11 +275,26 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
   );
   await expect(page.getByRole('article').first()).toContainText('UTC');
 
+  await page.getByLabel('Local unlock secret').fill('test local secret');
+  await page.getByRole('button', { name: 'Enable and unlock' }).click();
+  await expect(page.getByText(/Offline journal unlocked/)).toBeVisible();
+
+  await page.evaluate(async () => navigator.serviceWorker.ready);
+  await page.reload();
+  await page.getByLabel('Local unlock secret').fill('test local secret');
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click();
+  await context.setOffline(true);
   await page
     .getByPlaceholder('What would you like to remember?')
     .fill('Midday reflection');
   await page.getByRole('button', { name: 'Add contribution' }).click();
   await expect(page.getByRole('article')).toHaveCount(3);
+  await expect(page.getByRole('article').last()).toContainText('Saved locally');
+
+  await context.setOffline(false);
+  await expect(page.getByRole('article').last()).not.toContainText(
+    'Saved locally',
+  );
 
   await page
     .getByRole('article')

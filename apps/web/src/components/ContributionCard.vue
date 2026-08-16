@@ -12,6 +12,7 @@ const props = defineProps<{
   contribution: ContributionResource;
   revisions: readonly ContributionRevisionResource[] | undefined;
   busy: boolean | undefined;
+  localStatus?: 'pending' | 'conflict' | undefined;
 }>();
 const emit = defineEmits<{
   delete: [contribution: ContributionResource];
@@ -76,7 +77,13 @@ watch(
             · {{ contribution.capturedTimezone }}
           </p>
         </div>
-        <span v-if="contribution.deletedAt" class="badge badge-warning"
+        <span v-if="localStatus === 'pending'" class="badge badge-info"
+          >Saved locally</span
+        >
+        <span v-else-if="localStatus === 'conflict'" class="badge badge-warning"
+          >Needs review</span
+        >
+        <span v-else-if="contribution.deletedAt" class="badge badge-warning"
           >Deleted</span
         >
         <span v-else class="badge badge-ghost">Manual source</span>
@@ -122,7 +129,12 @@ watch(
       </p>
 
       <div v-if="!editing" class="card-actions items-center justify-end">
-        <button class="btn btn-ghost btn-sm" type="button" @click="openHistory">
+        <button
+          v-if="localStatus === undefined"
+          class="btn btn-ghost btn-sm"
+          type="button"
+          @click="openHistory"
+        >
           History
         </button>
         <button
@@ -134,7 +146,7 @@ watch(
         >
           Restore
         </button>
-        <template v-else>
+        <template v-else-if="localStatus !== 'pending'">
           <button class="btn btn-ghost btn-sm" type="button" @click="beginEdit">
             Edit
           </button>

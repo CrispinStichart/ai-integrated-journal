@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useOnline } from '@vueuse/core';
+import { useDocumentVisibility, useOnline } from '@vueuse/core';
 import { nextTick, watch } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 
@@ -7,6 +7,7 @@ import AppIcon, { type IconName } from './components/AppIcon.vue';
 import AppStatus from './components/AppStatus.vue';
 import PwaUpdateDialog from './components/PwaUpdateDialog.vue';
 import { useAuthentication } from './auth';
+import { useOfflineJournal } from './journal/offline';
 import { useUiStore } from './stores/ui';
 import AuthenticationView from './views/AuthenticationView.vue';
 
@@ -31,16 +32,36 @@ const dockItems = navigationItems.slice(0, 4);
 const route = useRoute();
 const ui = useUiStore();
 const online = useOnline();
+const visibility = useDocumentVisibility();
 const auth = useAuthentication();
-void auth.initialize();
+const offline = useOfflineJournal();
+
+async function resumeOfflineWork(): Promise<void> {
+  const ownerId = auth.status.value?.ownerId;
+  const csrfToken = auth.status.value?.csrfToken;
+  if (ownerId === undefined || csrfToken === undefined) return;
+  await offline.initialize(ownerId);
+  await offline.replay(csrfToken);
+}
+
+void auth.initialize().then(resumeOfflineWork);
 
 async function logout(): Promise<void> {
   try {
+    await offline.logout();
     await auth.logout();
   } catch {
     ui.announce('Logout failed. Please try again.');
   }
 }
+
+watch(online, (available, wasAvailable) => {
+  if (available && !wasAvailable) void resumeOfflineWork();
+});
+
+watch(visibility, (value) => {
+  if (value === 'visible') void resumeOfflineWork();
+});
 
 async function registerPasskey(): Promise<void> {
   try {
