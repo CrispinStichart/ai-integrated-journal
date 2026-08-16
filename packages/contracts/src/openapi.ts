@@ -18,6 +18,16 @@ import {
   idempotentMutationHeadersSchema,
 } from './http-metadata.js';
 import {
+  contributionMutationResponseSchema,
+  contributionRevisionPageSchema,
+  contributionSchema,
+  createContributionRequestSchema,
+  editContributionRequestSchema,
+  journalDaySummaryPageSchema,
+  journalDayViewSchema,
+  moveContributionRequestSchema,
+} from './journal.js';
+import {
   cursorPageMetadataSchema,
   cursorPaginationRequestSchema,
 } from './pagination.js';
@@ -184,6 +194,120 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/journal-days': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Deterministic calendar summary page',
+              'JournalDaySummaryPage',
+            ),
+            '400': problemResponse('Invalid cursor'),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+      },
+      '/api/v1/journal-days/{date}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [
+            {
+              in: 'path',
+              name: 'date',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            '200': schemaResponse(
+              'Complete journal day view',
+              'JournalDayView',
+            ),
+            '404': problemResponse('Journal day not found'),
+          },
+        },
+      },
+      '/api/v1/contributions': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('CreateContributionRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Contribution created',
+              'ContributionMutationResponse',
+            ),
+            '400': problemResponse('Invalid contribution'),
+            '428': problemResponse('Idempotency key required'),
+          },
+        },
+      },
+      '/api/v1/contributions/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse('Contribution', 'Contribution'),
+            '404': problemResponse('Contribution not found'),
+          },
+        },
+        patch: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('EditContributionRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Contribution revised',
+              'ContributionMutationResponse',
+            ),
+            '412': problemResponse('ETag mismatch'),
+            '428': problemResponse('Precondition required'),
+          },
+        },
+        delete: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Contribution recoverably deleted',
+              'ContributionMutationResponse',
+            ),
+            '412': problemResponse('ETag mismatch'),
+          },
+        },
+      },
+      '/api/v1/contributions/{id}/revisions': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Immutable revision history',
+              'ContributionRevisionPage',
+            ),
+          },
+        },
+      },
+      '/api/v1/contributions/{id}/move': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('MoveContributionRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Contribution moved',
+              'ContributionMutationResponse',
+            ),
+            '412': problemResponse('ETag mismatch'),
+          },
+        },
+      },
+      '/api/v1/contributions/{id}/restore': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Contribution restored',
+              'ContributionMutationResponse',
+            ),
+            '412': problemResponse('ETag mismatch'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -280,11 +404,22 @@ export function createOpenApiDocument(): Record<string, unknown> {
         ConditionalMutationHeaders: componentSchema(
           conditionalMutationHeadersSchema,
         ),
+        Contribution: componentSchema(contributionSchema),
+        ContributionMutationResponse: componentSchema(
+          contributionMutationResponseSchema,
+        ),
+        ContributionRevisionPage: componentSchema(
+          contributionRevisionPageSchema,
+        ),
+        CreateContributionRequest: componentSchema(
+          createContributionRequestSchema,
+        ),
         CursorPageMetadata: componentSchema(cursorPageMetadataSchema),
         CursorPaginationRequest: componentSchema(cursorPaginationRequestSchema),
         EditableResponseHeaders: componentSchema(editableResponseHeadersSchema),
         EventPollRequest: componentSchema(eventPollRequestSchema),
         EventPollResponse: componentSchema(eventPollResponseSchema),
+        EditContributionRequest: componentSchema(editContributionRequestSchema),
         HealthDependency: componentSchema(healthDependencySchema),
         HealthDetailsResponse: componentSchema(healthDetailsResponseSchema),
         IdempotencyResponseMetadata: componentSchema(
@@ -294,7 +429,10 @@ export function createOpenApiDocument(): Record<string, unknown> {
           idempotentMutationHeadersSchema,
         ),
         LivenessResponse: componentSchema(livenessResponseSchema),
+        JournalDaySummaryPage: componentSchema(journalDaySummaryPageSchema),
+        JournalDayView: componentSchema(journalDayViewSchema),
         LogoutResponse: componentSchema(logoutResponseSchema),
+        MoveContributionRequest: componentSchema(moveContributionRequestSchema),
         PasskeyOptionsResponse: componentSchema(passkeyOptionsResponseSchema),
         PasskeyVerificationRequest: componentSchema(
           passkeyVerificationRequestSchema,

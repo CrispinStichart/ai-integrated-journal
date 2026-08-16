@@ -24,7 +24,18 @@ import {
   type UserId,
   type UtcInstant,
 } from '@journal/domain';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  isNull,
+  lt,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import type { JournalTransaction, RepositoryContext } from '../client.js';
 import {
@@ -69,6 +80,12 @@ export interface ContributionAuditRecord {
   readonly metadata: Readonly<Record<string, string | number | boolean | null>>;
 }
 
+export interface JournalDaySummaryRecord {
+  readonly day: Readonly<JournalDay>;
+  readonly contributionCount: number;
+  readonly latestContributionAt?: UtcInstant;
+}
+
 function hashText(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
@@ -77,8 +94,10 @@ function toDate(instant: UtcInstant): Date {
   return new Date(instant);
 }
 
-function fromDate(value: Date): UtcInstant {
-  return parseUtcInstant(value.toISOString());
+function fromDate(value: Date | string): UtcInstant {
+  return parseUtcInstant(
+    value instanceof Date ? value.toISOString() : new Date(value).toISOString(),
+  );
 }
 
 /** Read paths exclude recoverably deleted contributions unless explicitly asked. */
@@ -142,6 +161,98 @@ export class JournalReadRepository {
     return row === undefined ? undefined : mapContributionRow(row);
   }
 
+  public async listDaySummaries(
+    ownerId: UserId,
+    input: {
+      readonly limit: number;
+      readonly before?: {
+        readonly journalDate: JournalDate;
+        readonly id: JournalDayId;
+      };
+    },
+  ): Promise<{
+    readonly items: readonly JournalDaySummaryRecord[];
+    readonly hasMore: boolean;
+  }> {
+    const before = input.before;
+    const rows = await this.context
+      .select({
+        day: journalDays,
+        contributionCount: count(contributions.id),
+        latestContributionAt: sql<
+          Date | string | null
+        >`max(${contributions.createdAt})`,
+      })
+      .from(journalDays)
+      .leftJoin(
+        contributions,
+        and(
+          eq(contributions.journalDayId, journalDays.id),
+          isNull(contributions.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(journalDays.userId, ownerId),
+          before === undefined
+            ? undefined
+            : or(
+                lt(journalDays.journalDate, before.journalDate),
+                and(
+                  eq(journalDays.journalDate, before.journalDate),
+                  lt(journalDays.id, before.id),
+                ),
+              ),
+        ),
+      )
+      .groupBy(journalDays.id)
+      .orderBy(desc(journalDays.journalDate), desc(journalDays.id))
+      .limit(input.limit + 1);
+    return {
+      items: rows.slice(0, input.limit).map((row) => ({
+        day: createJournalDay({
+          id: parseUuidV7<'journal-day'>(row.day.id),
+          ownerId: parseUuidV7<'user'>(row.day.userId),
+          journalDate: parseJournalDate(row.day.journalDate),
+          createdAt: fromDate(row.day.createdAt),
+        }),
+        contributionCount: Number(row.contributionCount),
+        ...(row.latestContributionAt === null
+          ? {}
+          : { latestContributionAt: fromDate(row.latestContributionAt) }),
+      })),
+      hasMore: rows.length > input.limit,
+    };
+  }
+
+  public async listDayContributions(
+    ownerId: UserId,
+    journalDate: JournalDate,
+    options: { readonly includeDeleted?: boolean } = {},
+  ): Promise<readonly PersistedContribution[]> {
+    const rows = await this.context
+      .select({
+        contribution: contributions,
+        day: journalDays,
+        revision: contributionRevisions,
+      })
+      .from(journalDays)
+      .innerJoin(contributions, eq(contributions.journalDayId, journalDays.id))
+      .leftJoin(
+        contributionRevisions,
+        eq(contributionRevisions.id, contributions.currentRevisionId),
+      )
+      .where(
+        and(
+          eq(journalDays.userId, ownerId),
+          eq(journalDays.journalDate, journalDate),
+          options.includeDeleted ? undefined : isNull(contributions.deletedAt),
+        ),
+      )
+      .orderBy(asc(contributions.createdAt), asc(contributions.id));
+    return rows.map(mapContributionRow);
+  }
+
   public async listContributionRevisions(
     ownerId: UserId,
     contributionId: ContributionId,
@@ -163,6 +274,41 @@ export class JournalReadRepository {
       .orderBy(asc(contributionRevisions.revision));
 
     return rows.map(({ revision }) => mapRevision(revision));
+  }
+
+  public async listContributionRevisionPage(
+    ownerId: UserId,
+    contributionId: ContributionId,
+    input: { readonly limit: number; readonly afterRevision?: number },
+  ): Promise<{
+    readonly items: readonly Readonly<ContributionRevision>[];
+    readonly hasMore: boolean;
+  }> {
+    const rows = await this.context
+      .select({ revision: contributionRevisions })
+      .from(contributionRevisions)
+      .innerJoin(
+        contributions,
+        eq(contributions.id, contributionRevisions.contributionId),
+      )
+      .innerJoin(journalDays, eq(journalDays.id, contributions.journalDayId))
+      .where(
+        and(
+          eq(contributionRevisions.contributionId, contributionId),
+          eq(journalDays.userId, ownerId),
+          input.afterRevision === undefined
+            ? undefined
+            : gt(contributionRevisions.revision, input.afterRevision),
+        ),
+      )
+      .orderBy(asc(contributionRevisions.revision))
+      .limit(input.limit + 1);
+    return {
+      items: rows
+        .slice(0, input.limit)
+        .map(({ revision }) => mapRevision(revision)),
+      hasMore: rows.length > input.limit,
+    };
   }
 
   public async listContributionAuditHistory(
@@ -375,6 +521,7 @@ export class JournalWriteRepository {
     readonly contributionId: ContributionId;
     readonly proposedJournalDayId: JournalDayId;
     readonly journalDate: JournalDate;
+    readonly expectedRevision?: RevisionNumber;
     readonly audit: JournalMutationAudit;
   }): Promise<void> {
     const current = await this.lockContribution(
@@ -382,6 +529,15 @@ export class JournalWriteRepository {
       input.contributionId,
     );
     if (current.deletedAt !== null) throw new DeletedContributionError();
+    if (
+      input.expectedRevision !== undefined &&
+      current.currentRevision !== input.expectedRevision
+    ) {
+      throw new OptimisticConcurrencyError(
+        input.expectedRevision,
+        current.currentRevision,
+      );
+    }
     const day = await this.ensureDay(
       input.proposedJournalDayId,
       input.ownerId,
@@ -415,6 +571,7 @@ export class JournalWriteRepository {
   public async softDeleteContribution(input: {
     readonly ownerId: UserId;
     readonly contributionId: ContributionId;
+    readonly expectedRevision?: RevisionNumber;
     readonly audit: JournalMutationAudit;
   }): Promise<void> {
     const current = await this.lockContribution(
@@ -422,6 +579,15 @@ export class JournalWriteRepository {
       input.contributionId,
     );
     if (current.deletedAt !== null) throw new DeletedContributionError();
+    if (
+      input.expectedRevision !== undefined &&
+      current.currentRevision !== input.expectedRevision
+    ) {
+      throw new OptimisticConcurrencyError(
+        input.expectedRevision,
+        current.currentRevision,
+      );
+    }
     await this.transaction
       .update(contributions)
       .set({
@@ -443,6 +609,7 @@ export class JournalWriteRepository {
   public async restoreContribution(input: {
     readonly ownerId: UserId;
     readonly contributionId: ContributionId;
+    readonly expectedRevision?: RevisionNumber;
     readonly audit: JournalMutationAudit;
   }): Promise<void> {
     const current = await this.lockContribution(
@@ -451,6 +618,15 @@ export class JournalWriteRepository {
     );
     if (current.deletedAt === null) {
       throw new Error('The contribution is not deleted.');
+    }
+    if (
+      input.expectedRevision !== undefined &&
+      current.currentRevision !== input.expectedRevision
+    ) {
+      throw new OptimisticConcurrencyError(
+        input.expectedRevision,
+        current.currentRevision,
+      );
     }
     await this.transaction
       .update(contributions)

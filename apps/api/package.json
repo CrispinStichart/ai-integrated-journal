@@ -24,6 +24,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@journal/test-support": "workspace:*",
     "@types/express": "5.0.6",
     "@types/supertest": "7.2.1",
     "supertest": "7.2.2"

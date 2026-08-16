@@ -21,6 +21,7 @@ export {
   contributionRevisions,
   contributions,
   journalDays,
+  journalApiIdempotency,
   passwordCredentials,
   recoveryCodes,
   sessions,
@@ -32,6 +33,7 @@ export {
   JournalRecordNotFoundError,
   JournalWriteRepository,
   type ContributionAuditRecord,
+  type JournalDaySummaryRecord,
   type JournalMutationAudit,
   type PersistedContribution,
 } from './repositories/journal-repository.js';

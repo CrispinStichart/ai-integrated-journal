@@ -291,6 +291,41 @@ export const contributions = journalSchema.table(
   ],
 );
 
+export const journalApiIdempotency = journalSchema.table(
+  'journal_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    contributionId: uuid('contribution_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('journal_api_idempotency_owner_operation_key_unique').on(
+      table.ownerId,
+      table.operation,
+      table.idempotencyKey,
+    ),
+    check(
+      'journal_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'journal_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'journal_api_idempotency_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const contributionRevisions = journalSchema.table(
   'contribution_revision',
   {
@@ -554,6 +589,7 @@ export const databaseSchema = {
   contributions,
   developmentFixtures,
   journalDays,
+  journalApiIdempotency,
   passwordCredentials,
   processorInstallations,
   queueConfigurations,

@@ -48,6 +48,9 @@ export default defineConfig({
         // separately gated infrastructure suite; mocked SQL-chain coverage
         // would measure the mock rather than persistence behavior.
         'packages/database/src/repositories/journal-repository.ts',
+        // The API journal service coordinates real Drizzle transactions and
+        // durable idempotency; it is covered by the infrastructure suite.
+        'apps/api/src/journal-service.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

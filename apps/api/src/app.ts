@@ -38,6 +38,7 @@ import type {
   AuthenticatedPrincipal,
   HealthProbeResult,
 } from './types.js';
+import { registerJournalRoutes, sendJournalError } from './journal-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -440,6 +441,8 @@ export function createApiApp(dependencies: ApiDependencies): Express {
     request.once('close', () => clearInterval(heartbeat));
   });
 
+  registerJournalRoutes(app, dependencies);
+
   app.use((request, response) => {
     sendProblem(request, response, {
       code: 'not_found',
@@ -473,6 +476,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
         });
         return;
       }
+      if (sendJournalError(error, request, response)) return;
       dependencies.logger.error(
         {
           correlationId: correlationId(response),

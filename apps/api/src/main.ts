@@ -15,6 +15,7 @@ import { createPostgresAuthenticationStore as createAuthStore } from './auth-sto
 import { createInMemoryEventFeed } from './events.js';
 import { createGracefulShutdown } from './shutdown.js';
 import type { HealthProbe } from './types.js';
+import { PostgresJournalService } from './journal-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -90,6 +91,7 @@ const app = createApiApp({
   eventFeed: createInMemoryEventFeed(),
   healthProbes,
   logger,
+  journalService: new PostgresJournalService(database.database),
 });
 const server = app.listen(config.http.port, config.http.host, () => {
   logger.info(

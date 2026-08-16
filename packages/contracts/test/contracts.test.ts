@@ -7,6 +7,7 @@ import {
   conditionalMutationHeadersSchema,
   contractsPackageName,
   createCursorPageSchema,
+  createContributionRequestSchema,
   createOpenApiDocument,
   createPersistedValueSchema,
   createSemanticValueSchema,
@@ -103,6 +104,53 @@ describe('CONTRACT ADR-0002 shared API contracts', () => {
     expect(
       idempotentMutationHeadersSchema.safeParse({
         'idempotency-key': 'has whitespace',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('DATA-010 DATA-013 validates typed and nudge-response provenance', () => {
+    const base = {
+      contributionId: UUID_V7,
+      revisionId: '01890f2e-7c10-7abc-8def-0123456789ac',
+      proposedJournalDayId: '01890f2e-7c10-7abc-8def-0123456789ad',
+      text: 'Source text',
+      capturedAt: INSTANT,
+      capturedTimezone: 'America/New_York',
+      journalTimezone: 'America/New_York',
+      journalDate: '2026-08-15',
+      journalDateAssignment: 'default' as const,
+    };
+    expect(
+      createContributionRequestSchema.safeParse({
+        ...base,
+        sourceType: 'typed_text',
+      }).success,
+    ).toBe(true);
+    expect(
+      createContributionRequestSchema.safeParse({
+        ...base,
+        sourceType: 'nudge_response',
+      }).success,
+    ).toBe(false);
+    expect(
+      createContributionRequestSchema.safeParse({
+        ...base,
+        sourceType: 'nudge_response',
+        elicitingNudgeId: '01890f2e-7c10-7abc-8def-0123456789ae',
+      }).success,
+    ).toBe(true);
+    expect(
+      createContributionRequestSchema.safeParse({
+        ...base,
+        sourceType: 'typed_text',
+        elicitingNudgeId: '01890f2e-7c10-7abc-8def-0123456789ae',
+      }).success,
+    ).toBe(false);
+    expect(
+      createContributionRequestSchema.safeParse({
+        ...base,
+        sourceType: 'typed_text',
+        capturedTimezone: 'Not/A_Timezone',
       }).success,
     ).toBe(false);
   });
