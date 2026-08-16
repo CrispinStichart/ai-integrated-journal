@@ -20,7 +20,10 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": ["openai.chatgpt"]
+      "extensions": [
+        "openai.chatgpt",
+        "streetsidesoftware.code-spell-checker"
+      ]
     }
   },
   "remoteUser": "pwuser",
