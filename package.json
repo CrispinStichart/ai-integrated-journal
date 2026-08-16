@@ -28,7 +28,7 @@
     "test:e2e": "corepack pnpm --filter @journal/web build && playwright test",
     "test:infrastructure": "vitest run --config vitest.infrastructure.config.ts",
     "typecheck": "corepack pnpm -r --parallel run typecheck",
-    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm openapi:check && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm build && corepack pnpm test:e2e"
+    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm openapi:check && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm test:infrastructure && corepack pnpm build && corepack pnpm test:e2e"
   },
   "simple-git-hooks": {
     "pre-commit": "corepack pnpm validate"

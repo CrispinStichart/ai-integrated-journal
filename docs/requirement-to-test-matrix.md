@@ -1,7 +1,7 @@
 # Requirement-to-test matrix
 
-- Status: Initial baseline
-- Date: 2026-08-15
+- Status: Maintained through the Phase 2 text-journal milestone
+- Date: 2026-08-16
 - Normative source: [`AI-Integrated-Journaling-Application-Specification.md`](../AI-Integrated-Journaling-Application-Specification.md)
 - Delivery source: [`implementation-plan.md`](implementation-plan.md)
 
@@ -17,8 +17,6 @@ Status values are:
 - `Partial`: some required proof exists, but the full behavior or milestone does not.
 - `Verified`: all listed automated and manual evidence passes.
 - `Manual`: automation is impractical and a repeatable manual procedure is linked.
-
-No row is `Verified` in this Phase 0 baseline.
 
 ## Planned verification suites
 
@@ -40,7 +38,7 @@ No row is `Verified` in this Phase 0 baseline.
 | `RETENTION` | Database/blob/cache/index/export/backup deletion and restoration tests | 47, 52 |
 | `PORTABILITY` | Streamed export and backup/restore contract, integration, and E2E tests | 48, 49 |
 | `SECURITY` | Auth integration, threat-model regression, content-safe logging, scan, and destructive-audit checks | 15, 50, 53 |
-| `RELEASE-E2E` | Playwright Firefox acceptance and edge-case suite | 20, 25, 30, 37, 43, 48, 51–54 |
+| `RELEASE-E2E` | Testcontainers-backed source workflow plus Playwright Firefox acceptance and edge-case scenarios | 20, 25, 30, 37, 43, 48, 51–54 |
 | `MANUAL-FIREFOX` | Repeatable physical Firefox Android checklist with device/browser version evidence | 4, 54 |
 | `MANUAL-OPS` | Repeatable backup, restore, retention, provider-disclosure, and recovery drills | 49, 50, 55 |
 
@@ -53,7 +51,7 @@ No row is `Verified` in this Phase 0 baseline.
 | ADR-0003 | `DOMAIN-KERNEL` property tests and `CONTRACT` fixtures round-trip each exact tagged state and reject `null`, invalid confidence, illegal domain states, and falsy-value coercion. |
 | ADR-0004 | `DOMAIN-KERNEL` and `PROCESSOR` directly cover field/whole-artifact overrides, manual deletion, staleness, conflicts, relinquishment, and export/restore authority. |
 | ADR-0005 | `PROCESSOR` covers immutable publication, semantic labels, exact dependencies, DAG rejection, fingerprints, targeted invalidation, history, and version-basis reporting. |
-| ADR-0006 | `RELEASE-E2E` applies the source-only release gates and retains partial status for the audio-dependent portions of AC-001 and AC-003. |
+| ADR-0006 | `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts` apply the source-only release gates; AC-001 and AC-003 retain partial status for their audio-dependent portions. |
 | ADR-0007 | `spikes/queue-transactionality/queue-transactionality.test.mjs` proves that an application mutation and `pg-boss` job commit and roll back together through the official Drizzle adapter. |
 | ADR-0008 | `AUDIO` verifies prepare/finalize/confirm recovery, immutable conflict handling, and conservative orphan discovery and sweeping. |
 | ADR-0009 | `UI-PWA`, `TRANSCRIPT`, `PROCESSOR`, `NUDGE`, `RETENTION`, `PORTABILITY`, `SECURITY`, and `MANUAL-OPS` verify encrypted bounded caches, exact evidence coordinates, raw-response policy, snapshot exports, anti-resurrection tombstones, private processor/nudge defaults, and encrypted backup/restore. |
@@ -65,9 +63,10 @@ No row is `Verified` in this Phase 0 baseline.
 | --- | --- | --- | --- | --- |
 | ARCH-001–003 | `DOMAIN-KERNEL`, `PROCESSOR`: enforce source/observation/interpretation types and exact input lineage/invalidation. | 9, 16, 33 | AI journal | Planned |
 | ARCH-004 | `DOMAIN-KERNEL`, `PROCESSOR`: generated proposals cannot replace active manual values. | 9, 35 | AI journal | Planned |
-| ARCH-005 | `API-OPS`, `UI-PWA`, `RELEASE-E2E`: source capture/view/edit works with providers and workers absent or failed. | 12–14, 19, 20, 52 | Source-only journal; repeated later | Planned |
-| DATA-001–004 | `DOMAIN-KERNEL`, `DB-JOURNAL`, `UI-PWA`: stable date-addressed days, zero/many contributions, and preserved boundaries. | 16–18 | Source-only journal | Planned |
-| DATA-010–013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: contribution metadata, independent lifecycle, targeted edits, and durable linked nudge responses. | 16–19, 43 | Source-only journal for 010–012; complete local release for 013 | Planned |
+| ARCH-005 | `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts`: source capture/view/edit works with the provider unconfigured and worker stopped. | 12–14, 19, 20, 52 | Source-only journal; repeated later | Verified |
+| DATA-001–004 | Domain/database tests plus `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts`: stable date-addressed days, zero/many contributions, and preserved boundaries. | 16–18 | Source-only journal | Verified |
+| DATA-010–012 | Database/API/UI tests plus `apps/api/test/text-journal-milestone.integration.ts`: contribution metadata, independent lifecycle, and targeted edits. | 16–20 | Source-only journal | Verified |
+| DATA-013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: durable linked nudge responses. | 16–19, 43 | Complete local release | Planned |
 | DATA-020–021 | `AUDIO`: preallocated recording identity and immutable finalized audio/replacement behavior. | 21–25 | Audio journal | Planned |
 | DATA-022–023 | `TRANSCRIPT`: immutable exact raw response and complete run provenance/capability metadata. | 26–27 | Transcript journal | Planned |
 | DATA-024–026 | `TRANSCRIPT`: distinct raw/corrected/cleaned layers and append-only editable history. | 28–30 | Transcript journal | Planned |
@@ -114,7 +113,7 @@ No row is `Verified` in this Phase 0 baseline.
 | SEM-002–003 | `DOMAIN-KERNEL`, `BUILTINS`: absent mood/food/other domains never become neutral, none, or zero. | 9, 38, 39 | AI journal | Planned |
 | SEM-004 | `BUILTINS`, `SEARCH`: statistics/summaries exclude or separately label unknown values and disclosed imputation. | 39, 42, 46 | Complete local release | Planned |
 | SEM-005 | `CONTRACT`, `UI-PWA`, `PORTABILITY`: UI and export/import retain state distinctions. | 10, 18, 48 | Complete local release | Planned |
-| TIME-001–003 | `DOMAIN-KERNEL`, `DB-JOURNAL`, `UI-PWA`: capture instant/date/zones round trip and travel/manual moves do not silently reassign. | 9, 16–18 | Source-only journal | Planned |
+| TIME-001–003 | Domain/database tests, `apps/api/test/text-journal-milestone.integration.ts`, and `playwright/shell.spec.ts`: capture instant/date/zones round trip and manual moves do not silently reassign. | 9, 16–20 | Source-only journal | Verified |
 | TIME-004–006 | `DOMAIN-KERNEL`, `BUILTINS`: relative/ambiguous language uses immutable contribution context and retains basis/uncertainty. | 9, 40 | AI journal | Planned |
 | TIME-007 | `DOMAIN-KERNEL`, `PROCESSOR`: corrected date/time remains authoritative through reprocessing. | 9, 35, 40 | AI journal | Planned |
 | SLEEP-001–004 | `BUILTINS`: wake-date default, disclosed correction, distinct naps/periods, and unknown optional fields. | 40 | AI journal | Planned |
@@ -143,7 +142,7 @@ No row is `Verified` in this Phase 0 baseline.
 | STATE-002–003 | `WORKER`, `RELEASE-E2E`: isolated failures preserve other stages and expose affected-stage retry. | 13, 27, 32, 52 | AI journal | Planned |
 | STATE-004 | `WORKER`, `PROCESSOR`: retry fingerprint/attempt lineage prevents silent duplicate observations. | 13, 27, 32, 34 | AI journal | Planned |
 | STATE-005 | `WORKER`, `PROCESSOR`: partial results remain labeled and ineligible as complete day state. | 13, 32 | AI journal | Planned |
-| STATE-006–007 | `API-OPS`, `UI-PWA`, `RELEASE-E2E`: source durability and journal use do not depend on optional processing. | 12–14, 19, 20 | Source-only journal | Planned |
+| STATE-006–007 | `apps/api/test/text-journal-milestone.integration.ts`, `apps/web/test/offline-journal.test.ts`, and `playwright/shell.spec.ts`: source durability and journal use do not depend on optional processing. | 12–14, 19, 20 | Source-only journal | Verified |
 | SEARCH-001 | `SEARCH`: deterministic selected-layer full-text retrieval. | 44 | Complete local release | Planned |
 | SEARCH-002 | `SEARCH`: optional semantic retrieval is capability-gated and lifecycle aware. | 45 | Complete local release | Planned |
 | SEARCH-003–004 | `SEARCH`, `RELEASE-E2E`: results/citations navigate to evidence and visually label source versus synthesis. | 44–46, 51 | Complete local release | Planned |
@@ -173,9 +172,9 @@ Acceptance criteria receive individual rows because they are release evidence, e
 
 | Criterion | Planned proof | Owning task(s) | First complete milestone | Status |
 | --- | --- | --- | --- | --- |
-| AC-001 | `UI-PWA` first proves one day with independent fixture contributions; `AUDIO`/`RELEASE-E2E` completes the two-recording-plus-text scenario. | 18, 20, 25, 51 | Audio journal | Planned |
+| AC-001 | `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts` prove one day with independent typed contributions; `AUDIO`/`RELEASE-E2E` must still complete the two-recording-plus-text scenario. | 18, 20, 25, 51 | Audio journal | Partial |
 | AC-002 | `AUDIO`, `RELEASE-E2E`: interrupt upload, reopen/reconnect, retry same identity, assert one durable recording. | 25, 51 | Audio journal | Planned |
-| AC-003 | `RELEASE-E2E`: worker/provider failure leaves typed sources editable; repeat with original recording after audio/STT milestones. | 20, 25, 30, 51 | Source-only partial; transcript journal complete | Planned |
+| AC-003 | `apps/api/test/text-journal-milestone.integration.ts` proves that worker/provider failure leaves typed sources durable and editable across restart; repeat with an original recording after audio/STT milestones. | 20, 25, 30, 51 | Source-only partial; transcript journal complete | Partial |
 | AC-010 | `TRANSCRIPT`, `RELEASE-E2E`: inspect audio and three explicitly distinct transcript layers. | 30, 51 | Transcript journal | Planned |
 | AC-011 | `TRANSCRIPT`: correction leaves raw bytes/text unchanged and stales exact dependents. | 28–30 | Transcript journal | Planned |
 | AC-012 | `TRANSCRIPT`, `RELEASE-E2E`: timed evidence seeks audio; untimed provider fixture shows unavailable timing. | 26, 29, 30, 51 | Transcript journal | Planned |

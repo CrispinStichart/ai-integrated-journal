@@ -7,6 +7,7 @@ packages for the journaling application.
 
 - Node.js 24.18.0 (see `.node-version` and `.nvmrc`)
 - Corepack, included with the pinned Node.js release
+- Docker with the Compose plugin (used by local PostgreSQL and persistence tests)
 
 ## Setup
 
@@ -36,9 +37,10 @@ Run every local quality gate, production build, and Firefox end-to-end test:
 corepack pnpm validate
 ```
 
-The pre-commit hook runs the same validation command. Useful focused commands
+The pre-commit hook runs the same validation command. It includes containerized
+PostgreSQL persistence tests, so Docker must be running. Useful focused commands
 are `format:check`, `lint`, `boundaries`, `typecheck`, `test`, `test:coverage`,
-`build`, and `test:e2e`.
+`test:infrastructure`, `build`, and `test:e2e`.
 
 Start the three application shells in watch mode with:
 
