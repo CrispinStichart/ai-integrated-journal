@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 readonly WORKSPACE_DIR="/workspaces/ai-integrated-journal"
 readonly HOST_SSH_DIR="/mnt/host-ssh"
+readonly JOURNAL_DATA_DIR="/mnt/journal-data"
 readonly DEV_USER="pwuser"
 readonly EXPECTED_ORIGIN="git@github.com:CrispinStichart/ai-integrated-journal.git"
 
@@ -35,6 +36,7 @@ install -m 0644 -o "${DEV_USER}" -g "${DEV_USER}" \
 
 install -d -o "${DEV_USER}" -g "${DEV_USER}" "${WORKSPACE_DIR}"
 chown "${DEV_USER}:${DEV_USER}" "${WORKSPACE_DIR}"
+install -d -m 0700 -o "${DEV_USER}" -g "${DEV_USER}" "${JOURNAL_DATA_DIR}"
 
 run_as_dev_user() {
   sudo -u "${DEV_USER}" -H "$@"
