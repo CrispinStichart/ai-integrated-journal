@@ -27,8 +27,8 @@ const boss = createQueueClient(config.databaseUrl);
 boss.on('error', (error: Error) => {
   logger.error({ errorType: error.name }, 'Queue runtime error');
 });
-await assertQueueFoundation(boss, database);
 await boss.start();
+await assertQueueFoundation(boss, database);
 
 const healthProbes: readonly HealthProbe[] = [
   {

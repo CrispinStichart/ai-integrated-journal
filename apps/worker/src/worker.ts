@@ -41,8 +41,8 @@ export class WorkerRuntime {
   public async start(): Promise<void> {
     if (this.state !== 'stopped') return;
     this.state = 'starting';
-    await assertQueueFoundation(this.options.boss, this.options.database);
     await this.options.boss.start();
+    await assertQueueFoundation(this.options.boss, this.options.database);
     await this.options.registerConsumers?.(this.options.boss);
     this.state = 'ready';
     this.options.logger.info('Worker ready');

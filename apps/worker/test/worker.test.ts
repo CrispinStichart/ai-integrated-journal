@@ -21,7 +21,7 @@ describe('@journal/worker operational shell', () => {
     });
   });
 
-  it('checks compatibility, starts consumers once, and shuts resources down once', async () => {
+  it('opens the queue database before checking compatibility, starts consumers once, and shuts resources down once', async () => {
     const boss = {
       start: vi.fn(),
       stop: vi.fn(),
@@ -45,6 +45,12 @@ describe('@journal/worker operational shell', () => {
     expect(assertQueueFoundation).toHaveBeenCalledOnce();
     expect(boss.start).toHaveBeenCalledOnce();
     expect(registerConsumers).toHaveBeenCalledOnce();
+    expect(vi.mocked(boss.start).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(assertQueueFoundation).mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(
+      vi.mocked(assertQueueFoundation).mock.invocationCallOrder[0],
+    ).toBeLessThan(registerConsumers.mock.invocationCallOrder[0] ?? 0);
 
     const firstStop = runtime.stop();
     const secondStop = runtime.stop();
