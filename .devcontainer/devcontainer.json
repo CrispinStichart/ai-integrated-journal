@@ -8,7 +8,8 @@
   "workspaceFolder": "/workspaces/ai-integrated-journal",
   "mounts": [
     "source=${localEnv:USERPROFILE}\\.ssh,target=/mnt/host-ssh,type=bind,readonly",
-    "source=journal-data,target=/mnt/journal-data,type=volume"
+    "source=journal-data,target=/mnt/journal-data,type=volume",
+    "source=ai-integrated-journal-pwuser-home,target=/home/pwuser,type=volume"
   ],
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
