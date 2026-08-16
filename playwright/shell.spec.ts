@@ -99,6 +99,7 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
       authority: 'manual';
       authorId: string;
       createdAt: string;
+      editReason?: string;
     };
     deletedAt?: string;
     restoredAt?: string;
@@ -131,6 +132,12 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
     makeContribution(ids.first, ids.firstRevision, 'Morning reflection'),
     makeContribution(ids.second, ids.secondRevision, 'Evening reflection'),
   ];
+  const revisionHistory = new Map(
+    contributions.map((contribution) => [
+      contribution.id,
+      [contribution.currentRevision],
+    ]),
+  );
 
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -215,6 +222,41 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
     const contributionMatch = /^\/api\/v1\/contributions\/([^/]+)$/.exec(
       url.pathname,
     );
+    if (contributionMatch?.[1] && request.method() === 'PATCH') {
+      const contribution = contributions.find(
+        (item) => item.id === contributionMatch[1],
+      );
+      const input = request.postDataJSON() as {
+        revisionId: string;
+        text: string;
+        editReason?: string;
+      };
+      if (contribution) {
+        contribution.currentRevision = {
+          id: input.revisionId,
+          contributionId: contribution.id,
+          revision: contribution.currentRevision.revision + 1,
+          text: input.text,
+          authority: 'manual',
+          authorId: ids.author,
+          createdAt: `${date}T12:30:00.000Z`,
+          ...(input.editReason === undefined
+            ? {}
+            : { editReason: input.editReason }),
+        };
+        revisionHistory
+          .get(contribution.id)
+          ?.push(contribution.currentRevision);
+      }
+      await respond({
+        contribution,
+        idempotency: {
+          key: request.headers()['idempotency-key'],
+          replayed: false,
+        },
+      });
+      return;
+    }
     if (contributionMatch?.[1] && request.method() === 'DELETE') {
       const contribution = contributions.find(
         (item) => item.id === contributionMatch[1],
@@ -253,11 +295,8 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
       url.pathname,
     );
     if (historyMatch?.[1]) {
-      const contribution = contributions.find(
-        (item) => item.id === historyMatch[1],
-      );
       await respond({
-        items: contribution ? [contribution.currentRevision] : [],
+        items: revisionHistory.get(historyMatch[1]) ?? [],
         page: { hasMore: false },
       });
       return;
@@ -306,6 +345,27 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
   ).toContainText('Morning reflection');
   await page
     .getByRole('dialog', { name: 'Revision history' })
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+
+  const firstContribution = page.getByRole('article').first();
+  await firstContribution.getByRole('button', { name: 'Edit' }).click();
+  await firstContribution
+    .getByLabel('Contribution text')
+    .fill('Updated morning reflection');
+  await firstContribution
+    .getByRole('button', { name: 'Save revision' })
+    .click();
+  await expect(firstContribution).toContainText('Updated morning reflection');
+  await firstContribution.getByRole('button', { name: 'History' }).click();
+  const updatedHistory = page.getByRole('dialog', {
+    name: 'Revision history',
+  });
+  await expect(updatedHistory).toContainText('Revision 1');
+  await expect(updatedHistory).toContainText('Morning reflection');
+  await expect(updatedHistory).toContainText('Revision 2');
+  await expect(updatedHistory).toContainText('Updated morning reflection');
+  await updatedHistory
     .getByRole('button', { name: 'Close', exact: true })
     .click();
 

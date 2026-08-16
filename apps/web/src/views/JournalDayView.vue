@@ -38,7 +38,7 @@ const selectedDate = ref(journalDate.value);
 const submitting = ref(false);
 const errorMessage = ref('');
 const revisions = reactive<
-  Record<string, readonly ContributionRevisionResource[]>
+  Record<string, readonly ContributionRevisionResource[] | undefined>
 >({});
 const conflict = ref<{
   current: ContributionResource;
@@ -303,7 +303,7 @@ async function changeDeletion(
 }
 
 async function loadHistory(contribution: ContributionResource): Promise<void> {
-  if (revisions[contribution.id] !== undefined) return;
+  revisions[contribution.id] = undefined;
   try {
     revisions[contribution.id] = await listContributionRevisions(
       contribution.id,
