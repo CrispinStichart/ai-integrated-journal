@@ -1,5 +1,6 @@
 import eslint from '@eslint/js';
 import globals from 'globals';
+import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 import pluginVue from 'eslint-plugin-vue';
 
@@ -47,4 +48,5 @@ export default tseslint.config(
       'vue/singleline-html-element-content-newline': 'off',
     },
   },
+  prettier,
 );

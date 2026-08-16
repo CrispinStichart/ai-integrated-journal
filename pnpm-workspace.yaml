@@ -10,3 +10,4 @@ allowBuilds:
   protobufjs: false
   simple-git-hooks: true
   ssh2: false
+  vue-demi: true

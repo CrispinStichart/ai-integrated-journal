@@ -4,3 +4,11 @@
     light --default,
     dark --prefersdark;
 }
+
+@theme {
+  --font-sans: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
+}
+
+html {
+  background-color: var(--color-base-100);
+}

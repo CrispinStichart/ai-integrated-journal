@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vitest/config';
+import vue from '@vitejs/plugin-vue';
 
 const repositoryRoot = path.dirname(fileURLToPath(import.meta.url));
 const workspacePackages = [
@@ -17,13 +18,24 @@ const workspacePackages = [
 ] as const;
 
 export default defineConfig({
+  plugins: [vue()],
   resolve: {
-    alias: Object.fromEntries(
-      workspacePackages.map((packageName) => [
+    alias: Object.fromEntries([
+      ...workspacePackages.map((packageName) => [
         `@journal/${packageName}`,
         path.join(repositoryRoot, 'packages', packageName, 'src', 'index.ts'),
       ]),
-    ),
+      [
+        'virtual:pwa-register',
+        path.join(
+          repositoryRoot,
+          'apps',
+          'web',
+          'test',
+          'virtual-pwa-register.ts',
+        ),
+      ],
+    ]),
   },
   test: {
     coverage: {
