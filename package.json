@@ -23,15 +23,16 @@
     "openapi:check": "corepack pnpm --filter @journal/contracts openapi:check",
     "openapi:generate": "corepack pnpm --filter @journal/contracts openapi:generate",
     "prepare": "simple-git-hooks",
+    "test:pre-commit": "node --test scripts/pre-commit.test.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "corepack pnpm --filter @journal/web build && playwright test",
     "test:infrastructure": "vitest run --config vitest.infrastructure.config.ts",
     "typecheck": "corepack pnpm -r --parallel run typecheck",
-    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm openapi:check && corepack pnpm typecheck && corepack pnpm test:coverage && corepack pnpm test:infrastructure && corepack pnpm build && corepack pnpm test:e2e"
+    "validate": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm boundaries && corepack pnpm openapi:check && corepack pnpm typecheck && corepack pnpm test:pre-commit && corepack pnpm test:coverage && corepack pnpm test:infrastructure && corepack pnpm build && corepack pnpm test:e2e"
   },
   "simple-git-hooks": {
-    "pre-commit": "corepack pnpm validate"
+    "pre-commit": "node scripts/pre-commit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

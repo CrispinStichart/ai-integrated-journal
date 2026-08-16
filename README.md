@@ -37,10 +37,12 @@ Run every local quality gate, production build, and Firefox end-to-end test:
 corepack pnpm validate
 ```
 
-The pre-commit hook runs the same validation command. It includes containerized
-PostgreSQL persistence tests, so Docker must be running. Useful focused commands
-are `format:check`, `lint`, `boundaries`, `typecheck`, `test`, `test:coverage`,
-`test:infrastructure`, `build`, and `test:e2e`.
+The pre-commit hook runs the same validation command unless all staged changes
+are Markdown files, all are under `.devcontainer/`, or all are under `.git/`.
+Validation includes containerized PostgreSQL persistence tests, so Docker must
+be running. Useful focused commands are `format:check`, `lint`, `boundaries`,
+`typecheck`, `test`, `test:coverage`, `test:infrastructure`, `build`, and
+`test:e2e`.
 
 Start the three application shells in watch mode with:
 
