@@ -23,3 +23,31 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  allQueueDefinitions,
+  createJobFingerprint,
+  createQueueJobPayload,
+  EXPECTED_PG_BOSS_SCHEMA_VERSION,
+  InvalidQueuePayloadError,
+  parseQueueJobPayload,
+  QUEUE_PAYLOAD_SCHEMA_VERSION,
+  queueDefinitions,
+  queueNames,
+  type QueueDefinition,
+  type QueueJobPayload,
+  type QueueName,
+} from './queue-contracts.js';
+export {
+  assertQueueFoundation,
+  cancelQueueJob,
+  classifyQueueError,
+  createQueueClient,
+  enqueueJobInTransaction,
+  provisionQueueFoundation,
+  QueueFoundationError,
+  QueueJobError,
+  registerQueueWorker,
+  type CanonicalJobHandler,
+  type CanonicalJobInput,
+  type QueueAttemptDisposition,
+} from './queue-runtime.js';

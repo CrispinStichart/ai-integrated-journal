@@ -10,6 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@journal/processors": "workspace:*"
+    "@journal/config": "workspace:*",
+    "@journal/database": "workspace:*",
+    "@journal/observability": "workspace:*",
+    "@journal/processors": "workspace:*",
+    "pg-boss": "12.26.3"
   }
 }

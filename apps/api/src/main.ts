@@ -2,7 +2,11 @@ import { constants } from 'node:fs';
 import { access } from 'node:fs/promises';
 
 import { loadConfig } from '@journal/config';
-import { createDatabaseClient } from '@journal/database';
+import {
+  assertQueueFoundation,
+  createDatabaseClient,
+  createQueueClient,
+} from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
 
 import { createApiApp } from './app.js';
@@ -16,6 +20,12 @@ const logger = createContentSafeLogger({
   service: '@journal/api',
 });
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
+const boss = createQueueClient(config.databaseUrl);
+boss.on('error', (error: Error) => {
+  logger.error({ errorType: error.name }, 'Queue runtime error');
+});
+await assertQueueFoundation(boss, database);
+await boss.start();
 
 const healthProbes: readonly HealthProbe[] = [
   {
@@ -39,7 +49,7 @@ const healthProbes: readonly HealthProbe[] = [
     requiredForReadiness: false,
     check: async () => {
       const result = await database.pool.query<{ migrations: string | null }>(
-        "select to_regclass('drizzle.__drizzle_migrations')::text as migrations",
+        "select to_regclass('journal_migrations.__drizzle_migrations')::text as migrations",
       );
       return result.rows[0]?.migrations
         ? { status: 'healthy' }
@@ -49,7 +59,14 @@ const healthProbes: readonly HealthProbe[] = [
   {
     name: 'queue',
     requiredForReadiness: false,
-    check: async () => ({ status: 'not_configured', detail: 'task_13' }),
+    check: async () => {
+      const schemaVersion = await boss.schemaVersion();
+      const queues = await boss.getQueues();
+      return {
+        status: 'healthy',
+        detail: `schema_${String(schemaVersion)}_queues_${queues.length}`,
+      };
+    },
   },
   {
     name: 'providers',
@@ -74,7 +91,12 @@ const server = app.listen(config.http.port, config.http.host, () => {
 });
 const shutdown = createGracefulShutdown({
   logger,
-  resources: [{ close: () => database.close() }],
+  resources: [
+    { close: () => database.close() },
+    {
+      close: () => boss.stop({ graceful: true, timeout: 10_000 }),
+    },
+  ],
   server,
 });
 

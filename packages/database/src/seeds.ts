@@ -6,86 +6,64 @@ import {
   queueConfigurations,
   schedules,
 } from './schema.js';
+import {
+  allQueueDefinitions,
+  createQueueJobPayload,
+  queueNames,
+} from './queue-contracts.js';
 import { inTransaction } from './transaction.js';
 
-const queueSeeds: (typeof queueConfigurations.$inferInsert)[] = [
-  {
-    name: 'journal.processing',
-    payloadSchemaVersion: 1,
-    retryLimit: 5,
-    retryDelaySeconds: 30,
-    retryBackoff: true,
-    expireInSeconds: 15 * 60,
-    retentionSeconds: 14 * 24 * 60 * 60,
-    deadLetterQueue: 'journal.dead-letter',
-  },
-  {
-    name: 'journal.maintenance',
-    payloadSchemaVersion: 1,
-    retryLimit: 3,
-    retryDelaySeconds: 60,
-    retryBackoff: true,
-    expireInSeconds: 30 * 60,
-    retentionSeconds: 14 * 24 * 60 * 60,
-    deadLetterQueue: 'journal.dead-letter',
-  },
-  {
-    name: 'journal.notifications',
-    payloadSchemaVersion: 1,
-    retryLimit: 3,
-    retryDelaySeconds: 60,
-    retryBackoff: true,
-    expireInSeconds: 5 * 60,
-    retentionSeconds: 7 * 24 * 60 * 60,
-    deadLetterQueue: 'journal.dead-letter',
-  },
-  {
-    name: 'journal.backup',
-    payloadSchemaVersion: 1,
-    retryLimit: 2,
-    retryDelaySeconds: 5 * 60,
-    retryBackoff: true,
-    expireInSeconds: 4 * 60 * 60,
-    retentionSeconds: 30 * 24 * 60 * 60,
-    deadLetterQueue: 'journal.dead-letter',
-  },
-  {
-    name: 'journal.dead-letter',
-    payloadSchemaVersion: 1,
-    retryLimit: 0,
-    retryDelaySeconds: 0,
-    retryBackoff: false,
-    expireInSeconds: 24 * 60 * 60,
-    retentionSeconds: 90 * 24 * 60 * 60,
-  },
-];
+const queueSeeds: (typeof queueConfigurations.$inferInsert)[] =
+  allQueueDefinitions.map((definition) => ({
+    deadLetterQueue: definition.queueOptions.deadLetter,
+    expireInSeconds: definition.queueOptions.expireInSeconds ?? 15 * 60,
+    name: definition.name,
+    payloadSchemaVersion: definition.payloadSchemaVersion,
+    retentionSeconds:
+      definition.queueOptions.retentionSeconds ?? 14 * 24 * 60 * 60,
+    retryBackoff: definition.queueOptions.retryBackoff ?? false,
+    retryDelaySeconds: definition.queueOptions.retryDelay ?? 0,
+    retryLimit: definition.queueOptions.retryLimit ?? 2,
+  }));
 
 const scheduleSeeds: (typeof schedules.$inferInsert)[] = [
   {
     key: 'retention.daily',
-    queueName: 'journal.maintenance',
+    queueName: queueNames.maintenance,
     cronExpression: '15 3 * * *',
     timeZone: 'UTC',
     payloadSchemaVersion: 1,
-    payload: { operation: 'retention' },
+    payload: createQueueJobPayload({
+      identifiers: { scheduleKey: 'retention.daily' },
+      operation: 'retention',
+      queueName: queueNames.maintenance,
+    }),
     enabled: true,
   },
   {
     key: 'backup.daily',
-    queueName: 'journal.backup',
+    queueName: queueNames.backup,
     cronExpression: '30 3 * * *',
     timeZone: 'UTC',
     payloadSchemaVersion: 1,
-    payload: { operation: 'backup' },
+    payload: createQueueJobPayload({
+      identifiers: { scheduleKey: 'backup.daily' },
+      operation: 'backup',
+      queueName: queueNames.backup,
+    }),
     enabled: false,
   },
   {
     key: 'nudges.digest',
-    queueName: 'journal.notifications',
+    queueName: queueNames.notifications,
     cronExpression: '0 * * * *',
     timeZone: 'UTC',
     payloadSchemaVersion: 1,
-    payload: { operation: 'nudge_digest' },
+    payload: createQueueJobPayload({
+      identifiers: { scheduleKey: 'nudges.digest' },
+      operation: 'nudge_digest',
+      queueName: queueNames.notifications,
+    }),
     enabled: true,
   },
 ];

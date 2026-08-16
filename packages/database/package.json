@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "pg-boss": "12.26.3",
     "pg": "8.23.0"
   }
 }
