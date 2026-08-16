@@ -19,7 +19,9 @@ Start the local PostgreSQL/pgvector service and create local blob directories:
 
 ```sh
 cp .env.example .env
-# Replace the password placeholders and set BLOB_DATA_DIR to an absolute path.
+# Replace the password placeholder and set BLOB_DATA_DIR to an absolute path.
+# When running directly on the Docker host instead of in the dev container,
+# replace host.docker.internal with 127.0.0.1 in DATABASE_URL.
 set -a
 . ./.env
 set +a

@@ -1,8 +1,12 @@
 # Local infrastructure
 
-Copy `.env.example` to `.env`, replace its password placeholders, replace its
-example blob path with an absolute path for your account, and export the values
-before starting the applications. Compose reads `.env` automatically.
+Copy `.env.example` to `.env`, replace its password placeholder with a
+URL-safe local password, replace its example blob path with an absolute path
+for your account, and export the values before starting the applications.
+Compose reads `.env` automatically. The example database URL uses
+`host.docker.internal` so processes in the development container can reach the
+Compose port published by the Docker host. If the Node.js processes instead run
+directly on that host, change the database URL host to `127.0.0.1`.
 
 ```sh
 set -a
