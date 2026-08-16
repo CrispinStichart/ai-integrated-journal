@@ -8,17 +8,20 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'today',
-    component: () => import('../views/TodayView.vue'),
+    component: () => import('../views/JournalDayView.vue'),
     meta: { title: 'Today' },
+  },
+  {
+    path: '/journal/:date(\\d{4}-\\d{2}-\\d{2})',
+    name: 'journal-day',
+    component: () => import('../views/JournalDayView.vue'),
+    props: (route) => ({ date: route.params.date }),
+    meta: { title: 'Journal Day' },
   },
   {
     path: '/calendar',
     name: 'calendar',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Browse journal days and their capture status.',
-      title: 'Calendar',
-    },
+    component: () => import('../views/CalendarView.vue'),
     meta: { title: 'Calendar' },
   },
   {

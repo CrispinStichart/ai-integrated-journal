@@ -15,6 +15,7 @@ describe('frontend application foundations', () => {
   it('defines every product area as a lazy route', async () => {
     expect(routes.map((route) => route.path)).toEqual([
       '/',
+      '/journal/:date(\\d{4}-\\d{2}-\\d{2})',
       '/calendar',
       '/search',
       '/activity',
