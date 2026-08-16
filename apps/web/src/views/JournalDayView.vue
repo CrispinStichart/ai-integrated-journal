@@ -49,7 +49,9 @@ const pendingMutations = ref<readonly TextMutation[]>([]);
 
 const dayQuery = useQuery({
   queryKey: computed(() => ['journal-day', journalDate.value]),
-  queryFn: () => offline.readDay(journalDate.value),
+  // TanStack Query treats an undefined result as a failed query. A missing
+  // Journal Day is a valid empty state, so represent it explicitly as null.
+  queryFn: async () => (await offline.readDay(journalDate.value)) ?? null,
 });
 const contributions = computed(() => {
   const byId = new Map(

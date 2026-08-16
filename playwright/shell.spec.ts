@@ -43,6 +43,50 @@ test('[ARCH-005][STATE-006] renders an accessible, navigable application shell',
   await expect(page.locator('#main-content')).toBeFocused();
 });
 
+test('[DATA-001][DATA-002] distinguishes a missing Journal Day from a load failure', async ({
+  page,
+}) => {
+  await authenticateShell(page);
+  await page.route('**/api/v1/journal-days/2040-01-01**', (route) =>
+    route.fulfill({
+      status: 404,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'about:blank',
+        title: 'Journal day not found',
+        status: 404,
+        code: 'not_found',
+      }),
+    }),
+  );
+
+  await page.goto('/journal/2040-01-01');
+
+  await expect(
+    page.getByRole('heading', { name: 'Nothing recorded yet' }),
+  ).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await page.route('**/api/v1/journal-days/2040-01-02**', (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({
+        type: 'about:blank',
+        title: 'Journal unavailable',
+        status: 500,
+        code: 'internal_error',
+      }),
+    }),
+  );
+  await page.goto('/journal/2040-01-02');
+
+  await expect(page.getByRole('alert')).toContainText(
+    'Could not load this Journal Day.',
+  );
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+});
+
 test('exposes an installable manifest and reloads the shell offline', async ({
   context,
   page,
