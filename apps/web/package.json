@@ -10,6 +10,8 @@
     "typecheck": "vue-tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
+    "@journal/contracts": "workspace:*",
+    "@simplewebauthn/browser": "13.3.0",
     "@tanstack/vue-query": "5.101.4",
     "@vueuse/core": "14.4.0",
     "idb": "8.0.3",

@@ -1,6 +1,7 @@
 /** Zod-backed wire and durable-value contracts shared by every application. */
 export const contractsPackageName = '@journal/contracts' as const;
 
+export * from './auth.js';
 export * from './events.js';
 export * from './http-metadata.js';
 export * from './operations.js';

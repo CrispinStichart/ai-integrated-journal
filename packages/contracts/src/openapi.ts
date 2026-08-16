@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+import {
+  authenticatedResponseSchema,
+  authStatusResponseSchema,
+  bootstrapRequestSchema,
+  logoutResponseSchema,
+  passkeyOptionsResponseSchema,
+  passkeyVerificationRequestSchema,
+  passwordLoginRequestSchema,
+  passwordRecoveryRequestSchema,
+} from './auth.js';
 import { lastEventIdSchema, sseEventEnvelopeSchema } from './events.js';
 import {
   conditionalMutationHeadersSchema,
@@ -52,6 +62,17 @@ function problemResponse(description: string): Record<string, unknown> {
   );
 }
 
+function jsonRequest(schemaName: string): Record<string, unknown> {
+  return {
+    required: true,
+    content: {
+      'application/json': {
+        schema: { $ref: `#/components/schemas/${schemaName}` },
+      },
+    },
+  };
+}
+
 export function createOpenApiDocument(): Record<string, unknown> {
   return {
     openapi: '3.1.1',
@@ -64,6 +85,105 @@ export function createOpenApiDocument(): Record<string, unknown> {
     },
     servers: [{ url: 'http://localhost:3000' }],
     paths: {
+      '/api/v1/auth/status': {
+        get: {
+          responses: {
+            '200': schemaResponse('Authentication state', 'AuthStatusResponse'),
+          },
+        },
+      },
+      '/api/v1/auth/bootstrap': {
+        post: {
+          requestBody: jsonRequest('BootstrapRequest'),
+          responses: {
+            '201': schemaResponse('Owner provisioned', 'AuthenticatedResponse'),
+            '409': problemResponse('Owner already provisioned'),
+            '429': problemResponse('Rate limited'),
+          },
+        },
+      },
+      '/api/v1/auth/password/login': {
+        post: {
+          requestBody: jsonRequest('PasswordLoginRequest'),
+          responses: {
+            '200': schemaResponse('Authenticated', 'AuthenticatedResponse'),
+            '401': problemResponse('Invalid credentials'),
+            '429': problemResponse('Rate limited'),
+          },
+        },
+      },
+      '/api/v1/auth/password/recover': {
+        post: {
+          requestBody: jsonRequest('PasswordRecoveryRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Password reset and authenticated',
+              'AuthenticatedResponse',
+            ),
+            '401': problemResponse('Invalid recovery code'),
+            '429': problemResponse('Rate limited'),
+          },
+        },
+      },
+      '/api/v1/auth/passkeys/registration/options': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Passkey creation options',
+              'PasskeyOptionsResponse',
+            ),
+            '401': problemResponse('Authentication required'),
+            '403': problemResponse('CSRF validation failed'),
+          },
+        },
+      },
+      '/api/v1/auth/passkeys/registration/verify': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('PasskeyVerificationRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Passkey registered and session rotated',
+              'AuthenticatedResponse',
+            ),
+            '400': problemResponse('Invalid passkey response'),
+            '403': problemResponse('CSRF validation failed'),
+          },
+        },
+      },
+      '/api/v1/auth/passkeys/authentication/options': {
+        post: {
+          responses: {
+            '200': schemaResponse(
+              'Passkey request options',
+              'PasskeyOptionsResponse',
+            ),
+          },
+        },
+      },
+      '/api/v1/auth/passkeys/authentication/verify': {
+        post: {
+          requestBody: jsonRequest('PasskeyVerificationRequest'),
+          responses: {
+            '200': schemaResponse('Authenticated', 'AuthenticatedResponse'),
+            '401': problemResponse('Passkey verification failed'),
+          },
+        },
+      },
+      '/api/v1/auth/logout': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Session revoked and caches cleared',
+              'LogoutResponse',
+            ),
+            '401': problemResponse('Authentication required'),
+            '403': problemResponse('CSRF validation failed'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -147,8 +267,16 @@ export function createOpenApiDocument(): Record<string, unknown> {
           in: 'cookie',
           name: 'journal_session',
         },
+        csrfToken: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-CSRF-Token',
+        },
       },
       schemas: {
+        AuthenticatedResponse: componentSchema(authenticatedResponseSchema),
+        AuthStatusResponse: componentSchema(authStatusResponseSchema),
+        BootstrapRequest: componentSchema(bootstrapRequestSchema),
         ConditionalMutationHeaders: componentSchema(
           conditionalMutationHeadersSchema,
         ),
@@ -166,6 +294,13 @@ export function createOpenApiDocument(): Record<string, unknown> {
           idempotentMutationHeadersSchema,
         ),
         LivenessResponse: componentSchema(livenessResponseSchema),
+        LogoutResponse: componentSchema(logoutResponseSchema),
+        PasskeyOptionsResponse: componentSchema(passkeyOptionsResponseSchema),
+        PasskeyVerificationRequest: componentSchema(
+          passkeyVerificationRequestSchema,
+        ),
+        PasswordLoginRequest: componentSchema(passwordLoginRequestSchema),
+        PasswordRecoveryRequest: componentSchema(passwordRecoveryRequestSchema),
         PersistedExtensibleValue: componentSchema(
           persistedExtensibleValueSchema,
         ),

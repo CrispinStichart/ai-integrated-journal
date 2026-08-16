@@ -16,6 +16,14 @@ export {
 } from './environment.js';
 export { migrateDatabase, migrationsFolder } from './migrations.js';
 export {
+  authChallenges,
+  authenticators,
+  passwordCredentials,
+  recoveryCodes,
+  sessions,
+  users,
+} from './schema.js';
+export {
   FoundationRepository,
   type ProcessorInstallationRecord,
   type QueueConfigurationRecord,

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -15,6 +16,167 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const journalSchema = pgSchema('journal');
+
+export const authChallengePurpose = pgEnum('auth_challenge_purpose', [
+  'passkey_registration',
+  'passkey_authentication',
+]);
+
+export const users = journalSchema.table(
+  'user',
+  {
+    id: uuid('id').primaryKey(),
+    singleton: boolean('singleton').notNull().default(true),
+    displayName: text('display_name').notNull(),
+    locale: text('locale').notNull().default('en'),
+    journalTimeZone: text('journal_time_zone').notNull().default('UTC'),
+    preferencesVersion: integer('preferences_version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('user_singleton_unique').on(table.singleton),
+    check('user_singleton_true', sql`${table.singleton} = true`),
+    check(
+      'user_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('user_display_name_not_blank', sql`length(${table.displayName}) > 0`),
+    check(
+      'user_preferences_version_positive',
+      sql`${table.preferencesVersion} > 0`,
+    ),
+  ],
+);
+
+export const passwordCredentials = journalSchema.table('password_credential', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const authenticators = journalSchema.table(
+  'authenticator',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id').notNull(),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: text('transports').array().notNull().default([]),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('authenticator_credential_id_unique').on(table.credentialId),
+    index('authenticator_user_id_idx').on(table.userId),
+    check(
+      'authenticator_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('authenticator_counter_valid', sql`${table.counter} >= 0`),
+  ],
+);
+
+export const recoveryCodes = journalSchema.table(
+  'recovery_code',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('recovery_code_hash_unique').on(table.codeHash),
+    index('recovery_code_user_id_idx').on(table.userId),
+    check(
+      'recovery_code_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+  ],
+);
+
+export const sessions = journalSchema.table(
+  'session',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    csrfTokenHash: text('csrf_token_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    idleExpiresAt: timestamp('idle_expires_at', {
+      withTimezone: true,
+    }).notNull(),
+    absoluteExpiresAt: timestamp('absolute_expires_at', {
+      withTimezone: true,
+    }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('session_token_hash_unique').on(table.tokenHash),
+    index('session_user_id_idx').on(table.userId),
+    index('session_expiry_idx').on(table.absoluteExpiresAt),
+    check(
+      'session_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'session_idle_before_absolute',
+      sql`${table.idleExpiresAt} <= ${table.absoluteExpiresAt}`,
+    ),
+  ],
+);
+
+export const authChallenges = journalSchema.table(
+  'auth_challenge',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    purpose: authChallengePurpose('purpose').notNull(),
+    challengeHash: text('challenge_hash').notNull(),
+    challenge: text('challenge').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('auth_challenge_hash_unique').on(table.challengeHash),
+    index('auth_challenge_expiry_idx').on(table.expiresAt),
+    check(
+      'auth_challenge_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+  ],
+);
 
 export const processorRequirementMode = pgEnum('processor_requirement_mode', [
   'optional',
@@ -209,9 +371,15 @@ export const auditEvents = journalSchema.table(
 );
 
 export const databaseSchema = {
+  authChallenges,
+  authenticators,
   auditEvents,
   developmentFixtures,
+  passwordCredentials,
   processorInstallations,
   queueConfigurations,
+  recoveryCodes,
   schedules,
+  sessions,
+  users,
 };

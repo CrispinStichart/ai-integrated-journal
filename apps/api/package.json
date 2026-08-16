@@ -15,7 +15,11 @@
     "@journal/database": "workspace:*",
     "@journal/domain": "workspace:*",
     "@journal/observability": "workspace:*",
+    "@simplewebauthn/server": "13.3.2",
+    "argon2": "0.45.1",
+    "drizzle-orm": "0.45.2",
     "express": "5.2.1",
+    "express-rate-limit": "8.6.2",
     "helmet": "8.1.0",
     "zod": "4.4.3"
   },

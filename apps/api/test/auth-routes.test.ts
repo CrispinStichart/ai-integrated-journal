@@ -1,0 +1,163 @@
+import { silentLogger } from '@journal/observability';
+import { describe, expect, it, vi } from 'vitest';
+import request from 'supertest';
+
+import { createApiApp } from '../src/app.js';
+import {
+  AuthenticationError,
+  type ActiveSession,
+  type AuthenticationService,
+  type IssuedSession,
+} from '../src/auth.js';
+import { createInMemoryEventFeed } from '../src/events.js';
+
+const CORRELATION_ID = '019c5b90-0000-7000-8000-000000000001';
+const active: ActiveSession = {
+  ownerId: 'owner',
+  sessionId: 'session',
+  displayName: 'Owner',
+  csrfToken: 'c'.repeat(43),
+  expiresAt: new Date('2026-08-17T12:00:00.000Z'),
+};
+const issued: IssuedSession = {
+  token: 'session-token',
+  csrfToken: active.csrfToken,
+  displayName: 'Owner',
+  expiresAt: active.expiresAt,
+};
+
+function fakeService(): AuthenticationService {
+  return {
+    secureCookies: false,
+    authenticate: vi.fn(async () => active),
+    ownerExists: vi.fn(async () => true),
+    passkeyCount: vi.fn(async () => 1),
+    bootstrap: vi.fn(async () => ({
+      ...issued,
+      recoveryCodes: ['AAAAA-AAAAA-AAAAA-22222'],
+    })),
+    loginWithPassword: vi.fn(async () => issued),
+    recover: vi.fn(async () => issued),
+    assertCsrf: vi.fn(),
+    registrationOptions: vi.fn(async () => ({ challenge: 'registration' })),
+    verifyRegistration: vi.fn(async () => issued),
+    authenticationOptions: vi.fn(async () => ({ challenge: 'authentication' })),
+    loginWithPasskey: vi.fn(async () => issued),
+    logout: vi.fn(async () => undefined),
+    sessionCookie: vi.fn(
+      (token: string) =>
+        `journal_session=${token}; Path=/; HttpOnly; SameSite=Strict`,
+    ),
+    csrfCookie: vi.fn(
+      (token: string) => `journal_csrf=${token}; Path=/; SameSite=Strict`,
+    ),
+    clearCookies: vi.fn(() => [
+      'journal_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0',
+      'journal_csrf=; Path=/; SameSite=Strict; Max-Age=0',
+    ]),
+  } as unknown as AuthenticationService;
+}
+
+function app(service: AuthenticationService) {
+  return createApiApp({
+    authenticator: service,
+    authenticationService: service,
+    createCorrelationId: () => CORRELATION_ID,
+    eventFeed: createInMemoryEventFeed(),
+    healthProbes: [],
+    logger: silentLogger,
+  });
+}
+
+describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
+  it('serves status, bootstrap, password login, and password recovery with no-store cookies', async () => {
+    const service = fakeService();
+    const api = app(service);
+
+    const status = await request(api).get('/api/v1/auth/status').expect(200);
+    expect(status.headers['cache-control']).toBe('no-store');
+    expect(status.body).toMatchObject({ authenticated: true, passkeyCount: 1 });
+
+    const bootstrap = await request(api)
+      .post('/api/v1/auth/bootstrap')
+      .send({
+        displayName: 'Owner',
+        password: 'a strong local password',
+        journalTimeZone: 'UTC',
+      })
+      .expect(201);
+    expect(bootstrap.headers['set-cookie']).toHaveLength(2);
+
+    await request(api)
+      .post('/api/v1/auth/password/login')
+      .send({ password: 'password' })
+      .expect(200);
+    await request(api)
+      .post('/api/v1/auth/password/recover')
+      .send({
+        recoveryCode: 'AAAAA-AAAAA-AAAAA-22222',
+        newPassword: 'a replacement password',
+      })
+      .expect(200);
+  });
+
+  it('serves passkey registration and authentication ceremonies', async () => {
+    const service = fakeService();
+    const api = app(service);
+
+    await request(api)
+      .post('/api/v1/auth/passkeys/registration/options')
+      .set('x-csrf-token', active.csrfToken)
+      .expect(200);
+    await request(api)
+      .post('/api/v1/auth/passkeys/registration/verify')
+      .set('x-csrf-token', active.csrfToken)
+      .send({ response: {} })
+      .expect(200);
+    await request(api)
+      .post('/api/v1/auth/passkeys/authentication/options')
+      .expect(200);
+    await request(api)
+      .post('/api/v1/auth/passkeys/authentication/verify')
+      .send({ response: {} })
+      .expect(200);
+
+    expect(service.assertCsrf).toHaveBeenCalledTimes(2);
+    expect(service.verifyRegistration).toHaveBeenCalledOnce();
+    expect(service.loginWithPasskey).toHaveBeenCalledOnce();
+  });
+
+  it('revokes logout sessions and instructs the browser to clear private caches', async () => {
+    const service = fakeService();
+    const response = await request(app(service))
+      .post('/api/v1/auth/logout')
+      .set('x-csrf-token', active.csrfToken)
+      .expect(200);
+
+    expect(service.logout).toHaveBeenCalledWith(active);
+    expect(response.headers['clear-site-data']).toBe(
+      '"cache", "cookies", "storage"',
+    );
+    expect(response.headers['set-cookie']).toHaveLength(2);
+  });
+
+  it('returns stable problem details for authentication service failures', async () => {
+    const service = fakeService();
+    vi.mocked(service.loginWithPassword).mockRejectedValueOnce(
+      new AuthenticationError(
+        'authentication_required',
+        401,
+        'Invalid credentials',
+      ),
+    );
+
+    const response = await request(app(service))
+      .post('/api/v1/auth/password/login')
+      .send({ password: 'wrong' })
+      .expect(401);
+    expect(response.body).toMatchObject({
+      code: 'authentication_required',
+      title: 'Invalid credentials',
+    });
+  });
+});

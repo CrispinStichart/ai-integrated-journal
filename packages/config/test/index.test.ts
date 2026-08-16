@@ -24,6 +24,11 @@ describe('@journal/config operational shell', () => {
 
     expect(config).toEqual({
       appEnv: 'development',
+      auth: {
+        expectedOrigin: 'http://localhost:5173',
+        rpId: 'localhost',
+        secureCookies: false,
+      },
       blobDataDirectory: '/var/lib/ai-integrated-journal/blobs',
       databaseUrl: 'postgresql://journal@localhost:5432/journal',
       http: { host: '127.0.0.1', port: 4321 },
@@ -31,6 +36,7 @@ describe('@journal/config operational shell', () => {
     });
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.http)).toBe(true);
+    expect(Object.isFrozen(config.auth)).toBe(true);
   });
 
   it.each([
@@ -56,6 +62,15 @@ describe('@journal/config operational shell', () => {
         HTTP_PORT: '0',
       },
       'HTTP_PORT',
+    ],
+    [
+      {
+        AUTH_ORIGIN: 'http://journal.example',
+        BLOB_DATA_DIR: '/tmp/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+        WEBAUTHN_RP_ID: 'journal.example',
+      },
+      'AUTH_ORIGIN',
     ],
   ])('fails fast when configuration is invalid', (environment, expectedKey) => {
     expect(() => parseEnvironment(environment)).toThrow(ConfigurationError);

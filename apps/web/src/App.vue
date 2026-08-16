@@ -6,7 +6,9 @@ import { RouterLink, RouterView, useRoute } from 'vue-router';
 import AppIcon, { type IconName } from './components/AppIcon.vue';
 import AppStatus from './components/AppStatus.vue';
 import PwaUpdateDialog from './components/PwaUpdateDialog.vue';
+import { useAuthentication } from './auth';
 import { useUiStore } from './stores/ui';
+import AuthenticationView from './views/AuthenticationView.vue';
 
 interface NavigationItem {
   icon: IconName;
@@ -29,6 +31,25 @@ const dockItems = navigationItems.slice(0, 4);
 const route = useRoute();
 const ui = useUiStore();
 const online = useOnline();
+const auth = useAuthentication();
+void auth.initialize();
+
+async function logout(): Promise<void> {
+  try {
+    await auth.logout();
+  } catch {
+    ui.announce('Logout failed. Please try again.');
+  }
+}
+
+async function registerPasskey(): Promise<void> {
+  try {
+    await auth.registerPasskey();
+    ui.announce('Passkey added. Your session was securely rotated.');
+  } catch {
+    ui.announce('Passkey setup was not completed.');
+  }
+}
 
 watch(
   () => route.fullPath,
@@ -42,138 +63,164 @@ watch(
 </script>
 
 <template>
-  <a
-    class="btn btn-sm fixed top-2 left-2 z-50 -translate-y-20 focus:translate-y-0"
-    href="#main-content"
+  <div
+    v-if="auth.loading.value"
+    class="flex min-h-screen items-center justify-center bg-base-100"
+    role="status"
+    aria-label="Checking authentication"
   >
-    Skip to content
-  </a>
-
-  <div class="drawer lg:drawer-open">
-    <input
-      id="application-navigation"
-      v-model="ui.navigationOpen"
-      type="checkbox"
-      class="drawer-toggle"
-      aria-label="Application navigation"
-    />
-
-    <div
-      class="drawer-content flex min-h-screen min-w-0 flex-col bg-base-100 text-base-content"
-    >
-      <header
-        class="navbar sticky top-0 z-30 border-b border-base-300 bg-base-100/95 px-3 backdrop-blur sm:px-6"
-      >
-        <div class="navbar-start gap-2">
-          <label
-            for="application-navigation"
-            class="btn btn-square btn-ghost drawer-button lg:hidden"
-            aria-label="Open navigation"
-          >
-            <AppIcon name="menu" />
-          </label>
-          <RouterLink to="/" class="text-lg font-semibold tracking-tight"
-            >Journal</RouterLink
-          >
-        </div>
-
-        <div class="navbar-end gap-2">
-          <AppStatus
-            :label="online ? 'Network available' : 'Offline'"
-            :tone="online ? 'success' : 'warning'"
-            :detail="
-              online
-                ? 'The browser reports network access'
-                : 'Only offline-ready features are available'
-            "
-          />
-        </div>
-      </header>
-
-      <main
-        id="main-content"
-        tabindex="-1"
-        class="mx-auto w-full max-w-6xl grow px-4 pt-8 pb-28 outline-none sm:px-6 lg:pb-10"
-      >
-        <RouterView v-slot="{ Component }">
-          <Suspense>
-            <component :is="Component" />
-            <template #fallback>
-              <div
-                class="flex min-h-64 items-center justify-center"
-                role="status"
-                aria-label="Loading page"
-              >
-                <span
-                  class="loading loading-spinner loading-lg"
-                  aria-hidden="true"
-                />
-              </div>
-            </template>
-          </Suspense>
-        </RouterView>
-      </main>
-
-      <nav
-        class="dock dock-sm border-t border-base-300 bg-base-100 lg:hidden"
-        aria-label="Primary navigation"
-      >
-        <RouterLink
-          v-for="item in dockItems"
-          :key="item.to"
-          :to="item.to"
-          :class="{ 'dock-active': route.path === item.to }"
-          :aria-current="route.path === item.to ? 'page' : undefined"
-        >
-          <AppIcon :name="item.icon" />
-          <span class="dock-label">{{ item.label }}</span>
-        </RouterLink>
-      </nav>
-    </div>
-
-    <div class="drawer-side z-40">
-      <label
-        for="application-navigation"
-        aria-label="Close navigation"
-        class="drawer-overlay"
-      />
-      <aside
-        class="flex min-h-full w-72 flex-col bg-base-200 p-4 text-base-content"
-      >
-        <RouterLink
-          to="/"
-          class="mb-6 flex items-center gap-3 px-3 py-2 text-xl font-bold"
-        >
-          <span
-            class="grid size-10 place-items-center rounded-box bg-primary text-primary-content"
-            aria-hidden="true"
-            >J</span
-          >
-          Journal
-        </RouterLink>
-        <nav aria-label="Application sections">
-          <ul class="menu w-full gap-1">
-            <li v-for="item in navigationItems" :key="item.to">
-              <RouterLink
-                :to="item.to"
-                :class="{ 'menu-active': route.path === item.to }"
-                :aria-current="route.path === item.to ? 'page' : undefined"
-              >
-                <AppIcon :name="item.icon" />
-                {{ item.label }}
-              </RouterLink>
-            </li>
-          </ul>
-        </nav>
-        <p class="mt-auto px-3 pt-8 text-xs text-base-content/60">
-          Private, local-first journaling
-        </p>
-      </aside>
-    </div>
+    <span class="loading loading-spinner loading-lg" aria-hidden="true" />
   </div>
 
-  <p class="sr-only" aria-live="polite" aria-atomic="true">
-    {{ ui.liveMessage }}
-  </p>
-  <PwaUpdateDialog />
+  <AuthenticationView
+    v-else-if="!auth.authenticated.value || auth.recoveryCodes.value.length > 0"
+  />
+
+  <template v-else>
+    <a
+      class="btn btn-sm fixed top-2 left-2 z-50 -translate-y-20 focus:translate-y-0"
+      href="#main-content"
+    >
+      Skip to content
+    </a>
+
+    <div class="drawer lg:drawer-open">
+      <input
+        id="application-navigation"
+        v-model="ui.navigationOpen"
+        type="checkbox"
+        class="drawer-toggle"
+        aria-label="Application navigation"
+      />
+
+      <div
+        class="drawer-content flex min-h-screen min-w-0 flex-col bg-base-100 text-base-content"
+      >
+        <header
+          class="navbar sticky top-0 z-30 border-b border-base-300 bg-base-100/95 px-3 backdrop-blur sm:px-6"
+        >
+          <div class="navbar-start gap-2">
+            <label
+              for="application-navigation"
+              class="btn btn-square btn-ghost drawer-button lg:hidden"
+              aria-label="Open navigation"
+            >
+              <AppIcon name="menu" />
+            </label>
+            <RouterLink to="/" class="text-lg font-semibold tracking-tight"
+              >Journal</RouterLink
+            >
+          </div>
+
+          <div class="navbar-end gap-2">
+            <AppStatus
+              :label="online ? 'Network available' : 'Offline'"
+              :tone="online ? 'success' : 'warning'"
+              :detail="
+                online
+                  ? 'The browser reports network access'
+                  : 'Only offline-ready features are available'
+              "
+            />
+            <button
+              v-if="(auth.status.value?.passkeyCount ?? 0) === 0"
+              class="btn btn-sm"
+              type="button"
+              @click="registerPasskey"
+            >
+              Add passkey
+            </button>
+            <button class="btn btn-ghost btn-sm" type="button" @click="logout">
+              Log out
+            </button>
+          </div>
+        </header>
+
+        <main
+          id="main-content"
+          tabindex="-1"
+          class="mx-auto w-full max-w-6xl grow px-4 pt-8 pb-28 outline-none sm:px-6 lg:pb-10"
+        >
+          <RouterView v-slot="{ Component }">
+            <Suspense>
+              <component :is="Component" />
+              <template #fallback>
+                <div
+                  class="flex min-h-64 items-center justify-center"
+                  role="status"
+                  aria-label="Loading page"
+                >
+                  <span
+                    class="loading loading-spinner loading-lg"
+                    aria-hidden="true"
+                  />
+                </div>
+              </template>
+            </Suspense>
+          </RouterView>
+        </main>
+
+        <nav
+          class="dock dock-sm border-t border-base-300 bg-base-100 lg:hidden"
+          aria-label="Primary navigation"
+        >
+          <RouterLink
+            v-for="item in dockItems"
+            :key="item.to"
+            :to="item.to"
+            :class="{ 'dock-active': route.path === item.to }"
+            :aria-current="route.path === item.to ? 'page' : undefined"
+          >
+            <AppIcon :name="item.icon" />
+            <span class="dock-label">{{ item.label }}</span>
+          </RouterLink>
+        </nav>
+      </div>
+
+      <div class="drawer-side z-40">
+        <label
+          for="application-navigation"
+          aria-label="Close navigation"
+          class="drawer-overlay"
+        />
+        <aside
+          class="flex min-h-full w-72 flex-col bg-base-200 p-4 text-base-content"
+        >
+          <RouterLink
+            to="/"
+            class="mb-6 flex items-center gap-3 px-3 py-2 text-xl font-bold"
+          >
+            <span
+              class="grid size-10 place-items-center rounded-box bg-primary text-primary-content"
+              aria-hidden="true"
+              >J</span
+            >
+            Journal
+          </RouterLink>
+          <nav aria-label="Application sections">
+            <ul class="menu w-full gap-1">
+              <li v-for="item in navigationItems" :key="item.to">
+                <RouterLink
+                  :to="item.to"
+                  :class="{ 'menu-active': route.path === item.to }"
+                  :aria-current="route.path === item.to ? 'page' : undefined"
+                >
+                  <AppIcon :name="item.icon" />
+                  {{ item.label }}
+                </RouterLink>
+              </li>
+            </ul>
+          </nav>
+          <p class="mt-auto px-3 pt-8 text-xs text-base-content/60">
+            Private, local-first journaling
+          </p>
+        </aside>
+      </div>
+    </div>
+
+    <p class="sr-only" aria-live="polite" aria-atomic="true">
+      {{ ui.liveMessage }}
+    </p>
+    <PwaUpdateDialog />
+  </template>
 </template>

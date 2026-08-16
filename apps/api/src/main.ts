@@ -10,6 +10,8 @@ import {
 import { createContentSafeLogger } from '@journal/observability';
 
 import { createApiApp } from './app.js';
+import { AuthenticationService } from './auth.js';
+import { createPostgresAuthenticationStore as createAuthStore } from './auth-store.js';
 import { createInMemoryEventFeed } from './events.js';
 import { createGracefulShutdown } from './shutdown.js';
 import type { HealthProbe } from './types.js';
@@ -75,10 +77,16 @@ const healthProbes: readonly HealthProbe[] = [
   },
 ];
 
+const authenticationService = new AuthenticationService({
+  store: createAuthStore(database.database),
+  rpId: config.auth.rpId,
+  expectedOrigin: config.auth.expectedOrigin,
+  secureCookies: config.auth.secureCookies,
+});
+
 const app = createApiApp({
-  authenticator: {
-    authenticate: async () => undefined,
-  },
+  authenticator: authenticationService,
+  authenticationService,
   eventFeed: createInMemoryEventFeed(),
   healthProbes,
   logger,

@@ -5,6 +5,7 @@ packages:
 minimumReleaseAge: 1440
 
 allowBuilds:
+  argon2: true
   cpu-features: false
   esbuild: true
   protobufjs: false

@@ -18,19 +18,47 @@ const absolutePath = z
   .min(1)
   .refine(path.isAbsolute, { error: 'must be an absolute path' });
 
-const environmentSchema = z.object({
-  APP_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  BLOB_DATA_DIR: absolutePath,
-  DATABASE_URL: postgresUrl,
-  HTTP_HOST: z.string().min(1).default('127.0.0.1'),
-  HTTP_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
-  LOG_LEVEL: z
-    .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
-    .default('info'),
-});
+const environmentSchema = z
+  .object({
+    APP_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
+    BLOB_DATA_DIR: absolutePath,
+    DATABASE_URL: postgresUrl,
+    HTTP_HOST: z.string().min(1).default('127.0.0.1'),
+    HTTP_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+    LOG_LEVEL: z
+      .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
+      .default('info'),
+    AUTH_ORIGIN: z.url().default('http://localhost:5173'),
+    WEBAUTHN_RP_ID: z.string().min(1).default('localhost'),
+  })
+  .superRefine((value, context) => {
+    const origin = new URL(value.AUTH_ORIGIN);
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+    if (origin.protocol !== 'https:' && !local) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_ORIGIN'],
+        message: 'must use HTTPS outside localhost',
+      });
+    }
+    if (value.WEBAUTHN_RP_ID !== origin.hostname) {
+      context.addIssue({
+        code: 'custom',
+        path: ['WEBAUTHN_RP_ID'],
+        message: 'must match the authentication origin hostname',
+      });
+    }
+  });
 
 export type AppConfig = Readonly<{
   appEnv: z.infer<typeof environmentSchema>['APP_ENV'];
+  auth: Readonly<{
+    expectedOrigin: string;
+    rpId: string;
+    secureCookies: boolean;
+  }>;
   blobDataDirectory: string;
   databaseUrl: string;
   http: Readonly<{ host: string; port: number }>;
@@ -63,6 +91,8 @@ export function parseEnvironment(
     HTTP_HOST: environment.HTTP_HOST,
     HTTP_PORT: environment.HTTP_PORT,
     LOG_LEVEL: environment.LOG_LEVEL,
+    AUTH_ORIGIN: environment.AUTH_ORIGIN,
+    WEBAUTHN_RP_ID: environment.WEBAUTHN_RP_ID,
   });
 
   if (!result.success) {
@@ -71,6 +101,11 @@ export function parseEnvironment(
 
   return Object.freeze({
     appEnv: result.data.APP_ENV,
+    auth: Object.freeze({
+      expectedOrigin: result.data.AUTH_ORIGIN,
+      rpId: result.data.WEBAUTHN_RP_ID,
+      secureCookies: new URL(result.data.AUTH_ORIGIN).protocol === 'https:',
+    }),
     blobDataDirectory: result.data.BLOB_DATA_DIR,
     databaseUrl: result.data.DATABASE_URL,
     http: Object.freeze({
