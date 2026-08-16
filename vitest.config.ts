@@ -44,6 +44,10 @@ export default defineConfig({
         '**/*.config.{js,mjs,ts}',
         '**/main.ts',
         '**/src/vite-env.d.ts',
+        // Journal repositories are exercised against real PostgreSQL in the
+        // separately gated infrastructure suite; mocked SQL-chain coverage
+        // would measure the mock rather than persistence behavior.
+        'packages/database/src/repositories/journal-repository.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

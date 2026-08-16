@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -20,6 +21,23 @@ export const journalSchema = pgSchema('journal');
 export const authChallengePurpose = pgEnum('auth_challenge_purpose', [
   'passkey_registration',
   'passkey_authentication',
+]);
+
+export const contributionSourceType = pgEnum('contribution_source_type', [
+  'typed_text',
+  'recording',
+  'nudge_response',
+]);
+
+export const contributionAuthority = pgEnum('contribution_authority', [
+  'manual',
+  'generated',
+]);
+
+export const journalDateAssignment = pgEnum('journal_date_assignment', [
+  'default',
+  'user_override',
+  'migration',
 ]);
 
 export const users = journalSchema.table(
@@ -174,6 +192,149 @@ export const authChallenges = journalSchema.table(
     check(
       'auth_challenge_id_uuid_v7',
       sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+  ],
+);
+
+export const journalDays = journalSchema.table(
+  'journal_day',
+  {
+    id: uuid('id').primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    journalDate: date('journal_date', { mode: 'string' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('journal_day_user_date_unique').on(
+      table.userId,
+      table.journalDate,
+    ),
+    check(
+      'journal_day_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+  ],
+);
+
+export const contributions = journalSchema.table(
+  'contribution',
+  {
+    id: uuid('id').primaryKey(),
+    journalDayId: uuid('journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    sourceType: contributionSourceType('source_type').notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    capturedTimezone: text('captured_timezone').notNull(),
+    journalTimezone: text('journal_timezone').notNull(),
+    journalDateAssignment: journalDateAssignment(
+      'journal_date_assignment',
+    ).notNull(),
+    elicitingNudgeId: uuid('eliciting_nudge_id'),
+    currentRevisionId: uuid('current_revision_id'),
+    currentRevision: integer('current_revision').notNull().default(0),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedBy: uuid('deleted_by').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    restoredAt: timestamp('restored_at', { withTimezone: true }),
+    restoredBy: uuid('restored_by').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('contribution_journal_day_created_idx').on(
+      table.journalDayId,
+      table.createdAt,
+      table.id,
+    ),
+    index('contribution_active_day_idx')
+      .on(table.journalDayId, table.id)
+      .where(sql`${table.deletedAt} is null`),
+    check(
+      'contribution_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'contribution_current_revision_consistent',
+      sql`(${table.currentRevision} = 0 and ${table.currentRevisionId} is null) or (${table.currentRevision} > 0 and ${table.currentRevisionId} is not null)`,
+    ),
+    check(
+      'contribution_nudge_provenance',
+      sql`(${table.sourceType} = 'nudge_response' and ${table.elicitingNudgeId} is not null) or (${table.sourceType} <> 'nudge_response' and ${table.elicitingNudgeId} is null)`,
+    ),
+    check(
+      'contribution_captured_timezone_not_blank',
+      sql`length(${table.capturedTimezone}) > 0`,
+    ),
+    check(
+      'contribution_journal_timezone_not_blank',
+      sql`length(${table.journalTimezone}) > 0`,
+    ),
+    check(
+      'contribution_deletion_consistent',
+      sql`(${table.deletedAt} is null and ${table.deletedBy} is null) or (${table.deletedAt} is not null and ${table.deletedBy} is not null)`,
+    ),
+  ],
+);
+
+export const contributionRevisions = journalSchema.table(
+  'contribution_revision',
+  {
+    id: uuid('id').primaryKey(),
+    contributionId: uuid('contribution_id')
+      .notNull()
+      .references(() => contributions.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    text: text('text').notNull(),
+    authority: contributionAuthority('authority').notNull(),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    contentHash: text('content_hash').notNull(),
+    editReason: text('edit_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('contribution_revision_number_unique').on(
+      table.contributionId,
+      table.revision,
+    ),
+    index('contribution_revision_history_idx').on(
+      table.contributionId,
+      table.revision,
+    ),
+    check(
+      'contribution_revision_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('contribution_revision_number_positive', sql`${table.revision} > 0`),
+    check(
+      'contribution_revision_text_not_empty',
+      sql`length(${table.text}) > 0`,
+    ),
+    check(
+      'contribution_revision_content_hash_sha256',
+      sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'contribution_revision_edit_reason_not_blank',
+      sql`${table.editReason} is null or length(btrim(${table.editReason})) > 0`,
     ),
   ],
 );
@@ -338,7 +499,10 @@ export const auditEvents = journalSchema.table(
     actorId: uuid('actor_id'),
     entityType: text('entity_type').notNull(),
     entityId: uuid('entity_id'),
+    revisionId: uuid('revision_id'),
     correlationId: uuid('correlation_id').notNull(),
+    beforeHash: text('before_hash'),
+    afterHash: text('after_hash'),
     metadata: jsonb('metadata')
       .$type<Readonly<Record<string, string | number | boolean | null>>>()
       .notNull()
@@ -362,6 +526,18 @@ export const auditEvents = journalSchema.table(
       'audit_event_entity_id_uuid_v7',
       sql`${table.entityId} is null or substring(${table.entityId}::text from 15 for 1) = '7'`,
     ),
+    check(
+      'audit_event_revision_id_uuid_v7',
+      sql`${table.revisionId} is null or substring(${table.revisionId}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'audit_event_before_hash_sha256',
+      sql`${table.beforeHash} is null or ${table.beforeHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'audit_event_after_hash_sha256',
+      sql`${table.afterHash} is null or ${table.afterHash} ~ '^[0-9a-f]{64}$'`,
+    ),
     check('audit_event_action_not_blank', sql`length(${table.action}) > 0`),
     check(
       'audit_event_entity_type_not_blank',
@@ -374,7 +550,10 @@ export const databaseSchema = {
   authChallenges,
   authenticators,
   auditEvents,
+  contributionRevisions,
+  contributions,
   developmentFixtures,
+  journalDays,
   passwordCredentials,
   processorInstallations,
   queueConfigurations,

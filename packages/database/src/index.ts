@@ -18,11 +18,23 @@ export { migrateDatabase, migrationsFolder } from './migrations.js';
 export {
   authChallenges,
   authenticators,
+  contributionRevisions,
+  contributions,
+  journalDays,
   passwordCredentials,
   recoveryCodes,
   sessions,
   users,
 } from './schema.js';
+export {
+  DeletedContributionError,
+  JournalReadRepository,
+  JournalRecordNotFoundError,
+  JournalWriteRepository,
+  type ContributionAuditRecord,
+  type JournalMutationAudit,
+  type PersistedContribution,
+} from './repositories/journal-repository.js';
 export {
   FoundationRepository,
   type ProcessorInstallationRecord,

@@ -6,6 +6,7 @@ export * from './authority.js';
 export * from './deletion.js';
 export * from './errors.js';
 export * from './identity.js';
+export * from './journal.js';
 export * from './processing-lifecycle.js';
 export * from './revision.js';
 export * from './semantic-value.js';
