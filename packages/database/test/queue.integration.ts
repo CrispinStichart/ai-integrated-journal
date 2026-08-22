@@ -1,12 +1,11 @@
 import { createPostgresTestContainer } from '@journal/test-support';
 import { sql } from 'drizzle-orm';
-import type { PgBoss } from 'pg-boss';
+import { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   assertQueueFoundation,
   createDatabaseClient,
-  createQueueClient,
   createQueueJobPayload,
   enqueueJobInTransaction,
   inTransaction,
@@ -46,7 +45,14 @@ describe('WORKER pg-boss foundation', () => {
     });
     await migrateDatabase(client.database);
     await seedDatabase(client.database, 'test');
-    boss = createQueueClient(container.getConnectionUri(), true);
+    boss = new PgBoss({
+      application_name: '@journal/queue-test',
+      connectionString: container.getConnectionUri(),
+      migrate: true,
+      schedule: false,
+      supervise: false,
+      useListenNotify: true,
+    });
     await provisionQueueFoundation(boss, client);
   }, 120_000);
 
@@ -161,12 +167,18 @@ describe('WORKER pg-boss foundation', () => {
     const claimed = await boss.fetch(queueNames.backup);
     expect(claimed.map(({ id }) => id)).toContain(jobId);
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 1_100));
-    await boss.supervise(queueNames.backup);
     await waitFor(async () => {
-      const recovered = await boss.getJobById(queueNames.backup, jobId);
-      return recovered?.state === 'retry' || recovered?.state === 'created';
-    }, 20_000);
+      const expiration = await client.database.execute(sql`
+        select (started_on + expire_seconds * interval '1 second') < now()
+          as expired
+        from pgboss.job
+        where id = ${jobId}::uuid
+      `);
+      return expiration.rows.some(({ expired }) => expired === true);
+    });
+    await boss.supervise(queueNames.backup);
+    const recovered = await boss.getJobById(queueNames.backup, jobId);
+    expect(['created', 'retry']).toContain(recovered?.state);
   }, 30_000);
 
   it('[STATE-001] supports durable cancellation before execution', async () => {
