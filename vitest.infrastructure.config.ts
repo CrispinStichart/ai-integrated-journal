@@ -22,6 +22,10 @@ export default defineConfig({
     ),
   },
   test: {
+    // Testcontainers compete for the same Docker daemon and can pause or stop
+    // sibling containers when the integration files start in parallel.
+    fileParallelism: false,
+    maxWorkers: 1,
     include: [
       'packages/database/test/**/*.integration.ts',
       'packages/test-support/test/**/*.integration.ts',

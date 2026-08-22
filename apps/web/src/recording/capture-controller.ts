@@ -498,6 +498,7 @@ export class BrowserCaptureController {
             ? 'browser_storage_exhausted'
             : 'failed',
         errorCode,
+        retrySafe: this.#recording.nextChunkIndex > 0,
         updatedAt: this.#dependencies.now().toISOString(),
       };
       try {
@@ -520,6 +521,11 @@ export class BrowserCaptureController {
       this.#recording = {
         ...this.#recording,
         state: 'saved_locally',
+        durationMilliseconds: Math.max(
+          0,
+          this.#dependencies.now().getTime() -
+            new Date(this.#recording.capturedAt).getTime(),
+        ).toString(),
         updatedAt: this.#dependencies.now().toISOString(),
       };
       try {

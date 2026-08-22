@@ -9,6 +9,7 @@ import PwaUpdateDialog from './components/PwaUpdateDialog.vue';
 import { useAuthentication } from './auth';
 import { useOfflineJournal } from './journal/offline';
 import { useBrowserCaptureController } from './recording/capture-controller';
+import { useRecordingSyncController } from './recording/sync-controller';
 import { useUiStore } from './stores/ui';
 import AuthenticationView from './views/AuthenticationView.vue';
 
@@ -37,6 +38,7 @@ const visibility = useDocumentVisibility();
 const auth = useAuthentication();
 const offline = useOfflineJournal();
 const capture = useBrowserCaptureController();
+const recordingSync = useRecordingSyncController();
 
 async function resumeOfflineWork(): Promise<void> {
   const ownerId = auth.status.value?.ownerId;
@@ -44,6 +46,8 @@ async function resumeOfflineWork(): Promise<void> {
   if (ownerId === undefined || csrfToken === undefined) return;
   await offline.initialize(ownerId);
   await offline.replay(csrfToken);
+  await recordingSync.initialize(ownerId, csrfToken);
+  if (offline.unlocked.value) await recordingSync.resume();
 }
 
 void auth.initialize().then(resumeOfflineWork);

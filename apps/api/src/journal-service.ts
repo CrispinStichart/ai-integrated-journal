@@ -153,6 +153,32 @@ function mapContribution(record: PersistedContribution): ContributionResource {
     ...(value.elicitingNudgeId === undefined
       ? {}
       : { elicitingNudgeId: value.elicitingNudgeId }),
+    ...(record.recording === undefined
+      ? {}
+      : {
+          recording: {
+            id: record.recording.id,
+            mimeType: record.recording.mimeType,
+            ...(record.recording.codec === null
+              ? {}
+              : { codec: record.recording.codec }),
+            persistenceState: record.recording.persistenceState,
+            ...(record.recording.durationMilliseconds === null
+              ? {}
+              : {
+                  durationMilliseconds:
+                    record.recording.durationMilliseconds.toString(),
+                }),
+            ...(record.recording.finalByteSize === null
+              ? {}
+              : { byteSize: record.recording.finalByteSize.toString() }),
+            ...(record.recording.audioDeletedAt === null
+              ? {}
+              : {
+                  audioDeletedAt: record.recording.audioDeletedAt.toISOString(),
+                }),
+          },
+        }),
     ...(record.currentRevision === undefined
       ? {}
       : { currentRevision: mapRevision(record.currentRevision) }),
@@ -381,7 +407,7 @@ export class PostgresJournalService implements JournalService {
             input.proposedJournalDayId,
           ),
           journalDate: parseJournalDate(input.journalDate),
-          expectedRevision: revisionNumber(expectedRevision),
+          expectedRevision,
           audit,
         });
       },

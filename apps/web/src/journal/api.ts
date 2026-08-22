@@ -6,6 +6,7 @@ import {
   editContributionRequestSchema,
   journalDaySummaryPageSchema,
   journalDayViewSchema,
+  moveContributionRequestSchema,
   problemDetailsSchema,
   type ContributionResource,
   type ContributionRevisionResource,
@@ -212,6 +213,45 @@ export async function setContributionDeleted(
         headers: mutationHeaders(csrfToken, idempotencyKey, revision),
       },
     ),
+  );
+  return result.contribution;
+}
+
+export async function moveContribution(
+  contribution: ContributionResource,
+  journalDate: string,
+  proposedJournalDayId: string,
+  csrfToken: string,
+  idempotencyKey: string,
+): Promise<ContributionResource> {
+  return moveContributionAtRevision(
+    contribution.id,
+    contribution.currentRevision?.revision ?? 0,
+    journalDate,
+    proposedJournalDayId,
+    csrfToken,
+    idempotencyKey,
+  );
+}
+
+export async function moveContributionAtRevision(
+  contributionId: string,
+  revision: number,
+  journalDate: string,
+  proposedJournalDayId: string,
+  csrfToken: string,
+  idempotencyKey: string,
+): Promise<ContributionResource> {
+  const body = moveContributionRequestSchema.parse({
+    journalDate,
+    proposedJournalDayId,
+  });
+  const result = contributionMutationResponseSchema.parse(
+    await jsonRequest(`/api/v1/contributions/${contributionId}/move`, {
+      method: 'POST',
+      headers: mutationHeaders(csrfToken, idempotencyKey, revision),
+      body: JSON.stringify(body),
+    }),
   );
   return result.contribution;
 }

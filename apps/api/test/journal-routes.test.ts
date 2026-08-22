@@ -44,6 +44,16 @@ const contribution: ContributionResource = {
     createdAt: '2026-08-16T12:00:00.000Z',
   },
 };
+const recordingContribution: ContributionResource = {
+  ...contribution,
+  sourceType: 'recording',
+  currentRevision: undefined,
+  recording: {
+    id: '019c5b90-0000-7000-8000-000000000015',
+    mimeType: 'audio/webm;codecs=opus',
+    persistenceState: 'durable',
+  },
+};
 
 function service(): JournalService {
   return {
@@ -190,6 +200,45 @@ describe('Journal REST API (DATA-001–DATA-013, DATA-026, TIME-001–TIME-003, 
       expect.objectContaining({ journalDate: '2030-01-01' }),
       1,
       'offline-move-1',
+      CORRELATION_ID,
+    );
+  });
+
+  it('[CAP-007][AC-040] moves a revisionless recording with a strong revision-zero ETag', async () => {
+    const journalService = service();
+    vi.mocked(journalService.getContribution).mockResolvedValue(
+      recordingContribution,
+    );
+    vi.mocked(journalService.move).mockResolvedValue({
+      contribution: {
+        ...recordingContribution,
+        journalDate: '2026-08-15',
+        journalDateAssignment: 'user_override',
+      },
+      replayed: false,
+    });
+    const api = app(journalService);
+    const read = await request(api)
+      .get(`/api/v1/contributions/${CONTRIBUTION_ID}`)
+      .set('authorization', 'Bearer valid')
+      .expect(200);
+    expect(read.headers.etag).toBe('"revision-0"');
+
+    const moved = await request(api)
+      .post(`/api/v1/contributions/${CONTRIBUTION_ID}/move`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'recording-move-1')
+      .set('if-match', '"revision-0"')
+      .send({ proposedJournalDayId: DAY_ID, journalDate: '2026-08-15' })
+      .expect(200);
+
+    expect(moved.headers.etag).toBe('"revision-0"');
+    expect(journalService.move).toHaveBeenCalledWith(
+      OWNER_ID,
+      CONTRIBUTION_ID,
+      expect.objectContaining({ journalDate: '2026-08-15' }),
+      0,
+      'recording-move-1',
       CORRELATION_ID,
     );
   });

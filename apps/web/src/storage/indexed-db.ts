@@ -1,6 +1,6 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const METADATA_STORE = 'shell-metadata';
 const OFFLINE_CONFIG_STORE = 'offline-config';
 const OUTBOX_STORE = 'text-outbox';
@@ -47,7 +47,13 @@ export interface EncryptedJournalCacheRecord {
 }
 
 export type LocalRecordingState =
-  'recording' | 'saved_locally' | 'browser_storage_exhausted' | 'failed';
+  | 'recording'
+  | 'saved_locally'
+  | 'uploading'
+  | 'durable'
+  | 'transcription_pending'
+  | 'browser_storage_exhausted'
+  | 'failed';
 
 export interface LocalRecordingRecord {
   recordingId: string;
@@ -66,6 +72,14 @@ export interface LocalRecordingRecord {
   state: LocalRecordingState;
   nextChunkIndex: number;
   totalBytes: string;
+  durationMilliseconds?: string;
+  uploadedChunkCount?: number;
+  serverCreated?: boolean;
+  serverPersistenceState?: 'uploading' | 'prepared' | 'durable';
+  retrySafe?: boolean;
+  syncErrorCode?: string;
+  syncErrorMessage?: string;
+  durableAt?: string;
   createdAt: string;
   updatedAt: string;
   lastSavedAt?: string;
@@ -322,6 +336,58 @@ export class JournalIndexedDb implements BrowserMetadataStore {
         [ownerId, recordingId, Number.MAX_SAFE_INTEGER],
       ),
     );
+  }
+
+  async getRecordingChunk(
+    recordingId: string,
+    index: number,
+  ): Promise<EncryptedRecordingChunkRecord | undefined> {
+    return (await this.#connect()).get(RECORDING_CHUNK_STORE, [
+      recordingId,
+      index,
+    ]);
+  }
+
+  async confirmRecordingDurable(
+    recordingId: string,
+    durableAt: string,
+  ): Promise<LocalRecordingRecord> {
+    const database = await this.#connect();
+    const transaction = database.transaction(
+      [RECORDING_STORE, RECORDING_CHUNK_STORE],
+      'readwrite',
+    );
+    const recording = await transaction
+      .objectStore(RECORDING_STORE)
+      .get(recordingId);
+    if (recording === undefined)
+      throw new Error('The local recording manifest is missing.');
+    const updated: LocalRecordingRecord = {
+      ...recording,
+      state: 'transcription_pending',
+      serverCreated: true,
+      serverPersistenceState: 'durable',
+      uploadedChunkCount: recording.nextChunkIndex,
+      retrySafe: false,
+      durableAt,
+      updatedAt: durableAt,
+    };
+    Reflect.deleteProperty(updated, 'syncErrorCode');
+    Reflect.deleteProperty(updated, 'syncErrorMessage');
+    await transaction.objectStore(RECORDING_STORE).put(updated);
+    const chunkStore = transaction.objectStore(RECORDING_CHUNK_STORE);
+    let cursor = await chunkStore.openCursor(
+      IDBKeyRange.bound(
+        [recordingId, 0],
+        [recordingId, Number.MAX_SAFE_INTEGER],
+      ),
+    );
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+    await transaction.done;
+    return updated;
   }
 
   #connect(): Promise<IDBPDatabase<JournalBrowserSchema>> {

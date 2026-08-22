@@ -26,7 +26,41 @@ vi.mock('../src/auth', () => ({
 vi.mock('../src/journal/api', () => ({
   createUuidV7: () => mocks.createUuidV7(),
   listContributionRevisions: vi.fn(),
+  moveContribution: vi.fn(),
+  moveContributionAtRevision: vi.fn(),
   setContributionDeleted: vi.fn(),
+}));
+
+vi.mock('../src/recording/capture-controller', async () => {
+  const { readonly, ref } = await import('vue');
+  const snapshot = readonly(ref({ phase: 'idle', storageState: 'available' }));
+  return {
+    useBrowserCaptureController: () => ({
+      snapshot,
+      start: vi.fn(),
+      stop: vi.fn(),
+    }),
+  };
+});
+
+vi.mock('../src/recording/sync-controller', async () => {
+  const { readonly, ref } = await import('vue');
+  const recordings = readonly(ref([]));
+  return {
+    useRecordingSyncController: () => ({
+      recordings,
+      initialize: vi.fn(),
+      refresh: vi.fn(),
+      resume: vi.fn(),
+      retry: vi.fn(),
+      move: vi.fn(),
+    }),
+  };
+});
+
+vi.mock('../src/recording/api', () => ({
+  recordingAudioUrl: (id: string) => `/api/v1/recordings/${id}/audio`,
+  retryRecordingFinalization: vi.fn(),
 }));
 
 vi.mock('../src/journal/offline', () => ({

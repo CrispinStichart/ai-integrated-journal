@@ -43,6 +43,7 @@ import {
   contributionRevisions,
   contributions,
   journalDays,
+  recordings,
 } from '../schema.js';
 
 export type JournalMutationAudit = Readonly<{
@@ -66,6 +67,7 @@ export interface PersistedContribution {
   readonly restoredAt?: UtcInstant;
   readonly restoredBy?: UserId;
   readonly currentRevision?: Readonly<ContributionRevision>;
+  readonly recording?: typeof recordings.$inferSelect;
 }
 
 export interface ContributionAuditRecord {
@@ -142,6 +144,7 @@ export class JournalReadRepository {
         contribution: contributions,
         day: journalDays,
         revision: contributionRevisions,
+        recording: recordings,
       })
       .from(contributions)
       .innerJoin(journalDays, eq(journalDays.id, contributions.journalDayId))
@@ -149,6 +152,7 @@ export class JournalReadRepository {
         contributionRevisions,
         eq(contributionRevisions.id, contributions.currentRevisionId),
       )
+      .leftJoin(recordings, eq(recordings.contributionId, contributions.id))
       .where(
         and(
           eq(contributions.id, contributionId),
@@ -235,6 +239,7 @@ export class JournalReadRepository {
         contribution: contributions,
         day: journalDays,
         revision: contributionRevisions,
+        recording: recordings,
       })
       .from(journalDays)
       .innerJoin(contributions, eq(contributions.journalDayId, journalDays.id))
@@ -242,6 +247,7 @@ export class JournalReadRepository {
         contributionRevisions,
         eq(contributionRevisions.id, contributions.currentRevisionId),
       )
+      .leftJoin(recordings, eq(recordings.contributionId, contributions.id))
       .where(
         and(
           eq(journalDays.userId, ownerId),
@@ -521,10 +527,10 @@ export class JournalWriteRepository {
     readonly contributionId: ContributionId;
     readonly proposedJournalDayId: JournalDayId;
     readonly journalDate: JournalDate;
-    readonly expectedRevision?: RevisionNumber;
+    readonly expectedRevision?: number;
     readonly audit: JournalMutationAudit;
   }): Promise<void> {
-    const current = await this.lockContribution(
+    const current = await this.lockOwnedContribution(
       input.ownerId,
       input.contributionId,
     );
@@ -675,6 +681,24 @@ export class JournalWriteRepository {
     ownerId: UserId,
     contributionId: ContributionId,
   ) {
+    const row = await this.lockOwnedContribution(ownerId, contributionId);
+    if (row.currentRevisionId === null) throw new JournalRecordNotFoundError();
+    const [revision] = await this.transaction
+      .select({ contentHash: contributionRevisions.contentHash })
+      .from(contributionRevisions)
+      .where(eq(contributionRevisions.id, row.currentRevisionId))
+      .limit(1);
+    if (revision === undefined) throw new JournalRecordNotFoundError();
+    return {
+      ...row,
+      currentContentHash: revision.contentHash,
+    };
+  }
+
+  private async lockOwnedContribution(
+    ownerId: UserId,
+    contributionId: ContributionId,
+  ) {
     const [row] = await this.transaction
       .select({
         currentRevision: contributions.currentRevision,
@@ -686,9 +710,7 @@ export class JournalWriteRepository {
       .where(eq(contributions.id, contributionId))
       .for('update')
       .limit(1);
-    if (row === undefined || row.currentRevisionId === null) {
-      throw new JournalRecordNotFoundError();
-    }
+    if (row === undefined) throw new JournalRecordNotFoundError();
     const [ownedDay] = await this.transaction
       .select({ journalDate: journalDays.journalDate })
       .from(journalDays)
@@ -699,17 +721,9 @@ export class JournalWriteRepository {
         ),
       )
       .limit(1);
-    const [revision] = await this.transaction
-      .select({ contentHash: contributionRevisions.contentHash })
-      .from(contributionRevisions)
-      .where(eq(contributionRevisions.id, row.currentRevisionId))
-      .limit(1);
-    if (ownedDay === undefined || revision === undefined) {
-      throw new JournalRecordNotFoundError();
-    }
+    if (ownedDay === undefined) throw new JournalRecordNotFoundError();
     return {
       ...row,
-      currentContentHash: revision.contentHash,
       journalDate: ownedDay.journalDate,
     };
   }
@@ -767,6 +781,7 @@ function mapContributionRow(row: {
   contribution: typeof contributions.$inferSelect;
   day: typeof journalDays.$inferSelect;
   revision: typeof contributionRevisions.$inferSelect | null;
+  recording: typeof recordings.$inferSelect | null;
 }): PersistedContribution {
   const contribution = createContribution({
     id: parseUuidV7<'contribution'>(row.contribution.id),
@@ -806,5 +821,6 @@ function mapContributionRow(row: {
     ...(row.revision === null
       ? {}
       : { currentRevision: mapRevision(row.revision) }),
+    ...(row.recording === null ? {} : { recording: row.recording }),
   };
 }

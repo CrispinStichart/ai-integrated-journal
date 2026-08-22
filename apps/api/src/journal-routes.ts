@@ -149,7 +149,7 @@ function mutationHeaders(
 }
 
 function expectedRevision(etag: string): number | undefined {
-  const match = /^"revision-([1-9][0-9]*)"$/.exec(etag);
+  const match = /^"revision-(0|[1-9][0-9]*)"$/.exec(etag);
   if (match?.[1] === undefined) return undefined;
   const value = Number(match[1]);
   return Number.isSafeInteger(value) ? value : undefined;
@@ -259,7 +259,7 @@ export function registerJournalRoutes(
         });
         return;
       }
-      setEtag(response, contribution.currentRevision?.revision);
+      setEtag(response, contribution.currentRevision?.revision ?? 0);
       sendValidated(response, contributionSchema, contribution);
     }),
   );
@@ -326,7 +326,7 @@ export function registerJournalRoutes(
         headers['idempotency-key'],
         correlationId(response),
       );
-      setEtag(response, result.contribution.currentRevision?.revision);
+      setEtag(response, result.contribution.currentRevision?.revision ?? 0);
       sendValidated(
         response,
         contributionMutationResponseSchema,
@@ -412,7 +412,7 @@ export function registerJournalRoutes(
                   key,
                   correlationId(response),
                 );
-      setEtag(response, result.contribution.currentRevision?.revision);
+      setEtag(response, result.contribution.currentRevision?.revision ?? 0);
       sendValidated(response, contributionMutationResponseSchema, {
         contribution: result.contribution,
         idempotency: { key, replayed: result.replayed },

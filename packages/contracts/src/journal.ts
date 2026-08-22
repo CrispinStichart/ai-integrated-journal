@@ -41,6 +41,22 @@ export const contributionRevisionSchema = z.strictObject({
   createdAt: utcInstantSchema,
 });
 
+export const contributionRecordingSchema = z.strictObject({
+  id: uuidV7Schema,
+  mimeType: z.string().min(1).max(255),
+  codec: z.string().min(1).optional(),
+  persistenceState: z.enum(['uploading', 'prepared', 'durable']),
+  durationMilliseconds: z
+    .string()
+    .regex(/^(?:0|[1-9][0-9]*)$/)
+    .optional(),
+  byteSize: z
+    .string()
+    .regex(/^(?:0|[1-9][0-9]*)$/)
+    .optional(),
+  audioDeletedAt: utcInstantSchema.optional(),
+});
+
 export const contributionSchema = z.strictObject({
   id: uuidV7Schema,
   journalDayId: uuidV7Schema,
@@ -51,6 +67,7 @@ export const contributionSchema = z.strictObject({
   capturedTimezone: ianaTimezoneSchema,
   journalTimezone: ianaTimezoneSchema,
   journalDateAssignment: journalDateAssignmentSchema,
+  recording: contributionRecordingSchema.optional(),
   elicitingNudgeId: uuidV7Schema.optional(),
   currentRevision: contributionRevisionSchema.optional(),
   deletedAt: utcInstantSchema.optional(),
@@ -123,6 +140,9 @@ export const contributionMutationResponseSchema = z.strictObject({
 });
 
 export type ContributionResource = z.infer<typeof contributionSchema>;
+export type ContributionRecordingResource = z.infer<
+  typeof contributionRecordingSchema
+>;
 export type ContributionRevisionResource = z.infer<
   typeof contributionRevisionSchema
 >;

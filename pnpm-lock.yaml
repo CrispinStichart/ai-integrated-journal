@@ -117,6 +117,9 @@ importers:
       '@journal/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
       '@simplewebauthn/browser':
         specifier: 13.3.0
         version: 13.3.0

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@journal/contracts": "workspace:*",
+    "@noble/hashes": "1.8.0",
     "@simplewebauthn/browser": "13.3.0",
     "@tanstack/vue-query": "5.101.4",
     "@vueuse/core": "14.4.0",

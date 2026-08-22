@@ -16,7 +16,11 @@ import {
   getJournalDay,
   JournalApiError,
 } from './api';
-import { browserMetadata, type JournalIndexedDb } from '../storage/indexed-db';
+import {
+  browserMetadata,
+  type EncryptedRecordingChunkRecord,
+  type JournalIndexedDb,
+} from '../storage/indexed-db';
 
 const CACHE_SCHEMA_VERSION = 1 as const;
 const PBKDF2_ITERATIONS = 600_000;
@@ -311,6 +315,28 @@ export class OfflineJournal {
       nonce: bytesToBase64(nonce),
       ciphertext,
     };
+  }
+
+  async unprotectRecordingChunk(
+    chunk: EncryptedRecordingChunkRecord,
+  ): Promise<ArrayBuffer> {
+    const ownerId = this.#requireOwner();
+    const key = this.#requireKey();
+    if (chunk.ownerId !== ownerId)
+      throw new Error('The recording chunk belongs to a different owner.');
+    return crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: base64ToBytes(chunk.nonce),
+        additionalData: aad(
+          ownerId,
+          'recording-chunk',
+          `${chunk.recordingId}:${chunk.index}`,
+        ),
+      },
+      key,
+      chunk.ciphertext,
+    );
   }
 
   async enqueueCreate(

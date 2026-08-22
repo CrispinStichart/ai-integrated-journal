@@ -7,11 +7,13 @@ import type {
 import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
+import AudioContributionCard from '../components/AudioContributionCard.vue';
 import ContributionCard from '../components/ContributionCard.vue';
 import { useAuthentication } from '../auth';
 import {
   createUuidV7,
   listContributionRevisions,
+  moveContribution,
   setContributionDeleted,
 } from '../journal/api';
 import { type TextMutation, useOfflineJournal } from '../journal/offline';
@@ -21,6 +23,10 @@ import {
   shiftJournalDate,
 } from '../journal/date';
 import { useUiStore } from '../stores/ui';
+import { useBrowserCaptureController } from '../recording/capture-controller';
+import { retryRecordingFinalization } from '../recording/api';
+import { useRecordingSyncController } from '../recording/sync-controller';
+import type { LocalRecordingRecord } from '../storage/indexed-db';
 
 const props = defineProps<{ date?: string }>();
 const journalDate = computed(() => props.date ?? localJournalDate());
@@ -29,9 +35,17 @@ const queryClient = useQueryClient();
 const auth = useAuthentication();
 const ui = useUiStore();
 const offline = useOfflineJournal();
+const capture = useBrowserCaptureController();
+const recordingSync = useRecordingSyncController();
 const ownerId = auth.status.value?.ownerId;
-if (ownerId !== undefined) await offline.initialize(ownerId);
+const sessionCsrfToken = auth.status.value?.csrfToken;
+if (ownerId !== undefined) {
+  await offline.initialize(ownerId);
+  if (sessionCsrfToken !== undefined)
+    await recordingSync.initialize(ownerId, sessionCsrfToken);
+}
 const newText = ref('');
+const audioAssignmentDate = ref(journalDate.value);
 const localSecret = ref('');
 const localStorageError = ref('');
 const selectedDate = ref(journalDate.value);
@@ -46,6 +60,20 @@ const conflict = ref<{
   reason: string;
 }>();
 const pendingMutations = ref<readonly TextMutation[]>([]);
+type TimelineItem =
+  | {
+      readonly kind: 'audio';
+      readonly id: string;
+      readonly capturedAt: string;
+      readonly contribution?: ContributionResource;
+      readonly local?: LocalRecordingRecord;
+    }
+  | {
+      readonly kind: 'text';
+      readonly id: string;
+      readonly capturedAt: string;
+      readonly contribution: ContributionResource;
+    };
 
 const dayQuery = useQuery({
   queryKey: computed(() => ['journal-day', journalDate.value]),
@@ -104,9 +132,47 @@ const contributions = computed(() => {
     left.capturedAt.localeCompare(right.capturedAt),
   );
 });
+const timelineItems = computed<readonly TimelineItem[]>(() => {
+  const localByContribution = new Map(
+    recordingSync.recordings.value
+      .filter((recording) => recording.journalDate === journalDate.value)
+      .map((recording) => [recording.contributionId, recording]),
+  );
+  const items: TimelineItem[] = contributions.value.map((contribution) => {
+    if (contribution.sourceType === 'recording') {
+      const local = localByContribution.get(contribution.id);
+      localByContribution.delete(contribution.id);
+      return {
+        kind: 'audio',
+        id: contribution.id,
+        capturedAt: contribution.capturedAt,
+        contribution,
+        ...(local === undefined ? {} : { local }),
+      };
+    }
+    return {
+      kind: 'text',
+      id: contribution.id,
+      capturedAt: contribution.capturedAt,
+      contribution,
+    };
+  });
+  for (const local of localByContribution.values())
+    items.push({
+      kind: 'audio',
+      id: local.contributionId,
+      capturedAt: local.capturedAt,
+      local,
+    });
+  return items.sort((left, right) =>
+    left.capturedAt.localeCompare(right.capturedAt),
+  );
+});
 const activeCount = computed(
   () =>
-    contributions.value.filter((item) => item.deletedAt === undefined).length,
+    timelineItems.value.filter(
+      (item) => item.contribution?.deletedAt === undefined,
+    ).length,
 );
 const dayTitle = computed(() =>
   props.date === undefined ? 'Today' : displayJournalDate(journalDate.value),
@@ -131,6 +197,7 @@ function localStatus(id: string): 'pending' | 'conflict' | undefined {
 
 watch(journalDate, (value) => {
   selectedDate.value = value;
+  audioAssignmentDate.value = value;
   errorMessage.value = '';
   conflict.value = undefined;
   void loadPending();
@@ -164,9 +231,10 @@ function csrfToken(): string {
 
 async function refresh(): Promise<void> {
   await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey: ['journal-day', journalDate.value],
-    }),
+    // Refetch the active day directly. An invalidation can be coalesced with
+    // the query that just completed, leaving a replayed contribution hidden
+    // until another focus or connectivity event triggers a refresh.
+    dayQuery.refetch(),
     queryClient.invalidateQueries({ queryKey: ['journal-days'] }),
   ]);
   await loadPending();
@@ -209,6 +277,89 @@ async function addContribution(): Promise<void> {
     ui.announce('Contribution saved locally');
     await loadPending();
     await offline.replay(csrfToken());
+    await refresh();
+  } catch (error) {
+    showError(error);
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function startRecording(): Promise<void> {
+  if (ownerId === undefined)
+    throw new Error('Your session needs to be refreshed.');
+  errorMessage.value = '';
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await capture.start({
+      ownerId,
+      proposedJournalDayId: createUuidV7(),
+      journalDate: audioAssignmentDate.value,
+      journalTimezone: timezone,
+      journalDateAssignment:
+        audioAssignmentDate.value === localJournalDate()
+          ? 'default'
+          : 'user_override',
+    });
+    await recordingSync.refresh();
+    ui.announce('Audio recording started');
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function stopRecording(): Promise<void> {
+  errorMessage.value = '';
+  try {
+    await capture.stop();
+    await recordingSync.refresh();
+    ui.announce('Recording saved locally');
+    await recordingSync.resume();
+    await refresh();
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function moveAudio(
+  item: Extract<TimelineItem, { kind: 'audio' }>,
+  date: string,
+) {
+  submitting.value = true;
+  errorMessage.value = '';
+  try {
+    if (item.local !== undefined) {
+      await recordingSync.move(item.local.recordingId, date);
+    } else if (item.contribution !== undefined) {
+      await moveContribution(
+        item.contribution,
+        date,
+        createUuidV7(),
+        csrfToken(),
+        `move-${createUuidV7()}`,
+      );
+    }
+    ui.announce(`Recording moved to ${date}`);
+    await refresh();
+  } catch (error) {
+    showError(error);
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function retryAudio(item: Extract<TimelineItem, { kind: 'audio' }>) {
+  submitting.value = true;
+  errorMessage.value = '';
+  try {
+    if (item.local !== undefined)
+      await recordingSync.retry(item.local.recordingId);
+    else if (item.contribution?.recording !== undefined)
+      await retryRecordingFinalization(
+        item.contribution.recording.id,
+        csrfToken(),
+      );
+    ui.announce('Audio synchronization retried safely');
     await refresh();
   } catch (error) {
     showError(error);
@@ -267,6 +418,10 @@ async function configureOfflineStorage(): Promise<void> {
     else await offline.setup(localSecret.value);
     localSecret.value = '';
     await offline.replay(csrfToken());
+    if (ownerId !== undefined) {
+      await recordingSync.initialize(ownerId, csrfToken());
+      await recordingSync.resume();
+    }
     await dayQuery.refetch();
     await loadPending();
   } catch (error) {
@@ -512,6 +667,98 @@ await loadPending();
 
     <form
       class="card card-border mt-7 bg-base-200"
+      aria-label="Add an audio recording"
+      @submit.prevent="
+        capture.snapshot.value.phase === 'recording'
+          ? stopRecording()
+          : startRecording()
+      "
+    >
+      <div class="card-body gap-3 p-4 sm:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="card-title">Record audio</h2>
+            <p class="mt-1 text-sm text-base-content/70">
+              Each checkpoint is encrypted and saved on this device before it
+              uploads.
+            </p>
+          </div>
+          <span
+            v-if="capture.snapshot.value.phase === 'recording'"
+            class="badge badge-error"
+            >Recording</span
+          >
+          <span
+            v-else-if="capture.snapshot.value.phase === 'stopping'"
+            class="badge badge-info"
+            >Saving locally</span
+          >
+          <span
+            v-else-if="capture.snapshot.value.phase === 'saved_locally'"
+            class="badge badge-success"
+            >Saved locally</span
+          >
+          <span
+            v-else-if="capture.snapshot.value.phase === 'failed'"
+            class="badge badge-error"
+            >Capture failed</span
+          >
+        </div>
+
+        <div
+          v-if="capture.snapshot.value.message"
+          role="status"
+          class="alert alert-warning alert-soft"
+        >
+          <span>{{ capture.snapshot.value.message }}</span>
+        </div>
+
+        <div
+          class="card-actions flex-col items-stretch sm:flex-row sm:items-end"
+        >
+          <label class="fieldset grow sm:max-w-60">
+            <span class="fieldset-legend">Journal Day assignment</span>
+            <input
+              v-model="audioAssignmentDate"
+              class="input w-full"
+              type="date"
+              required
+              :disabled="
+                capture.snapshot.value.phase === 'recording' ||
+                capture.snapshot.value.phase === 'stopping'
+              "
+            />
+          </label>
+          <button
+            v-if="capture.snapshot.value.phase === 'recording'"
+            class="btn btn-error"
+            type="submit"
+          >
+            Stop and save
+          </button>
+          <button
+            v-else
+            class="btn"
+            type="submit"
+            :disabled="
+              !offline.readyForLocalCapture.value ||
+              capture.snapshot.value.phase === 'requesting_permission' ||
+              capture.snapshot.value.phase === 'stopping'
+            "
+          >
+            <span
+              v-if="capture.snapshot.value.phase === 'requesting_permission'"
+              class="loading loading-spinner loading-sm"
+              aria-hidden="true"
+            />
+            Start recording
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <form
+      class="card card-border mt-7 bg-base-200"
       aria-label="Add a typed contribution"
       @submit.prevent="addContribution"
     >
@@ -555,7 +802,7 @@ await loadPending();
       <span class="sr-only">Loading Journal Day</span>
     </div>
     <div
-      v-else-if="dayQuery.isError.value && contributions.length === 0"
+      v-else-if="dayQuery.isError.value && timelineItems.length === 0"
       role="alert"
       class="alert alert-error mt-7"
     >
@@ -565,7 +812,7 @@ await loadPending();
       </button>
     </div>
     <div
-      v-else-if="contributions.length === 0"
+      v-else-if="timelineItems.length === 0"
       class="card card-border mt-7 bg-base-100"
     >
       <div class="card-body items-center py-12 text-center">
@@ -580,24 +827,33 @@ await loadPending();
       class="timeline timeline-vertical timeline-compact mt-8"
       aria-label="Day timeline"
     >
-      <li v-for="(contribution, index) in contributions" :key="contribution.id">
+      <li v-for="(item, index) in timelineItems" :key="item.id">
         <hr v-if="index > 0" class="bg-base-300" />
         <div class="timeline-middle" aria-hidden="true">
           <span class="block size-3 rounded-full bg-base-content/30" />
         </div>
         <div class="timeline-end mb-7 w-[calc(100%-1.5rem)]">
-          <ContributionCard
-            :contribution="contribution"
-            :revisions="revisions[contribution.id]"
+          <AudioContributionCard
+            v-if="item.kind === 'audio'"
+            :contribution="item.contribution"
+            :local="item.local"
             :busy="submitting"
-            :local-status="localStatus(contribution.id)"
+            @move="moveAudio(item, $event)"
+            @retry="retryAudio(item)"
+          />
+          <ContributionCard
+            v-else
+            :contribution="item.contribution"
+            :revisions="revisions[item.contribution.id]"
+            :busy="submitting"
+            :local-status="localStatus(item.contribution.id)"
             @edit="saveEdit"
             @delete="changeDeletion($event, true)"
             @restore="changeDeletion($event, false)"
             @load-history="loadHistory"
           />
         </div>
-        <hr v-if="index < contributions.length - 1" class="bg-base-300" />
+        <hr v-if="index < timelineItems.length - 1" class="bg-base-300" />
       </li>
     </ol>
   </section>

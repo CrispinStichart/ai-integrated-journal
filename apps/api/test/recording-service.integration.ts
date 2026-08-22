@@ -19,6 +19,7 @@ import { LocalBlobStore } from '@journal/storage';
 import { createPostgresTestContainer } from '@journal/test-support';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PostgresJournalService } from '../src/journal-service.js';
 import {
   PostgresRecordingService,
   RecordingAudioDeletedError,
@@ -52,6 +53,7 @@ describe('recording persistence and recoverable finalization', () => {
   const uploadId = createUuidV7<'recording-upload'>({ timestamp: 103_000 });
   const dayId = createUuidV7<'journal-day'>({ timestamp: 104_000 });
   const correlationId = createUuidV7<'correlation'>({ timestamp: 105_000 });
+  const priorDayId = createUuidV7<'journal-day'>({ timestamp: 106_000 });
   const now = new Date('2026-08-22T12:00:00.000Z');
   const createInput: CreateRecordingRequest = {
     recordingId,
@@ -212,6 +214,34 @@ describe('recording persistence and recoverable finalization', () => {
       sha256: sha256('hello audio'),
       durationMilliseconds: '10000',
     });
+    const journal = new PostgresJournalService(client.database, () => now);
+    expect(
+      (await journal.getDay(ownerId, '2026-08-22', false))?.contributions[0],
+    ).toMatchObject({
+      id: contributionId,
+      recording: {
+        id: recordingId,
+        persistenceState: 'durable',
+        byteSize: '11',
+        durationMilliseconds: '10000',
+      },
+    });
+    const moved = await journal.move(
+      ownerId,
+      contributionId,
+      { proposedJournalDayId: priorDayId, journalDate: '2026-08-21' },
+      0,
+      'move-recording-prior-day',
+      correlationId,
+    );
+    expect(moved.contribution).toMatchObject({
+      journalDate: '2026-08-21',
+      journalDateAssignment: 'user_override',
+      capturedTimezone: createInput.capturedTimezone,
+    });
+    expect(Date.parse(moved.contribution.capturedAt)).toBe(
+      Date.parse(createInput.capturedAt),
+    );
     expect(
       (
         await service.finalize(
