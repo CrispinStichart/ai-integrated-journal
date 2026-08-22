@@ -74,6 +74,9 @@ importers:
       '@journal/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@journal/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@simplewebauthn/server':
         specifier: 13.3.2
         version: 13.3.2

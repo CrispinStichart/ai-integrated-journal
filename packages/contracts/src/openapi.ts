@@ -41,6 +41,15 @@ import {
 } from './operations.js';
 import { persistedExtensibleValueSchema } from './persisted-values.js';
 import { problemDetailsSchema } from './problem-details.js';
+import {
+  audioDeletionResponseSchema,
+  createRecordingRequestSchema,
+  finalizeRecordingRequestSchema,
+  recordingChunkUploadResponseSchema,
+  recordingMutationResponseSchema,
+  recordingSchema,
+  recordingUploadStatusSchema,
+} from './recording.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
 
 function componentSchema(schema: z.ZodType): Record<string, unknown> {
@@ -308,6 +317,154 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/recordings': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('CreateRecordingRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Recording upload created',
+              'RecordingMutationResponse',
+            ),
+            '409': problemResponse('Recording identity conflict'),
+            '428': problemResponse('Idempotency key required'),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/chunks/{index}': {
+        put: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [
+            {
+              in: 'header',
+              name: 'X-Content-SHA256',
+              required: true,
+              schema: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+            },
+            {
+              in: 'path',
+              name: 'id',
+              required: true,
+              schema: { type: 'string', format: 'uuid' },
+            },
+            {
+              in: 'path',
+              name: 'index',
+              required: true,
+              schema: { type: 'integer', minimum: 0 },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/octet-stream': {
+                schema: {
+                  type: 'string',
+                  contentMediaType: 'application/octet-stream',
+                },
+              },
+            },
+          },
+          responses: {
+            '201': schemaResponse(
+              'Chunk accepted',
+              'RecordingChunkUploadResponse',
+            ),
+            '409': problemResponse('Chunk checksum or identity conflict'),
+            '413': problemResponse('Chunk exceeds the transport bound'),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/upload': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Accepted indexes and recording state',
+              'RecordingUploadStatus',
+            ),
+            '404': problemResponse('Recording not found'),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/finalize': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('FinalizeRecordingRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Recording durably finalized',
+              'RecordingMutationResponse',
+            ),
+            '409': problemResponse('Manifest conflict'),
+            '507': problemResponse('Server storage exhausted'),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/retry': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Prepared finalization retried',
+              'RecordingMutationResponse',
+            ),
+            '409': problemResponse('Recording is not prepared'),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/audio': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [
+            {
+              in: 'header',
+              name: 'Range',
+              required: false,
+              schema: { type: 'string', pattern: '^bytes=' },
+            },
+          ],
+          responses: {
+            '206': {
+              description: 'Bounded audio byte range',
+              headers: {
+                'Accept-Ranges': { schema: { const: 'bytes' } },
+                'Content-Range': { schema: { type: 'string' } },
+              },
+              content: {
+                'audio/*': {
+                  schema: {
+                    type: 'string',
+                    contentMediaType: 'application/octet-stream',
+                  },
+                },
+              },
+            },
+            '410': problemResponse('Audio recoverably deleted'),
+            '416': problemResponse('Range not satisfiable'),
+          },
+        },
+        delete: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Audio recoverably deleted',
+              'AudioDeletionResponse',
+            ),
+          },
+        },
+      },
+      '/api/v1/recordings/{id}/audio/restore': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Audio restored',
+              'RecordingMutationResponse',
+            ),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -400,6 +557,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
       schemas: {
         AuthenticatedResponse: componentSchema(authenticatedResponseSchema),
         AuthStatusResponse: componentSchema(authStatusResponseSchema),
+        AudioDeletionResponse: componentSchema(audioDeletionResponseSchema),
         BootstrapRequest: componentSchema(bootstrapRequestSchema),
         ConditionalMutationHeaders: componentSchema(
           conditionalMutationHeadersSchema,
@@ -414,6 +572,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
         CreateContributionRequest: componentSchema(
           createContributionRequestSchema,
         ),
+        CreateRecordingRequest: componentSchema(createRecordingRequestSchema),
         CursorPageMetadata: componentSchema(cursorPageMetadataSchema),
         CursorPaginationRequest: componentSchema(cursorPaginationRequestSchema),
         EditableResponseHeaders: componentSchema(editableResponseHeadersSchema),
@@ -433,6 +592,9 @@ export function createOpenApiDocument(): Record<string, unknown> {
         JournalDayView: componentSchema(journalDayViewSchema),
         LogoutResponse: componentSchema(logoutResponseSchema),
         MoveContributionRequest: componentSchema(moveContributionRequestSchema),
+        FinalizeRecordingRequest: componentSchema(
+          finalizeRecordingRequestSchema,
+        ),
         PasskeyOptionsResponse: componentSchema(passkeyOptionsResponseSchema),
         PasskeyVerificationRequest: componentSchema(
           passkeyVerificationRequestSchema,
@@ -444,6 +606,14 @@ export function createOpenApiDocument(): Record<string, unknown> {
         ),
         ProblemDetails: componentSchema(problemDetailsSchema),
         ReadinessResponse: componentSchema(readinessResponseSchema),
+        Recording: componentSchema(recordingSchema),
+        RecordingChunkUploadResponse: componentSchema(
+          recordingChunkUploadResponseSchema,
+        ),
+        RecordingMutationResponse: componentSchema(
+          recordingMutationResponseSchema,
+        ),
+        RecordingUploadStatus: componentSchema(recordingUploadStatusSchema),
         SemanticJsonValue: componentSchema(semanticJsonValueSchema),
         SseEventEnvelope: componentSchema(sseEventEnvelopeSchema),
       },

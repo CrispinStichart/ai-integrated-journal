@@ -276,27 +276,12 @@ export class LocalBlobStore implements BlobStore {
 
   public async finalizeChunks(
     uploadId: string,
-    orderedChunks: readonly StagedChunk[],
+    orderedChunks: readonly StagedChunk[] | AsyncIterable<StagedChunk>,
     metadata: BlobMetadata,
   ): Promise<StoredBlob> {
     assertUploadId(uploadId);
     assertExpectedIntegrity(metadata);
     const target = this.#finalPath(metadata.key);
-
-    for (const [index, chunk] of orderedChunks.entries()) {
-      if (
-        chunk.uploadId !== uploadId ||
-        chunk.index !== index ||
-        chunk.stagingKey !== this.#stagingKey(uploadId, index) ||
-        chunk.byteSize < 0n
-      ) {
-        throw new BlobConflictError(
-          'Staging chunk order or identity conflicts.',
-        );
-      }
-      assertValidSha256(chunk.sha256);
-      this.#stagingPath(chunk.stagingKey);
-    }
 
     if (metadata.expectedIntegrity !== undefined) {
       try {
@@ -316,7 +301,21 @@ export class LocalBlobStore implements BlobStore {
       this.#stagingPath(stagingKey);
     const assembled = await this.#writeTemporary(
       (async function* (): AsyncGenerator<Uint8Array, void, undefined> {
-        for (const descriptor of orderedChunks) {
+        let expectedIndex = 0;
+        for await (const descriptor of orderedChunks) {
+          if (
+            descriptor.uploadId !== uploadId ||
+            descriptor.index !== expectedIndex ||
+            descriptor.stagingKey !==
+              `${uploadId}/${String(expectedIndex)}.chunk` ||
+            descriptor.byteSize < 0n
+          ) {
+            throw new BlobConflictError(
+              'Staging chunk order or identity conflicts.',
+            );
+          }
+          assertValidSha256(descriptor.sha256);
+          expectedIndex += 1;
           const stagingPath = resolveStagingPath(descriptor.stagingKey);
           const handle = await openStagingPath(stagingPath);
           const digest = createHash('sha256');

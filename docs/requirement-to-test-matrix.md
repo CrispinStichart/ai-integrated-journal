@@ -67,7 +67,7 @@ Status values are:
 | DATA-001–004 | Domain/database tests plus `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts`: stable date-addressed days, zero/many contributions, and preserved boundaries. | 16–18 | Source-only journal | Verified |
 | DATA-010–012 | Database/API/UI tests plus `apps/api/test/text-journal-milestone.integration.ts`: contribution metadata, independent lifecycle, and targeted edits. | 16–20 | Source-only journal | Verified |
 | DATA-013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: durable linked nudge responses. | 16–19, 43 | Complete local release | Planned |
-| DATA-020–021 | `AUDIO`: preallocated recording identity and immutable finalized audio/replacement behavior. | 21–25 | Audio journal | Planned |
+| DATA-020–021 | `apps/api/test/recording-service.integration.ts`, `apps/api/test/recording-routes.test.ts`, and storage adapter contracts cover preallocated recording identity, immutable streamed finalization, and conflicting retry behavior. Browser capture remains in `AUDIO`. | 21–25 | Audio journal | Partial |
 | DATA-022–023 | `TRANSCRIPT`: immutable exact raw response and complete run provenance/capability metadata. | 26–27 | Transcript journal | Planned |
 | DATA-024–026 | `TRANSCRIPT`: distinct raw/corrected/cleaned layers and append-only editable history. | 28–30 | Transcript journal | Planned |
 | DATA-027–028 | `TRANSCRIPT`: retained timing enables seek; capability absence remains valid and explicitly unknown. | 26, 29, 30 | Transcript journal | Planned |
@@ -84,7 +84,7 @@ Status values are:
 | --- | --- | --- | --- | --- |
 | CAP-001 | `AUDIO`, `RELEASE-E2E`: multiple typed/recorded contributions coexist independently on one day. | 22–25 | Audio journal | Planned |
 | CAP-002–003 | `AUDIO`: IndexedDB remains recovery authority across interruption, suspension, closure, and reconnect until durable confirmation. | 23–25 | Audio journal | Planned |
-| CAP-004 | `AUDIO`: duplicate create/chunk/finalize retries reuse identity and reject conflicting bytes. | 22, 24, 25 | Audio journal | Planned |
+| CAP-004 | `apps/api/test/recording-service.integration.ts` and `apps/api/test/recording-routes.test.ts` cover duplicate create/chunk/finalize retries, database uniqueness, and conflicting bytes/manifests; synchronization E2E remains in `AUDIO`. | 22, 24, 25 | Audio journal | Partial |
 | CAP-005 | `AUDIO`, `PORTABILITY`, `MANUAL-FIREFOX`: timesliced long capture has no aggregate cap; bounded-memory upload/finalization/playback/export/backup preserves earlier chunks under interruption and quota/disk pressure. | 21–25, 48, 49, 52, 54 | Audio journal; portability repeated later | Planned |
 | CAP-006 | `AUDIO`: component/E2E tests distinguish each local, upload, durable, pending, and failure state accessibly. | 23–25 | Audio journal | Planned |
 | CAP-007 | `AUDIO`: alternate-day assignment preserves actual capture time and timezone. | 22–25 | Audio journal | Planned |

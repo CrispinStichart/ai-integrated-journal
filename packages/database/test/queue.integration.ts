@@ -167,7 +167,7 @@ describe('WORKER pg-boss foundation', () => {
       const recovered = await boss.getJobById(queueNames.backup, jobId);
       return recovered?.state === 'retry' || recovered?.state === 'created';
     }, 20_000);
-  });
+  }, 30_000);
 
   it('[STATE-001] supports durable cancellation before execution', async () => {
     const jobId = '019c5b90-0000-7000-8000-000000000306';

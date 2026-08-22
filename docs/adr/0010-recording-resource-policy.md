@@ -80,6 +80,16 @@ count are decimal strings on the wire so JavaScript safe-integer limits do not
 become aggregate recording limits. The first successfully prepared summary
 remains binding under ADR-0008.
 
+For manifest version 1, the canonical digest input is the UTF-8 concatenation
+of one descriptor per accepted chunk in ascending index order:
+`<index>:<decimal-byte-size>:<lowercase-sha256>\n`. Index and byte size use
+canonical base-10 digits with no sign or leading zeroes (except the value
+zero). The digest is the lowercase SHA-256 of that byte stream. The finalize
+summary also carries the incrementally calculated SHA-256 of the complete
+audio so prepare can bind the expected immutable object before publication.
+Resume queries page accepted indexes (at most 1,000 per response) so recovery
+does not materialize an unbounded index list.
+
 ### Browser quota policy
 
 Pending recording data is recovery data under ADR-0009 and is never evicted to

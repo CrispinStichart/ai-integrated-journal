@@ -8,6 +8,7 @@ import {
   contractsPackageName,
   createCursorPageSchema,
   createContributionRequestSchema,
+  createRecordingRequestSchema,
   createOpenApiDocument,
   createPersistedValueSchema,
   createSemanticValueSchema,
@@ -15,6 +16,7 @@ import {
   editableResponseHeadersSchema,
   ERROR_CODES,
   eventPollResponseSchema,
+  finalizeRecordingRequestSchema,
   healthDetailsResponseSchema,
   idempotencyResponseMetadataSchema,
   idempotentMutationHeadersSchema,
@@ -282,6 +284,54 @@ describe('CONTRACT DATA-032 DATA-033 persisted extensible values', () => {
       numberValue.safeParse({ state: 'uncertain', confidence: 1.1 }).success,
     ).toBe(false);
     expect(semanticJsonValueSchema.safeParse(null).success).toBe(false);
+  });
+});
+
+describe('CONTRACT CAP-002 CAP-004 CAP-005 recording protocol', () => {
+  it('validates preallocated identities, MIME metadata, and temporal context', () => {
+    const input = {
+      recordingId: UUID_V7,
+      contributionId: UUID_V7,
+      uploadId: UUID_V7,
+      proposedJournalDayId: UUID_V7,
+      mimeType: 'audio/webm;codecs=opus',
+      codec: 'opus',
+      capturedAt: INSTANT,
+      capturedTimezone: 'America/New_York',
+      journalTimezone: 'America/New_York',
+      journalDate: '2026-08-15',
+      journalDateAssignment: 'default',
+    };
+    expect(createRecordingRequestSchema.parse(input)).toEqual(input);
+    expect(
+      createRecordingRequestSchema.safeParse({
+        ...input,
+        mimeType: 'text/plain',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('uses decimal aggregate values and a bounded manifest summary', () => {
+    const summary = {
+      manifestVersion: 1,
+      chunkCount: '9007199254740993',
+      totalBytes: '90071992547409930',
+      manifestSha256: 'a'.repeat(64),
+      finalSha256: 'b'.repeat(64),
+    };
+    expect(finalizeRecordingRequestSchema.parse(summary)).toEqual(summary);
+    expect(
+      finalizeRecordingRequestSchema.safeParse({
+        ...summary,
+        chunkCount: 2,
+      }).success,
+    ).toBe(false);
+    expect(
+      finalizeRecordingRequestSchema.safeParse({
+        ...summary,
+        totalBytes: '01',
+      }).success,
+    ).toBe(false);
   });
 });
 

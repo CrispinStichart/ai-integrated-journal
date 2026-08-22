@@ -8,12 +8,17 @@ const repositoryRoot = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: Object.fromEntries(
-      ['contracts', 'database', 'domain', 'observability', 'test-support'].map(
-        (packageName) => [
-          `@journal/${packageName}`,
-          path.join(repositoryRoot, 'packages', packageName, 'src/index.ts'),
-        ],
-      ),
+      [
+        'contracts',
+        'database',
+        'domain',
+        'observability',
+        'storage',
+        'test-support',
+      ].map((packageName) => [
+        `@journal/${packageName}`,
+        path.join(repositoryRoot, 'packages', packageName, 'src/index.ts'),
+      ]),
     ),
   },
   test: {

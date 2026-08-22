@@ -159,6 +159,7 @@ export class OfflineJournal {
   #key: CryptoKey | undefined;
   #syncing: Promise<void> | undefined;
   #lastSequence = 0;
+  #lastCacheAccess = 0;
   readonly configured = ref(false);
   readonly unlocked = ref(false);
   readonly pendingCount = ref(0);
@@ -368,7 +369,7 @@ export class OfflineJournal {
     );
     await this.#storage.putJournalCache({
       ...record,
-      lastAccessedAt: new Date().toISOString(),
+      lastAccessedAt: this.#nextCacheTimestamp(),
     });
     this.lastReadFromCache.value = true;
     return day;
@@ -500,7 +501,7 @@ export class OfflineJournal {
       day.journalDate,
       day,
     );
-    const now = new Date().toISOString();
+    const now = this.#nextCacheTimestamp();
     await this.#storage.putJournalCache({
       key: `${ownerId}:${day.journalDate}`,
       ownerId,
@@ -547,6 +548,11 @@ export class OfflineJournal {
       this.#lastSequence,
       ...outbox.map((record) => record.sequence),
     );
+    this.#lastCacheAccess = Math.max(
+      this.#lastCacheAccess,
+      0,
+      ...cache.map((record) => Date.parse(record.lastAccessedAt)),
+    );
     this.cacheDays.value = cache.length;
     this.cacheBytes.value = cache.reduce(
       (sum, record) => sum + record.byteSize,
@@ -558,6 +564,11 @@ export class OfflineJournal {
     if (this.#ownerId === undefined)
       throw new Error('An authenticated owner is required.');
     return this.#ownerId;
+  }
+
+  #nextCacheTimestamp(): string {
+    this.#lastCacheAccess = Math.max(Date.now(), this.#lastCacheAccess + 1);
+    return new Date(this.#lastCacheAccess).toISOString();
   }
 
   #requireKey(): CryptoKey {

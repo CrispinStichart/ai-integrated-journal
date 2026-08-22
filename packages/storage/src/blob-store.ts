@@ -46,7 +46,7 @@ export interface BlobStore {
   ): Promise<StagedChunk>;
   finalizeChunks(
     uploadId: string,
-    orderedChunks: readonly StagedChunk[],
+    orderedChunks: readonly StagedChunk[] | AsyncIterable<StagedChunk>,
     metadata: BlobMetadata,
   ): Promise<StoredBlob>;
   open(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array>>;

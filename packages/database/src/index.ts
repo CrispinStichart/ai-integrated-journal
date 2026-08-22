@@ -16,6 +16,7 @@ export {
 } from './environment.js';
 export { migrateDatabase, migrationsFolder } from './migrations.js';
 export {
+  auditEvents,
   authChallenges,
   authenticators,
   contributionRevisions,
@@ -24,6 +25,10 @@ export {
   journalApiIdempotency,
   passwordCredentials,
   recoveryCodes,
+  recordingApiIdempotency,
+  recordingChunks,
+  recordings,
+  recordingUploads,
   sessions,
   users,
 } from './schema.js';

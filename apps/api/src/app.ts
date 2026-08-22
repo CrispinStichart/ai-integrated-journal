@@ -39,6 +39,10 @@ import type {
   HealthProbeResult,
 } from './types.js';
 import { registerJournalRoutes, sendJournalError } from './journal-routes.js';
+import {
+  registerRecordingRoutes,
+  sendRecordingError,
+} from './recording-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -446,6 +450,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
   });
 
   registerJournalRoutes(app, dependencies);
+  registerRecordingRoutes(app, dependencies);
 
   app.use((request, response) => {
     sendProblem(request, response, {
@@ -481,6 +486,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
         return;
       }
       if (sendJournalError(error, request, response)) return;
+      if (sendRecordingError(error, request, response)) return;
       dependencies.logger.error(
         {
           correlationId: correlationId(response),

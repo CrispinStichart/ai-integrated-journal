@@ -117,6 +117,7 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
   page,
 }) => {
   const date = '2026-08-16';
+  await page.clock.setFixedTime(new Date(`${date}T12:00:00.000Z`));
   const ids = {
     author: '018f0000-0000-7000-8000-000000000001',
     day: '018f0000-0000-7000-8000-000000000002',

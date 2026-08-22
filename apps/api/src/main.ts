@@ -8,6 +8,7 @@ import {
   createQueueClient,
 } from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
+import { LocalBlobStore } from '@journal/storage';
 
 import { createApiApp } from './app.js';
 import { AuthenticationService } from './auth.js';
@@ -16,6 +17,7 @@ import { createInMemoryEventFeed } from './events.js';
 import { createGracefulShutdown } from './shutdown.js';
 import type { HealthProbe } from './types.js';
 import { PostgresJournalService } from './journal-service.js';
+import { PostgresRecordingService } from './recording-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -92,6 +94,10 @@ const app = createApiApp({
   healthProbes,
   logger,
   journalService: new PostgresJournalService(database.database),
+  recordingService: new PostgresRecordingService(
+    database.database,
+    new LocalBlobStore(config.blobDataDirectory),
+  ),
 });
 const server = app.listen(config.http.port, config.http.host, () => {
   logger.info(

@@ -3,6 +3,7 @@ import type { ContentSafeLogger } from '@journal/observability';
 import type { Request } from 'express';
 import type { AuthenticationService } from './auth.js';
 import type { JournalService } from './journal-service.js';
+import type { RecordingService } from './recording-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -42,6 +43,7 @@ export interface ApiDependencies {
   readonly healthProbes: readonly HealthProbe[];
   readonly logger: ContentSafeLogger;
   readonly journalService?: JournalService;
+  readonly recordingService?: RecordingService;
   readonly now?: () => Date;
   readonly createCorrelationId?: () => string;
   readonly sseHeartbeatMilliseconds?: number;

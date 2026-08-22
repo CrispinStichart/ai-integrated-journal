@@ -51,6 +51,9 @@ export default defineConfig({
         // The API journal service coordinates real Drizzle transactions and
         // durable idempotency; it is covered by the infrastructure suite.
         'apps/api/src/journal-service.ts',
+        // Recording persistence coordinates real Drizzle transactions with
+        // streamed blob I/O and is covered by the infrastructure suite.
+        'apps/api/src/recording-service.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

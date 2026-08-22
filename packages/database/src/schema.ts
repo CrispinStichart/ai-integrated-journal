@@ -34,6 +34,12 @@ export const contributionAuthority = pgEnum('contribution_authority', [
   'generated',
 ]);
 
+export const recordingPersistenceState = pgEnum('recording_persistence_state', [
+  'uploading',
+  'prepared',
+  'durable',
+]);
+
 export const journalDateAssignment = pgEnum('journal_date_assignment', [
   'default',
   'user_override',
@@ -374,6 +380,184 @@ export const contributionRevisions = journalSchema.table(
   ],
 );
 
+export const recordings = journalSchema.table(
+  'recording',
+  {
+    id: uuid('id').primaryKey(),
+    contributionId: uuid('contribution_id')
+      .notNull()
+      .references(() => contributions.id, { onDelete: 'restrict' }),
+    mimeType: text('mime_type').notNull(),
+    codec: text('codec'),
+    durationMilliseconds: bigint('duration_milliseconds', { mode: 'bigint' }),
+    finalByteSize: bigint('final_byte_size', { mode: 'bigint' }),
+    finalSha256: text('final_sha256'),
+    finalBlobKey: text('final_blob_key'),
+    persistenceState: recordingPersistenceState('persistence_state')
+      .notNull()
+      .default('uploading'),
+    audioDeletedAt: timestamp('audio_deleted_at', { withTimezone: true }),
+    audioDeletedBy: uuid('audio_deleted_by').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    audioRestoredAt: timestamp('audio_restored_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('recording_contribution_id_unique').on(table.contributionId),
+    uniqueIndex('recording_final_blob_key_unique')
+      .on(table.finalBlobKey)
+      .where(sql`${table.finalBlobKey} is not null`),
+    check(
+      'recording_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('recording_mime_type_not_blank', sql`length(${table.mimeType}) > 0`),
+    check(
+      'recording_duration_nonnegative',
+      sql`${table.durationMilliseconds} is null or ${table.durationMilliseconds} >= 0`,
+    ),
+    check(
+      'recording_final_size_nonnegative',
+      sql`${table.finalByteSize} is null or ${table.finalByteSize} >= 0`,
+    ),
+    check(
+      'recording_final_sha256_valid',
+      sql`${table.finalSha256} is null or ${table.finalSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'recording_final_fields_consistent',
+      sql`(${table.persistenceState} = 'uploading' and ${table.finalByteSize} is null and ${table.finalSha256} is null and ${table.finalBlobKey} is null) or (${table.persistenceState} in ('prepared', 'durable') and ${table.finalByteSize} is not null and ${table.finalSha256} is not null and ${table.finalBlobKey} is not null)`,
+    ),
+    check(
+      'recording_audio_deletion_consistent',
+      sql`(${table.audioDeletedAt} is null and ${table.audioDeletedBy} is null) or (${table.audioDeletedAt} is not null and ${table.audioDeletedBy} is not null)`,
+    ),
+  ],
+);
+
+export const recordingUploads = journalSchema.table(
+  'recording_upload',
+  {
+    id: uuid('id').primaryKey(),
+    recordingId: uuid('recording_id')
+      .notNull()
+      .references(() => recordings.id, { onDelete: 'restrict' }),
+    manifestVersion: integer('manifest_version'),
+    manifestChunkCount: bigint('manifest_chunk_count', { mode: 'bigint' }),
+    manifestTotalBytes: bigint('manifest_total_bytes', { mode: 'bigint' }),
+    manifestSha256: text('manifest_sha256'),
+    manifestFingerprint: text('manifest_fingerprint'),
+    lastActivityAt: timestamp('last_activity_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('recording_upload_recording_id_unique').on(table.recordingId),
+    check(
+      'recording_upload_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'recording_upload_manifest_counts_nonnegative',
+      sql`(${table.manifestChunkCount} is null or ${table.manifestChunkCount} >= 0) and (${table.manifestTotalBytes} is null or ${table.manifestTotalBytes} >= 0)`,
+    ),
+    check(
+      'recording_upload_manifest_hashes_valid',
+      sql`(${table.manifestSha256} is null or ${table.manifestSha256} ~ '^[0-9a-f]{64}$') and (${table.manifestFingerprint} is null or ${table.manifestFingerprint} ~ '^[0-9a-f]{64}$')`,
+    ),
+    check(
+      'recording_upload_manifest_fields_consistent',
+      sql`(${table.manifestVersion} is null and ${table.manifestChunkCount} is null and ${table.manifestTotalBytes} is null and ${table.manifestSha256} is null and ${table.manifestFingerprint} is null) or (${table.manifestVersion} is not null and ${table.manifestChunkCount} is not null and ${table.manifestTotalBytes} is not null and ${table.manifestSha256} is not null and ${table.manifestFingerprint} is not null)`,
+    ),
+  ],
+);
+
+export const recordingChunks = journalSchema.table(
+  'recording_chunk',
+  {
+    uploadId: uuid('upload_id')
+      .notNull()
+      .references(() => recordingUploads.id, { onDelete: 'restrict' }),
+    chunkIndex: integer('chunk_index').notNull(),
+    byteSize: bigint('byte_size', { mode: 'bigint' }).notNull(),
+    sha256: text('sha256').notNull(),
+    stagingBlobKey: text('staging_blob_key').notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('recording_chunk_upload_index_unique').on(
+      table.uploadId,
+      table.chunkIndex,
+    ),
+    uniqueIndex('recording_chunk_staging_blob_key_unique').on(
+      table.stagingBlobKey,
+    ),
+    index('recording_chunk_manifest_order_idx').on(
+      table.uploadId,
+      table.chunkIndex,
+    ),
+    check('recording_chunk_index_nonnegative', sql`${table.chunkIndex} >= 0`),
+    check(
+      'recording_chunk_byte_size_bounded',
+      sql`${table.byteSize} >= 0 and ${table.byteSize} <= 8388608`,
+    ),
+    check(
+      'recording_chunk_sha256_valid',
+      sql`${table.sha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'recording_chunk_staging_key_not_blank',
+      sql`length(${table.stagingBlobKey}) > 0`,
+    ),
+  ],
+);
+
+export const recordingApiIdempotency = journalSchema.table(
+  'recording_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    recordingId: uuid('recording_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('recording_api_idempotency_owner_operation_key_unique').on(
+      table.ownerId,
+      table.operation,
+      table.idempotencyKey,
+    ),
+    check(
+      'recording_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'recording_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'recording_api_idempotency_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const processorRequirementMode = pgEnum('processor_requirement_mode', [
   'optional',
   'required',
@@ -594,6 +778,10 @@ export const databaseSchema = {
   processorInstallations,
   queueConfigurations,
   recoveryCodes,
+  recordingApiIdempotency,
+  recordingChunks,
+  recordings,
+  recordingUploads,
   schedules,
   sessions,
   users,

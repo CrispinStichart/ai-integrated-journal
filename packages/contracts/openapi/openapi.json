@@ -695,6 +695,362 @@
         }
       }
     },
+    "/api/v1/recordings": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRecordingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recording upload created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Recording identity conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Idempotency key required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/chunks/{index}": {
+      "put": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Content-SHA256",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "index",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Chunk accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingChunkUploadResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Chunk checksum or identity conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Chunk exceeds the transport bound",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/upload": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Accepted indexes and recording state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingUploadStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recording not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/finalize": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinalizeRecordingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recording durably finalized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Manifest conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "507": {
+            "description": "Server storage exhausted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/retry": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prepared finalization retried",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Recording is not prepared",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/audio": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Range",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^bytes="
+            }
+          }
+        ],
+        "responses": {
+          "206": {
+            "description": "Bounded audio byte range",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                }
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "audio/*": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Audio recoverably deleted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Range not satisfiable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audio recoverably deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioDeletionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recordings/{id}/audio/restore": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audio restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingMutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "responses": {
@@ -972,6 +1328,119 @@
         "required": [
           "bootstrapRequired",
           "authenticated"
+        ],
+        "additionalProperties": false
+      },
+      "AudioDeletionResponse": {
+        "type": "object",
+        "properties": {
+          "recording": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "contributionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "uploadId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "mimeType": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^audio\\/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;[^\\r\\n]+)?$"
+              },
+              "codec": {
+                "type": "string",
+                "minLength": 1
+              },
+              "persistenceState": {
+                "type": "string",
+                "enum": [
+                  "uploading",
+                  "prepared",
+                  "durable"
+                ]
+              },
+              "durationMilliseconds": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "byteSize": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "audioDeletedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "id",
+              "contributionId",
+              "uploadId",
+              "mimeType",
+              "persistenceState",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "warning": {
+            "type": "string",
+            "const": "Audio verification and timestamp playback are unavailable while audio is deleted."
+          },
+          "idempotency": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 255,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "description": "Opaque key scoped to the authenticated actor and operation."
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "replayed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "recording",
+          "warning",
+          "idempotency"
         ],
         "additionalProperties": false
       },
@@ -1496,6 +1965,85 @@
           "proposedJournalDayId",
           "sourceType",
           "text",
+          "capturedAt",
+          "capturedTimezone",
+          "journalTimezone",
+          "journalDate",
+          "journalDateAssignment"
+        ],
+        "additionalProperties": false
+      },
+      "CreateRecordingRequest": {
+        "type": "object",
+        "properties": {
+          "recordingId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "uploadId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "proposedJournalDayId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "mimeType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^audio\\/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;[^\\r\\n]+)?$"
+          },
+          "codec": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          },
+          "capturedTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "journalTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "journalDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Canonical YYYY-MM-DD journal date."
+          },
+          "journalDateAssignment": {
+            "type": "string",
+            "enum": [
+              "default",
+              "user_override",
+              "migration"
+            ]
+          }
+        },
+        "required": [
+          "recordingId",
+          "contributionId",
+          "uploadId",
+          "proposedJournalDayId",
+          "mimeType",
           "capturedAt",
           "capturedTimezone",
           "journalTimezone",
@@ -2086,6 +2634,43 @@
         ],
         "additionalProperties": false
       },
+      "FinalizeRecordingRequest": {
+        "type": "object",
+        "properties": {
+          "manifestVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "chunkCount": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "totalBytes": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "manifestSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "finalSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "durationMilliseconds": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          }
+        },
+        "required": [
+          "manifestVersion",
+          "chunkCount",
+          "totalBytes",
+          "manifestSha256",
+          "finalSha256"
+        ],
+        "additionalProperties": false
+      },
       "PasskeyOptionsResponse": {
         "type": "object",
         "properties": {
@@ -2343,6 +2928,330 @@
         },
         "required": [
           "status"
+        ],
+        "additionalProperties": false
+      },
+      "Recording": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "uploadId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "mimeType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^audio\\/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;[^\\r\\n]+)?$"
+          },
+          "codec": {
+            "type": "string",
+            "minLength": 1
+          },
+          "persistenceState": {
+            "type": "string",
+            "enum": [
+              "uploading",
+              "prepared",
+              "durable"
+            ]
+          },
+          "durationMilliseconds": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "byteSize": {
+            "type": "string",
+            "pattern": "^(?:0|[1-9][0-9]*)$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "audioDeletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          }
+        },
+        "required": [
+          "id",
+          "contributionId",
+          "uploadId",
+          "mimeType",
+          "persistenceState",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RecordingChunkUploadResponse": {
+        "type": "object",
+        "properties": {
+          "chunk": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "byteSize": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "index",
+              "byteSize",
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chunk",
+          "replayed"
+        ],
+        "additionalProperties": false
+      },
+      "RecordingMutationResponse": {
+        "type": "object",
+        "properties": {
+          "recording": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "contributionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "uploadId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "mimeType": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^audio\\/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;[^\\r\\n]+)?$"
+              },
+              "codec": {
+                "type": "string",
+                "minLength": 1
+              },
+              "persistenceState": {
+                "type": "string",
+                "enum": [
+                  "uploading",
+                  "prepared",
+                  "durable"
+                ]
+              },
+              "durationMilliseconds": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "byteSize": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "audioDeletedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "id",
+              "contributionId",
+              "uploadId",
+              "mimeType",
+              "persistenceState",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "idempotency": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 255,
+                "pattern": "^[\\x21-\\x7e]+$",
+                "description": "Opaque key scoped to the authenticated actor and operation."
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "replayed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "recording",
+          "idempotency"
+        ],
+        "additionalProperties": false
+      },
+      "RecordingUploadStatus": {
+        "type": "object",
+        "properties": {
+          "recording": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "contributionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "uploadId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "mimeType": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^audio\\/[A-Za-z0-9!#$&^_.+-]+(?:\\s*;[^\\r\\n]+)?$"
+              },
+              "codec": {
+                "type": "string",
+                "minLength": 1
+              },
+              "persistenceState": {
+                "type": "string",
+                "enum": [
+                  "uploading",
+                  "prepared",
+                  "durable"
+                ]
+              },
+              "durationMilliseconds": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "byteSize": {
+                "type": "string",
+                "pattern": "^(?:0|[1-9][0-9]*)$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "audioDeletedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "id",
+              "contributionId",
+              "uploadId",
+              "mimeType",
+              "persistenceState",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "acceptedIndexes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "nextAfter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "recording",
+          "acceptedIndexes"
         ],
         "additionalProperties": false
       },
