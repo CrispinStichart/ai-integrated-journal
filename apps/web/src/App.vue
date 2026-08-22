@@ -8,6 +8,7 @@ import AppStatus from './components/AppStatus.vue';
 import PwaUpdateDialog from './components/PwaUpdateDialog.vue';
 import { useAuthentication } from './auth';
 import { useOfflineJournal } from './journal/offline';
+import { useBrowserCaptureController } from './recording/capture-controller';
 import { useUiStore } from './stores/ui';
 import AuthenticationView from './views/AuthenticationView.vue';
 
@@ -35,6 +36,7 @@ const online = useOnline();
 const visibility = useDocumentVisibility();
 const auth = useAuthentication();
 const offline = useOfflineJournal();
+const capture = useBrowserCaptureController();
 
 async function resumeOfflineWork(): Promise<void> {
   const ownerId = auth.status.value?.ownerId;
@@ -60,7 +62,10 @@ watch(online, (available, wasAvailable) => {
 });
 
 watch(visibility, (value) => {
-  if (value === 'visible') void resumeOfflineWork();
+  if (value === 'visible') {
+    void resumeOfflineWork();
+    void capture.checkStorage();
+  }
 });
 
 async function registerPasskey(): Promise<void> {

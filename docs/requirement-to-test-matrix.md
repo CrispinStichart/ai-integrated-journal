@@ -83,11 +83,11 @@ Status values are:
 | Requirement(s) | Planned proof | Owning task(s) | First complete milestone | Status |
 | --- | --- | --- | --- | --- |
 | CAP-001 | `AUDIO`, `RELEASE-E2E`: multiple typed/recorded contributions coexist independently on one day. | 22–25 | Audio journal | Planned |
-| CAP-002–003 | `AUDIO`: IndexedDB remains recovery authority across interruption, suspension, closure, and reconnect until durable confirmation. | 23–25 | Audio journal | Planned |
+| CAP-002–003 | `apps/web/test/capture-controller.test.ts`, `apps/web/test/indexed-db.test.ts`, and `apps/web/test/offline-journal.test.ts` cover encrypted immediate local persistence, atomic ordered checkpoints, and preserved prefixes after quota failure; reload/reconnect synchronization remains in `AUDIO`. | 23–25 | Audio journal | Partial |
 | CAP-004 | `apps/api/test/recording-service.integration.ts` and `apps/api/test/recording-routes.test.ts` cover duplicate create/chunk/finalize retries, database uniqueness, and conflicting bytes/manifests; synchronization E2E remains in `AUDIO`. | 22, 24, 25 | Audio journal | Partial |
-| CAP-005 | `AUDIO`, `PORTABILITY`, `MANUAL-FIREFOX`: timesliced long capture has no aggregate cap; bounded-memory upload/finalization/playback/export/backup preserves earlier chunks under interruption and quota/disk pressure. | 21–25, 48, 49, 52, 54 | Audio journal; portability repeated later | Planned |
-| CAP-006 | `AUDIO`: component/E2E tests distinguish each local, upload, durable, pending, and failure state accessibly. | 23–25 | Audio journal | Planned |
-| CAP-007 | `AUDIO`: alternate-day assignment preserves actual capture time and timezone. | 22–25 | Audio journal | Planned |
+| CAP-005 | `apps/web/test/capture-controller.test.ts` covers 5-second timeslices, bounded 8 MiB units, proactive quota checks, and preserved checkpoints; upload/finalization/playback/export/backup and physical Firefox checks remain in `AUDIO`, `PORTABILITY`, and `MANUAL-FIREFOX`. | 21–25, 48, 49, 52, 54 | Audio journal; portability repeated later | Partial |
+| CAP-006 | `apps/web/test/capture-controller.test.ts` covers controller recording, locally saved, low-storage, exhausted, and failure states; accessible upload/durable/processing UI remains in `AUDIO`. | 23–25 | Audio journal | Partial |
+| CAP-007 | `apps/web/test/capture-controller.test.ts` covers preserving capture time/timezone separately from Journal Day assignment; alternate-day UI remains in `AUDIO`. | 22–25 | Audio journal | Partial |
 | STT-001–002 | `TRANSCRIPT`, `WORKER`: durable audio schedules async STT; failure preserves audio and safe retry. | 27, 30 | Transcript journal | Planned |
 | STT-003–005 | `TRANSCRIPT`, `PROCESSOR`: approved global context is versioned/snapshotted; future scope is not required for baseline. | 26, 27, 37 | AI journal | Planned |
 | MEM-001–002 | `PROCESSOR`, `RELEASE-E2E`: occurrence correction remains local unless remember is explicitly chosen. | 37 | AI journal | Planned |

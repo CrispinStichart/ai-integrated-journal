@@ -1,10 +1,12 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const METADATA_STORE = 'shell-metadata';
 const OFFLINE_CONFIG_STORE = 'offline-config';
 const OUTBOX_STORE = 'text-outbox';
 const READ_CACHE_STORE = 'journal-read-cache';
+const RECORDING_STORE = 'recordings';
+const RECORDING_CHUNK_STORE = 'recording-chunks';
 
 interface ShellMetadataRecord {
   key: string;
@@ -44,6 +46,45 @@ export interface EncryptedJournalCacheRecord {
   ciphertext: string;
 }
 
+export type LocalRecordingState =
+  'recording' | 'saved_locally' | 'browser_storage_exhausted' | 'failed';
+
+export interface LocalRecordingRecord {
+  recordingId: string;
+  contributionId: string;
+  uploadId: string;
+  proposedJournalDayId: string;
+  ownerId: string;
+  schemaVersion: 1;
+  mimeType: string;
+  codec?: string;
+  capturedAt: string;
+  capturedTimezone: string;
+  journalTimezone: string;
+  journalDate: string;
+  journalDateAssignment: 'default' | 'user_override' | 'migration';
+  state: LocalRecordingState;
+  nextChunkIndex: number;
+  totalBytes: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSavedAt?: string;
+  errorCode?: 'browser_storage_exhausted' | 'capture_failed';
+}
+
+export interface EncryptedRecordingChunkRecord {
+  recordingId: string;
+  index: number;
+  ownerId: string;
+  schemaVersion: 1;
+  byteSize: number;
+  sha256: string;
+  mimeType: string;
+  capturedAt: string;
+  nonce: string;
+  ciphertext: ArrayBuffer;
+}
+
 interface JournalBrowserSchema extends DBSchema {
   [METADATA_STORE]: { key: string; value: ShellMetadataRecord };
   [OFFLINE_CONFIG_STORE]: { key: string; value: OfflineConfigRecord };
@@ -60,6 +101,26 @@ interface JournalBrowserSchema extends DBSchema {
       'by-owner-refresh': [string, string];
     };
   };
+  [RECORDING_STORE]: {
+    key: string;
+    value: LocalRecordingRecord;
+    indexes: { 'by-owner-created': [string, string] };
+  };
+  [RECORDING_CHUNK_STORE]: {
+    key: [string, number];
+    value: EncryptedRecordingChunkRecord;
+    indexes: { 'by-owner-recording': [string, string, number] };
+  };
+}
+
+function equalArrayBuffers(left: ArrayBuffer, right: ArrayBuffer): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  const leftBytes = new Uint8Array(left);
+  const rightBytes = new Uint8Array(right);
+  for (let index = 0; index < leftBytes.length; index += 1) {
+    if (leftBytes[index] !== rightBytes[index]) return false;
+  }
+  return true;
 }
 
 export interface BrowserMetadataStore {
@@ -176,6 +237,93 @@ export class JournalIndexedDb implements BrowserMetadataStore {
     await transaction.done;
   }
 
+  async putRecording(record: LocalRecordingRecord): Promise<void> {
+    await (await this.#connect()).put(RECORDING_STORE, record);
+  }
+
+  async getRecording(
+    recordingId: string,
+  ): Promise<LocalRecordingRecord | undefined> {
+    return (await this.#connect()).get(RECORDING_STORE, recordingId);
+  }
+
+  async listRecordings(ownerId: string): Promise<LocalRecordingRecord[]> {
+    return (await this.#connect()).getAllFromIndex(
+      RECORDING_STORE,
+      'by-owner-created',
+      IDBKeyRange.bound([ownerId, ''], [ownerId, '\uffff']),
+    );
+  }
+
+  async commitRecordingChunk(
+    recordingId: string,
+    chunk: EncryptedRecordingChunkRecord,
+    committedAt: string,
+  ): Promise<LocalRecordingRecord> {
+    const database = await this.#connect();
+    const transaction = database.transaction(
+      [RECORDING_STORE, RECORDING_CHUNK_STORE],
+      'readwrite',
+    );
+    const recordingStore = transaction.objectStore(RECORDING_STORE);
+    const recording = await recordingStore.get(recordingId);
+    if (recording === undefined) {
+      throw new Error('The local recording manifest is missing.');
+    }
+    if (chunk.recordingId !== recordingId) {
+      throw new Error('The recording chunk identity does not match.');
+    }
+    if (chunk.ownerId !== recording.ownerId) {
+      throw new Error('The recording chunk owner does not match.');
+    }
+    if (chunk.index !== recording.nextChunkIndex) {
+      throw new Error('Recording chunks must be committed in order.');
+    }
+    const updated: LocalRecordingRecord = {
+      ...recording,
+      nextChunkIndex: recording.nextChunkIndex + 1,
+      totalBytes: (
+        BigInt(recording.totalBytes) + BigInt(chunk.byteSize)
+      ).toString(),
+      updatedAt: committedAt,
+      lastSavedAt: committedAt,
+    };
+    await transaction.objectStore(RECORDING_CHUNK_STORE).add(chunk);
+    await recordingStore.put(updated);
+    await transaction.done;
+
+    const persisted = await database.get(RECORDING_CHUNK_STORE, [
+      recordingId,
+      chunk.index,
+    ]);
+    if (
+      persisted === undefined ||
+      persisted.byteSize !== chunk.byteSize ||
+      persisted.sha256 !== chunk.sha256 ||
+      persisted.nonce !== chunk.nonce ||
+      !equalArrayBuffers(persisted.ciphertext, chunk.ciphertext)
+    ) {
+      throw new Error(
+        'The recording chunk failed local read-back verification.',
+      );
+    }
+    return updated;
+  }
+
+  async listRecordingChunks(
+    ownerId: string,
+    recordingId: string,
+  ): Promise<EncryptedRecordingChunkRecord[]> {
+    return (await this.#connect()).getAllFromIndex(
+      RECORDING_CHUNK_STORE,
+      'by-owner-recording',
+      IDBKeyRange.bound(
+        [ownerId, recordingId, 0],
+        [ownerId, recordingId, Number.MAX_SAFE_INTEGER],
+      ),
+    );
+  }
+
   #connect(): Promise<IDBPDatabase<JournalBrowserSchema>> {
     this.#connection ??= openDB<JournalBrowserSchema>(
       this.#databaseName,
@@ -200,6 +348,22 @@ export class JournalIndexedDb implements BrowserMetadataStore {
             });
             store.createIndex('by-owner-access', ['ownerId', 'lastAccessedAt']);
             store.createIndex('by-owner-refresh', ['ownerId', 'refreshedAt']);
+          }
+          if (!database.objectStoreNames.contains(RECORDING_STORE)) {
+            const store = database.createObjectStore(RECORDING_STORE, {
+              keyPath: 'recordingId',
+            });
+            store.createIndex('by-owner-created', ['ownerId', 'createdAt']);
+          }
+          if (!database.objectStoreNames.contains(RECORDING_CHUNK_STORE)) {
+            const store = database.createObjectStore(RECORDING_CHUNK_STORE, {
+              keyPath: ['recordingId', 'index'],
+            });
+            store.createIndex('by-owner-recording', [
+              'ownerId',
+              'recordingId',
+              'index',
+            ]);
           }
         },
       },

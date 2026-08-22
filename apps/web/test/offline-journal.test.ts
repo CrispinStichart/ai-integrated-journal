@@ -117,6 +117,33 @@ describe('offline text outbox and cached reads (SEC-001–SEC-003, AC-003)', () 
     ]);
   });
 
+  it('[CAP-002][SEC-001] encrypts recording units with the local unlock key', async () => {
+    const storage = createStore();
+    const journal = new OfflineJournal(storage, 1);
+    await journal.initialize(OWNER_ID);
+    await journal.setup('local-only secret');
+
+    const protectedChunk = await journal.protectRecordingChunk(
+      CONTRIBUTION_ID,
+      0,
+      new Blob(['private spoken journal'], { type: 'audio/webm' }),
+    );
+
+    expect(protectedChunk.byteSize).toBe(22);
+    expect(protectedChunk.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(new TextDecoder().decode(protectedChunk.ciphertext)).not.toContain(
+      'private spoken journal',
+    );
+    journal.lock();
+    await expect(
+      journal.protectRecordingChunk(
+        CONTRIBUTION_ID,
+        1,
+        new Blob(['more private audio']),
+      ),
+    ).rejects.toThrow('Unlock offline storage');
+  });
+
   it('preserves strict enqueue order across a browser-process restart', async () => {
     const storage = createStore();
     vi.spyOn(Date, 'now').mockReturnValue(1_000);

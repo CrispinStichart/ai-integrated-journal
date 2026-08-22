@@ -152,6 +152,13 @@ function quotaExceeded(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'QuotaExceededError';
 }
 
+export interface ProtectedRecordingChunk {
+  readonly byteSize: number;
+  readonly sha256: string;
+  readonly nonce: string;
+  readonly ciphertext: ArrayBuffer;
+}
+
 export class OfflineJournal {
   readonly #storage: JournalIndexedDb;
   readonly #iterations: number;
@@ -269,6 +276,41 @@ export class OfflineJournal {
     this.lock();
     this.cacheBytes.value = 0;
     this.cacheDays.value = 0;
+  }
+
+  async protectRecordingChunk(
+    recordingId: string,
+    index: number,
+    chunk: Blob,
+  ): Promise<ProtectedRecordingChunk> {
+    const ownerId = this.#requireOwner();
+    const key = this.#requireKey();
+    const plaintext = await chunk.arrayBuffer();
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const [digest, ciphertext] = await Promise.all([
+      crypto.subtle.digest('SHA-256', plaintext),
+      crypto.subtle.encrypt(
+        {
+          name: 'AES-GCM',
+          iv: nonce,
+          additionalData: aad(
+            ownerId,
+            'recording-chunk',
+            `${recordingId}:${index}`,
+          ),
+        },
+        key,
+        plaintext,
+      ),
+    ]);
+    return {
+      byteSize: plaintext.byteLength,
+      sha256: [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join(''),
+      nonce: bytesToBase64(nonce),
+      ciphertext,
+    };
   }
 
   async enqueueCreate(
@@ -580,7 +622,7 @@ export class OfflineJournal {
   }
 }
 
-const offlineJournal = new OfflineJournal();
+export const offlineJournal = new OfflineJournal();
 
 export function useOfflineJournal() {
   return {
