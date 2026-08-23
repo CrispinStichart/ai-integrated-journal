@@ -8,6 +8,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import AudioContributionCard from '../components/AudioContributionCard.vue';
+import ArtifactReviewPanel from '../components/ArtifactReviewPanel.vue';
 import ContributionCard from '../components/ContributionCard.vue';
 import { useAuthentication } from '../auth';
 import {
@@ -883,5 +884,9 @@ await loadPending();
         <hr v-if="index < timelineItems.length - 1" class="bg-base-300" />
       </li>
     </ol>
+    <ArtifactReviewPanel
+      v-if="dayQuery.data.value?.id"
+      :journal-day-id="dayQuery.data.value.id"
+    />
   </section>
 </template>

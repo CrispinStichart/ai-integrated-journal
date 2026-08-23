@@ -6,6 +6,7 @@ import type { JournalService } from './journal-service.js';
 import type { RecordingService } from './recording-service.js';
 import type { ProcessorService } from './processor-service.js';
 import type { TranscriptService } from './transcript-service.js';
+import type { ArtifactService } from './artifact-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -39,6 +40,7 @@ export interface EventFeed {
 }
 
 export interface ApiDependencies {
+  readonly artifactService?: ArtifactService;
   readonly authenticator: RequestAuthenticator;
   readonly authenticationService?: AuthenticationService;
   readonly eventFeed: EventFeed;

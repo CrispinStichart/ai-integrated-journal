@@ -119,7 +119,7 @@ Status values are:
 | SLEEP-001–004 | `BUILTINS`: wake-date default, disclosed correction, distinct naps/periods, and unknown optional fields. | 40 | AI journal | Planned |
 | FOOD-001–002 | `BUILTINS`: consumption and ownership evidence exclude buying/planning/others eating. | 38 | AI journal | Planned |
 | FOOD-003–004 | `BUILTINS`: optional food fields remain semantic values and qualitative quantity is not fabricated. | 38 | AI journal | Planned |
-| FOOD-005–007 | `BUILTINS`, `PROCESSOR`: day reconciliation updates logical events and supports manual split/merge/correct/delete/confirm. | 34, 35, 38 | AI journal | Planned |
+| FOOD-005–007 | Reconciliation tests cover generic day updates; artifact domain/database/API/UI tests cover atomic manual split/merge/correct/delete/confirm behavior. Food-specific extraction fixtures remain in Task 38. | 34, 35, 38 | AI journal | Partial |
 | MOOD-001–003 | `BUILTINS`: contextual observations remain separate from inspectable aggregate interpretation. | 39 | AI journal | Planned |
 | MOOD-004 | `BUILTINS`: no mention produces insufficient information, never neutral. | 39, 43 | Complete local release | Planned |
 | MOOD-005 | `BUILTINS`, `PROCESSOR`: manual observation/rating values survive reprocessing. | 35, 39 | AI journal | Planned |
@@ -135,8 +135,8 @@ Status values are:
 | --- | --- | --- | --- | --- |
 | EDIT-001–002 | Transcript and processor worker integration plus provenance property tests cover corrected/source revision replacement, exact recorded-edge traversal through observations/interpretations, sibling/ancestor exclusion, stale evidence, canceled obsolete work, and identifier-only replacement jobs without retranscription. | 29, 33 | AI journal | Verified |
 | EDIT-003–004 | `PROCESSOR`: every reprocessing scope has impact preview and explicit confirmation for large runs. | 36 | AI journal | Planned |
-| EDIT-005 | `packages/database/test/processor-reconciliation.integration.ts` verifies stable artifact identity, append-only payload versions, explicit supersession links/lifecycle, and retained removed history. Manual editing and broader reprocessing audit remain Tasks 35–36. | 33–36 | AI journal | Partial |
-| EDIT-006–007 | `PROCESSOR`: manual values win and conflicts create reviewable candidates. | 35, 36 | AI journal | Planned |
+| EDIT-005 | Processor reconciliation and artifact-editing integration tests verify stable identity, append-only generated/manual revisions, explicit supersession, tombstones, split/merge edit groups, and retained history. Broader reprocessing audit remains Task 36. | 33–36 | AI journal | Partial |
+| EDIT-006–007 | Domain, database/API integration, API contract/client, and accessible component tests prove active manual fields and tombstones survive reprocessing while disagreements become separately adoptable/dismissible candidates. | 35, 36 | AI journal | Verified |
 | EDIT-008 | `PROCESSOR`, `PORTABILITY`: reports expose version basis or explicitly normalized data. | 31, 36, 48 | Complete local release | Planned |
 | STATE-001 | `apps/worker/test/processor-runtime.integration.ts` verifies queued/running/succeeded processor lifecycle persistence; visible API/UI state remains in later processing-activity work. | 13, 27, 32, 43 | Complete local release | Partial |
 | STATE-002–003 | `WORKER`, `RELEASE-E2E`: isolated failures preserve other stages and expose affected-stage retry. | 13, 27, 32, 52 | AI journal | Planned |
@@ -185,7 +185,7 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-024 | `BUILTINS`: tentative idea and firm dated obligation retain different classifications. | 41 | AI journal | Planned |
 | AC-030 | `PROCESSOR`, `RELEASE-E2E`: transcript edit creates no global rule without explicit remember approval. | 37, 51 | AI journal | Planned |
 | AC-031 | `PROCESSOR`, `RELEASE-E2E`: list/edit/disable/delete every active persistent memory. | 37, 51 | AI journal | Planned |
-| AC-032 | `PROCESSOR`: reprocess each named manual field/bullet and assert effective manual values are unchanged. | 35–37, 51 | AI journal | Planned |
+| AC-032 | Generic artifact integration/UI tests reprocess a manually corrected structured field and assert the manual effective value survives while the generated disagreement remains reviewable. Named mood/food/task/summary fixtures remain in Tasks 38–42 and 51. | 35–37, 51 | AI journal | Partial |
 | AC-040 | `apps/web/test/recording-sync.test.ts`, `apps/web/test/journal-components.test.ts`, and `apps/api/test/journal-routes.test.ts` cover the 00:30 prior-day reassignment UI/protocol while retaining instant and timezone; `AUDIO`/`BUILTINS` still verify the full workflow. | 24, 25, 40 | AI journal | Partial |
 | AC-041 | `BUILTINS`: tomorrow retains phrase, contextual basis, timezone, and resolved date. | 40 | AI journal | Planned |
 | AC-042 | `NUDGE`, `RELEASE-E2E`: three missing requirements form one digest and day dismissal prevents repeat default prompts. | 43, 51 | Complete local release | Planned |

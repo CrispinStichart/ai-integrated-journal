@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 import {
+  artifactEditRequestSchema,
+  artifactListResponseSchema,
+  artifactMergeRequestSchema,
+  artifactMutationResponseSchema,
+  artifactResourceSchema,
+} from './artifact.js';
+import {
   authenticatedResponseSchema,
   authStatusResponseSchema,
   bootstrapRequestSchema,
@@ -653,6 +660,51 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/journal-days/{id}/artifacts': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Effective generated and manual artifact views',
+              'ArtifactListResponse',
+            ),
+            '404': problemResponse('Journal Day not found'),
+          },
+        },
+      },
+      '/api/v1/artifacts/{id}/edits': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('ArtifactEditRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Immutable manual artifact revision',
+              'ArtifactMutationResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+            '404': problemResponse('Artifact not found'),
+            '409': problemResponse('Artifact or candidate conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/artifacts/merge': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('ArtifactMergeRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Atomic manual merge result',
+              'ArtifactMutationResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+            '409': problemResponse('Artifact-set conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -743,6 +795,13 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
       },
       schemas: {
+        ArtifactEditRequest: componentSchema(artifactEditRequestSchema),
+        ArtifactListResponse: componentSchema(artifactListResponseSchema),
+        ArtifactMergeRequest: componentSchema(artifactMergeRequestSchema),
+        ArtifactMutationResponse: componentSchema(
+          artifactMutationResponseSchema,
+        ),
+        ArtifactResource: componentSchema(artifactResourceSchema),
         AuthenticatedResponse: componentSchema(authenticatedResponseSchema),
         AuthStatusResponse: componentSchema(authStatusResponseSchema),
         AudioDeletionResponse: componentSchema(audioDeletionResponseSchema),

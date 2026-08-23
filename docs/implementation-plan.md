@@ -332,7 +332,7 @@ Record exact artifact inputs, source revisions, processor versions, prompts, pro
 
 Implement create, update, supersede, remove/supersede, and unchanged outcomes. Add stable logical keys, serialization or locking for concurrent day reconciliation, and database-enforced idempotency.
 
-### 35. Manual overrides and artifact editing
+### 35. Manual overrides and artifact editing - FINISHED
 
 Add correction, split, merge, delete, confirmation, and manual override behavior. Generated results never overwrite active manual authority. Conflicts become reviewable generated candidates.
 

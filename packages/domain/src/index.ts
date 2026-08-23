@@ -2,6 +2,7 @@
 export const domainPackageName = '@journal/domain' as const;
 
 export * from './audit.js';
+export * from './artifact-editing.js';
 export * from './authority.js';
 export * from './deletion.js';
 export * from './evidence.js';

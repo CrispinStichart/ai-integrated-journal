@@ -51,6 +51,10 @@ import {
   registerTranscriptRoutes,
   sendTranscriptError,
 } from './transcript-routes.js';
+import {
+  registerArtifactRoutes,
+  sendArtifactError,
+} from './artifact-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -460,6 +464,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
   registerJournalRoutes(app, dependencies);
   registerRecordingRoutes(app, dependencies);
   registerProcessorRoutes(app, dependencies);
+  registerArtifactRoutes(app, dependencies);
   registerTranscriptRoutes(app, dependencies);
 
   app.use((request, response) => {
@@ -498,6 +503,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       if (sendJournalError(error, request, response)) return;
       if (sendRecordingError(error, request, response)) return;
       if (sendProcessorError(error, request, response)) return;
+      if (sendArtifactError(error, request, response)) return;
       if (sendTranscriptError(error, request, response)) return;
       dependencies.logger.error(
         {

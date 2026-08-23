@@ -16,6 +16,7 @@ export {
 } from './environment.js';
 export { migrateDatabase, migrationsFolder } from './migrations.js';
 export {
+  artifactApiIdempotency,
   auditEvents,
   authChallenges,
   authenticators,
@@ -26,6 +27,8 @@ export {
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,
+  processorArtifactCandidates,
+  processorArtifactManualRevisions,
   processorArtifactVersions,
   recoveryCodes,
   recordingApiIdempotency,

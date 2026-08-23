@@ -11,6 +11,8 @@ import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import type { JournalTransaction } from './client.js';
 import {
+  processorArtifactCandidates,
+  processorArtifactManualRevisions,
   processorArtifacts,
   processorArtifactVersions,
   processorReconciliationOutcomes,
@@ -208,6 +210,77 @@ export async function reconcileProcessorResult(input: {
     let priorVersionId = planned.current?.versionId;
     let versionId: string | undefined;
 
+    if (
+      outcome === 'unchanged' &&
+      planned.current?.authority === 'manual' &&
+      planned.candidate !== undefined &&
+      artifactId !== undefined
+    ) {
+      const [manual] = await input.transaction
+        .select()
+        .from(processorArtifactManualRevisions)
+        .where(
+          and(
+            eq(processorArtifactManualRevisions.artifactId, artifactId),
+            eq(processorArtifactManualRevisions.active, true),
+          ),
+        )
+        .limit(1);
+      if (
+        manual !== undefined &&
+        manual.payloadHash !== planned.candidate.payloadHash
+      ) {
+        await input.transaction
+          .update(processorArtifactCandidates)
+          .set({ status: 'superseded', resolvedAt: input.now })
+          .where(
+            and(
+              eq(processorArtifactCandidates.artifactId, artifactId),
+              eq(processorArtifactCandidates.status, 'reviewable'),
+            ),
+          );
+        await input.transaction.insert(processorArtifactCandidates).values({
+          id: input.createId(),
+          artifactId,
+          runId: input.run.id,
+          sourceResultId: input.result.id,
+          processorVersionId: input.run.processorVersionId,
+          conflictsWithManualRevisionId: manual.id,
+          payload: planned.candidate.payload,
+          payloadHash: planned.candidate.payloadHash,
+          status: 'reviewable',
+          createdAt: input.now,
+        });
+        await input.transaction
+          .update(processorArtifacts)
+          .set({
+            revision: sql`${processorArtifacts.revision} + 1`,
+            updatedAt: input.now,
+          })
+          .where(eq(processorArtifacts.id, artifactId));
+      } else if (manual !== undefined) {
+        const resolved = await input.transaction
+          .update(processorArtifactCandidates)
+          .set({ status: 'superseded', resolvedAt: input.now })
+          .where(
+            and(
+              eq(processorArtifactCandidates.artifactId, artifactId),
+              eq(processorArtifactCandidates.status, 'reviewable'),
+            ),
+          )
+          .returning({ id: processorArtifactCandidates.id });
+        if (resolved.length > 0) {
+          await input.transaction
+            .update(processorArtifacts)
+            .set({
+              revision: sql`${processorArtifacts.revision} + 1`,
+              updatedAt: input.now,
+            })
+            .where(eq(processorArtifacts.id, artifactId));
+        }
+      }
+    }
+
     if (outcome === 'create' && planned.candidate !== undefined) {
       const [inactive] = await input.transaction
         .select()
@@ -318,7 +391,11 @@ export async function reconcileProcessorResult(input: {
       }
       await input.transaction
         .update(processorArtifacts)
-        .set({ active: true, updatedAt: input.now })
+        .set({
+          active: true,
+          revision: sql`${processorArtifacts.revision} + 1`,
+          updatedAt: input.now,
+        })
         .where(eq(processorArtifacts.id, artifactId));
     } else if (
       outcome === 'remove_supersede' &&
@@ -331,7 +408,11 @@ export async function reconcileProcessorResult(input: {
         .where(eq(processorArtifactVersions.id, priorVersionId));
       await input.transaction
         .update(processorArtifacts)
-        .set({ active: false, updatedAt: input.now })
+        .set({
+          active: false,
+          revision: sql`${processorArtifacts.revision} + 1`,
+          updatedAt: input.now,
+        })
         .where(eq(processorArtifacts.id, artifactId));
     }
 

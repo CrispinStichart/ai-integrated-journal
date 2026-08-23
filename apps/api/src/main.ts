@@ -20,6 +20,7 @@ import { PostgresJournalService } from './journal-service.js';
 import { PostgresRecordingService } from './recording-service.js';
 import { PostgresProcessorService } from './processor-service.js';
 import { PostgresTranscriptService } from './transcript-service.js';
+import { PostgresArtifactService } from './artifact-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -90,6 +91,7 @@ const authenticationService = new AuthenticationService({
 });
 
 const app = createApiApp({
+  artifactService: new PostgresArtifactService(database.database),
   authenticator: authenticationService,
   authenticationService,
   eventFeed: createInMemoryEventFeed(),

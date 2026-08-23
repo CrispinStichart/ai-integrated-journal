@@ -1564,6 +1564,7 @@ export const processorArtifacts = journalSchema.table(
     authority: contributionAuthority('authority')
       .notNull()
       .default('generated'),
+    revision: integer('revision').notNull().default(0),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -1595,6 +1596,10 @@ export const processorArtifacts = journalSchema.table(
     check(
       'processor_artifact_kind_valid',
       sql`${table.kind} in ('source_transform', 'observation', 'interpretation', 'other')`,
+    ),
+    check(
+      'processor_artifact_revision_nonnegative',
+      sql`${table.revision} >= 0`,
     ),
   ],
 );
@@ -1678,6 +1683,180 @@ export const processorArtifactVersions = journalSchema.table(
     check(
       'processor_artifact_version_supersession_consistent',
       sql`(${table.lifecycle} = 'active' and ${table.supersededByVersionId} is null and ${table.supersededAt} is null) or (${table.lifecycle} = 'superseded' and ${table.supersededAt} is not null)`,
+    ),
+  ],
+);
+
+/** Immutable user-authored overlays and tombstones for a stable artifact. */
+export const processorArtifactManualRevisions = journalSchema.table(
+  'processor_artifact_manual_revision',
+  {
+    id: uuid('id').primaryKey(),
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => processorArtifacts.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    operation: text('operation').notNull(),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    overrides: jsonb('overrides')
+      .$type<readonly Readonly<{ path: string; value: unknown }>[]>()
+      .notNull()
+      .default([]),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    editGroupId: uuid('edit_group_id').notNull(),
+    reason: text('reason'),
+    active: boolean('active').notNull().default(true),
+    supersedesRevisionId: uuid('supersedes_revision_id'),
+    supersededByRevisionId: uuid('superseded_by_revision_id'),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    staleReason: text('stale_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('processor_artifact_manual_revision_number_unique').on(
+      table.artifactId,
+      table.revision,
+    ),
+    uniqueIndex('processor_artifact_manual_revision_one_active_unique')
+      .on(table.artifactId)
+      .where(sql`${table.active} = true`),
+    index('processor_artifact_manual_edit_group_idx').on(table.editGroupId),
+    foreignKey({
+      columns: [table.supersedesRevisionId],
+      foreignColumns: [table.id],
+      name: 'processor_artifact_manual_supersedes_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.supersededByRevisionId],
+      foreignColumns: [table.id],
+      name: 'processor_artifact_manual_superseded_by_fk',
+    }).onDelete('restrict'),
+    check(
+      'processor_artifact_manual_revision_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_artifact_manual_revision_number_positive',
+      sql`${table.revision} > 0`,
+    ),
+    check(
+      'processor_artifact_manual_operation_valid',
+      sql`${table.operation} in ('confirm', 'correct', 'delete', 'merge_result', 'merge_source', 'split_result', 'split_source')`,
+    ),
+    check(
+      'processor_artifact_manual_payload_hash_sha256',
+      sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_artifact_manual_lifecycle_consistent',
+      sql`(${table.active} = true and ${table.supersededByRevisionId} is null and ${table.supersededAt} is null) or (${table.active} = false and ${table.supersededAt} is not null)`,
+    ),
+    check(
+      'processor_artifact_manual_staleness_consistent',
+      sql`(${table.staleAt} is null and ${table.staleReason} is null) or (${table.staleAt} is not null and ${table.staleReason} is not null)`,
+    ),
+  ],
+);
+
+/** Generated disagreement retained for explicit review under manual authority. */
+export const processorArtifactCandidates = journalSchema.table(
+  'processor_artifact_candidate',
+  {
+    id: uuid('id').primaryKey(),
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => processorArtifacts.id, { onDelete: 'restrict' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    sourceResultId: uuid('source_result_id')
+      .notNull()
+      .references(() => processorResults.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    conflictsWithManualRevisionId: uuid('conflicts_with_manual_revision_id')
+      .notNull()
+      .references(() => processorArtifactManualRevisions.id, {
+        onDelete: 'restrict',
+      }),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    status: text('status').notNull().default('reviewable'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_artifact_candidate_run_artifact_unique').on(
+      table.runId,
+      table.artifactId,
+    ),
+    uniqueIndex('processor_artifact_candidate_one_reviewable_unique')
+      .on(table.artifactId)
+      .where(sql`${table.status} = 'reviewable'`),
+    check(
+      'processor_artifact_candidate_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_artifact_candidate_payload_hash_sha256',
+      sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_artifact_candidate_status_valid',
+      sql`${table.status} in ('reviewable', 'adopted', 'dismissed', 'superseded')`,
+    ),
+    check(
+      'processor_artifact_candidate_resolution_consistent',
+      sql`(${table.status} = 'reviewable' and ${table.resolvedAt} is null) or (${table.status} <> 'reviewable' and ${table.resolvedAt} is not null)`,
+    ),
+  ],
+);
+
+export const artifactApiIdempotency = journalSchema.table(
+  'artifact_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    response: jsonb('response')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'artifact_api_idempotency_pk',
+      columns: [table.ownerId, table.operation, table.idempotencyKey],
+    }),
+    check(
+      'artifact_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'artifact_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'artifact_api_idempotency_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 );
@@ -2038,6 +2217,7 @@ export const auditEvents = journalSchema.table(
 );
 
 export const databaseSchema = {
+  artifactApiIdempotency,
   authChallenges,
   authenticators,
   auditEvents,
@@ -2049,6 +2229,8 @@ export const databaseSchema = {
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,
+  processorArtifactCandidates,
+  processorArtifactManualRevisions,
   processorArtifactVersions,
   processorInstallations,
   processorReconciliationOutcomes,
