@@ -295,6 +295,102 @@ function moodAggregateArtifact(
   };
 }
 
+function sleepProvenance() {
+  return {
+    resultId: '019c5b90-0000-7000-8000-000000000050',
+    runId: '019c5b90-0000-7000-8000-000000000051',
+    processorKey: 'sleep',
+    processorName: 'Sleep',
+    processorVersionId: '019c5b90-0000-7000-8000-000000000023',
+    semanticVersion: '2.0.0',
+    instructionHash: '4'.repeat(64),
+    promptTemplateHash: '5'.repeat(64),
+    provider: { id: 'fixture', displayName: 'Fixture provider' },
+    model: { id: 'fixture-sleep-model' },
+    processingTimeMilliseconds: 14,
+  };
+}
+
+function sleepBasis(ruleId: string) {
+  return {
+    ruleId,
+    ruleVersion: '1',
+    capturedAt: '2026-08-24T05:30:00Z',
+    capturedTimezone: 'America/Chicago',
+    effectiveJournalDate: '2026-08-23',
+    journalTimezone: 'America/Chicago',
+    journalDateAssignment: 'user_override',
+  };
+}
+
+function sleepArtifact(ambiguous = false): ArtifactResource {
+  const base = foodArtifact();
+  return {
+    ...base,
+    id: ambiguous
+      ? '019c5b90-0000-7000-8000-000000000052'
+      : '019c5b90-0000-7000-8000-000000000053',
+    logicalKey: ambiguous
+      ? 'string:ambiguous-midnight-sleep'
+      : 'string:nightly-2026-08-23',
+    authority: ambiguous ? 'generated' : 'manual',
+    overridePaths: ambiguous ? [] : ['/associatedDate'],
+    payload: {
+      eventKey: ambiguous ? 'ambiguous-midnight-sleep' : 'nightly-2026-08-23',
+      periodType: ambiguous ? 'other_sleep_period' : 'nightly_sleep',
+      associatedDate: ambiguous
+        ? {
+            state: 'uncertain',
+            originalPhrase: 'around midnight',
+            candidateDates: ['2026-08-23', '2026-08-24'],
+            timezone: 'America/Chicago',
+            confidence: 0.5,
+            manualOverride: false,
+            resolutionBasis: sleepBasis('ambiguous-late-night-v1'),
+          }
+        : {
+            state: 'known',
+            originalPhrase: 'last night',
+            resolvedDate: '2026-08-22',
+            timezone: 'America/Chicago',
+            confidence: 1,
+            manualOverride: true,
+            resolutionBasis: sleepBasis('manual-correction-v1'),
+          },
+      ...(ambiguous
+        ? {}
+        : {
+            reportedQuality: 'badly',
+            reportedDuration: 'seven hours',
+            reportedStart: 'around 11 p.m.',
+            interruptions: 'woke twice',
+          }),
+      evidenceOrdinals: [0],
+    },
+    evidence: [
+      {
+        id: ambiguous
+          ? '019c5b90-0000-7000-8000-000000000054'
+          : '019c5b90-0000-7000-8000-000000000055',
+        ordinal: 0,
+        sourceLabel: 'typed_text:019c5b90-0000-7000-8000-000000000056',
+        sourceType: 'typed_text',
+        sourceRevisionId: '019c5b90-0000-7000-8000-000000000056',
+        normalization: 'NFC_LF_V1',
+        offsetUnit: 'utf16_code_unit',
+        startUtf16: 0,
+        endUtf16: ambiguous ? 32 : 25,
+        quote: ambiguous
+          ? 'I finally slept around midnight.'
+          : 'I slept badly last night.',
+        quoteHash: '6'.repeat(64),
+        resolutionStatus: 'resolved',
+      },
+    ],
+    provenance: sleepProvenance(),
+  };
+}
+
 function mountPanel(items: readonly ArtifactResource[] = [artifact()]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -399,6 +495,37 @@ describe('artifact review UI', () => {
       'This is unknown, not neutral, and is excluded from numerical averages.',
     );
     expect(wrapper.text()).not.toContain('Explicitly neutral');
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[SLEEP-001–003][TIME-005–007][PROV-001][AC-040] discloses wake-date semantics, manual correction, uncertainty, temporal provenance, and evidence accessibly', async () => {
+    const { wrapper, queryClient } = mountPanel([
+      sleepArtifact(),
+      sleepArtifact(true),
+    ]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Nightly sleep');
+    expect(wrapper.text()).toContain('Sleep observation');
+    expect(wrapper.text()).toContain('Date corrected manually');
+    expect(wrapper.text()).toContain('Associated wake date');
+    expect(wrapper.text()).toContain('2026-08-22');
+    expect(wrapper.text()).toContain('Original temporal phrase');
+    expect(wrapper.text()).toContain('last night');
+    expect(wrapper.text()).toContain(
+      'Nightly sleep is associated with the date you woke by default.',
+    );
+    expect(wrapper.text()).toContain('Reported quality');
+    expect(wrapper.text()).toContain('seven hours');
+    expect(wrapper.text()).toContain('woke twice');
+    expect(wrapper.text()).toContain('Ambiguous sleep date');
+    expect(wrapper.text()).toContain('Candidate dates: 2026-08-23, 2026-08-24');
+    expect(wrapper.text()).toContain('Temporal resolution details');
+    expect(wrapper.text()).toContain('manual-correction-v1');
+    expect(wrapper.text()).toContain('America/Chicago');
+    expect(wrapper.text()).toContain('I slept badly last night.');
+    expect(wrapper.text()).toContain('Sleep version 2.0.0');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();

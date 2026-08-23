@@ -356,7 +356,7 @@ Cover consumption versus mention, ownership, qualitative quantity, whole-day rec
 
 Preserve multiple contextual observations, keep the daily aggregate separate, distinguish unknown from neutral, protect manual ratings, and prohibit clinical claims. Verify AC-022–023.
 
-### 40. Sleep and temporal processor
+### 40. Sleep and temporal processor - FINISHED
 
 Implement wake-date association, separate naps and sleep periods, ambiguity, correction, original temporal phrases, and resolution provenance. Verify AC-040–041.
 

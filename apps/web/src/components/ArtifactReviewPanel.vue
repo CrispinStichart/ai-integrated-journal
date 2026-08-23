@@ -50,6 +50,15 @@ function isMoodAggregate(artifact: ArtifactResource): boolean {
   return artifact.payload.artifactType === 'daily_mood_aggregate';
 }
 
+function isSleepArtifact(artifact: ArtifactResource): boolean {
+  return (
+    artifact.provenance?.processorKey === 'sleep' &&
+    (artifact.payload.periodType === 'nightly_sleep' ||
+      artifact.payload.periodType === 'nap' ||
+      artifact.payload.periodType === 'other_sleep_period')
+  );
+}
+
 function textField(
   payload: Readonly<Record<string, unknown>>,
   key: string,
@@ -93,6 +102,28 @@ function objectField(
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Readonly<Record<string, unknown>>)
     : undefined;
+}
+
+function humanizedField(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.replaceAll('_', ' ') : undefined;
+}
+
+function sleepAssociation(artifact: ArtifactResource) {
+  return objectField(artifact.payload, 'associatedDate');
+}
+
+function sleepResolutionBasis(artifact: ArtifactResource) {
+  const association = sleepAssociation(artifact);
+  return association === undefined
+    ? undefined
+    : objectField(association, 'resolutionBasis');
+}
+
+function sleepCandidateDates(artifact: ArtifactResource): readonly string[] {
+  const candidates = sleepAssociation(artifact)?.candidateDates;
+  return Array.isArray(candidates)
+    ? candidates.filter((value): value is string => typeof value === 'string')
+    : [];
 }
 
 function moodSemanticLabel(
@@ -508,6 +539,153 @@ async function split(artifact: ArtifactResource): Promise<void> {
                 <p class="text-xs text-base-content/70">
                   Journaling analysis, not a clinical assessment.
                 </p>
+              </div>
+            </div>
+            <div
+              v-else-if="isSleepArtifact(artifact)"
+              class="card card-border mt-3 bg-base-200"
+            >
+              <div class="card-body">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="card-title">
+                    {{
+                      artifact.payload.periodType === 'nightly_sleep'
+                        ? 'Nightly sleep'
+                        : artifact.payload.periodType === 'nap'
+                          ? 'Nap'
+                          : 'Sleep period'
+                    }}
+                  </h3>
+                  <span class="badge badge-outline">Sleep observation</span>
+                  <span
+                    v-if="sleepAssociation(artifact)?.state === 'uncertain'"
+                    class="badge badge-warning badge-soft"
+                    >Uncertain date</span
+                  >
+                  <span
+                    v-if="sleepAssociation(artifact)?.manualOverride === true"
+                    class="badge badge-ghost"
+                    >Date corrected manually</span
+                  >
+                </div>
+                <div
+                  v-if="sleepAssociation(artifact)?.state === 'uncertain'"
+                  role="status"
+                  class="alert alert-warning alert-soft"
+                >
+                  <div>
+                    <strong>Ambiguous sleep date</strong>
+                    <p class="text-sm">
+                      The original wording was not forced to a calendar date.
+                      Review or correct this period.
+                    </p>
+                    <p
+                      v-if="sleepCandidateDates(artifact).length > 0"
+                      class="mt-1 text-sm"
+                    >
+                      Candidate dates:
+                      {{ sleepCandidateDates(artifact).join(', ') }}
+                    </p>
+                  </div>
+                </div>
+                <p
+                  v-if="artifact.payload.periodType === 'nightly_sleep'"
+                  class="text-sm text-base-content/70"
+                >
+                  Nightly sleep is associated with the date you woke by default.
+                  Use Correct below to change the date; manual corrections
+                  remain authoritative.
+                </p>
+                <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div v-if="sleepAssociation(artifact)?.resolvedDate">
+                    <dt class="font-medium">Associated wake date</dt>
+                    <dd>{{ sleepAssociation(artifact)?.resolvedDate }}</dd>
+                  </div>
+                  <div v-if="sleepAssociation(artifact)?.originalPhrase">
+                    <dt class="font-medium">Original temporal phrase</dt>
+                    <dd>“{{ sleepAssociation(artifact)?.originalPhrase }}”</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'reportedQuality')">
+                    <dt class="font-medium">Reported quality</dt>
+                    <dd>
+                      {{ textField(artifact.payload, 'reportedQuality') }}
+                    </dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'reportedDuration')">
+                    <dt class="font-medium">Reported duration</dt>
+                    <dd>
+                      {{ textField(artifact.payload, 'reportedDuration') }}
+                    </dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'reportedStart')">
+                    <dt class="font-medium">Reported start</dt>
+                    <dd>{{ textField(artifact.payload, 'reportedStart') }}</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'reportedEnd')">
+                    <dt class="font-medium">Reported end</dt>
+                    <dd>{{ textField(artifact.payload, 'reportedEnd') }}</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'interruptions')">
+                    <dt class="font-medium">Interruptions</dt>
+                    <dd>{{ textField(artifact.payload, 'interruptions') }}</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'context')">
+                    <dt class="font-medium">Context</dt>
+                    <dd>{{ textField(artifact.payload, 'context') }}</dd>
+                  </div>
+                </dl>
+                <details class="collapse collapse-arrow bg-base-100">
+                  <summary class="collapse-title text-sm font-medium">
+                    Temporal resolution details
+                  </summary>
+                  <div class="collapse-content">
+                    <dl class="space-y-1 text-xs">
+                      <div>
+                        <dt class="inline font-medium">Resolution rule:</dt>
+                        <dd class="inline">
+                          {{
+                            humanizedField(
+                              sleepResolutionBasis(artifact)?.ruleId,
+                            ) ?? 'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">Timezone:</dt>
+                        <dd class="inline">
+                          {{
+                            sleepAssociation(artifact)?.timezone ?? 'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">
+                          Effective Journal Day:
+                        </dt>
+                        <dd class="inline">
+                          {{
+                            sleepResolutionBasis(artifact)
+                              ?.effectiveJournalDate ?? 'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">Capture context:</dt>
+                        <dd class="inline">
+                          {{
+                            sleepResolutionBasis(artifact)?.capturedAt ??
+                            'Unknown'
+                          }}
+                          ·
+                          {{
+                            sleepResolutionBasis(artifact)?.capturedTimezone ??
+                            'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </details>
               </div>
             </div>
             <pre

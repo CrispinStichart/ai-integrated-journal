@@ -4,6 +4,10 @@ import {
   validateFoodAndDrinkOutput,
 } from './food-and-drink.js';
 import { MOOD_PROCESSOR_KEY, validateMoodOutput } from './mood.js';
+import {
+  SLEEP_PROCESSOR_KEY,
+  validateSleepAndTemporalOutput,
+} from './sleep-and-temporal.js';
 
 /** Routes immutable built-in semantic checks after generic schema validation. */
 export function validateBuiltInProcessorOutput(
@@ -13,4 +17,6 @@ export function validateBuiltInProcessorOutput(
   if (processorKey === FOOD_AND_DRINK_PROCESSOR_KEY)
     validateFoodAndDrinkOutput(output);
   if (processorKey === MOOD_PROCESSOR_KEY) validateMoodOutput(output);
+  if (processorKey === SLEEP_PROCESSOR_KEY)
+    validateSleepAndTemporalOutput(output);
 }

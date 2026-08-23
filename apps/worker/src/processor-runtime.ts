@@ -23,7 +23,9 @@ import {
 import { createUuidV7, DomainInvariantError } from '@journal/domain';
 import {
   FoodAndDrinkValidationError,
+  MoodValidationError,
   ProcessorRuntimeValidationError,
+  SleepAndTemporalValidationError,
   processorGenerationMessages,
   processorOutputJsonSchema,
   validateProcessorOutput,
@@ -73,13 +75,17 @@ function classify(error: unknown): ProcessorPipelineFailure {
   if (
     error instanceof ProcessorRuntimeValidationError ||
     error instanceof FoodAndDrinkValidationError ||
+    error instanceof MoodValidationError ||
+    error instanceof SleepAndTemporalValidationError ||
     error instanceof DomainInvariantError ||
     error instanceof TypeError
   )
     return new ProcessorPipelineFailure(
       error instanceof ProcessorRuntimeValidationError
         ? error.code
-        : error instanceof FoodAndDrinkValidationError
+        : error instanceof FoodAndDrinkValidationError ||
+            error instanceof MoodValidationError ||
+            error instanceof SleepAndTemporalValidationError
           ? error.code
           : error instanceof DomainInvariantError
             ? 'invalid_reconciliation_output'

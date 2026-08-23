@@ -9,6 +9,10 @@ import {
   MOOD_PROCESSOR_ID,
   MOOD_PROCESSOR_VERSION_ID,
   MOOD_SYNTHETIC_FIXTURES,
+  SLEEP_DEFINITION,
+  SLEEP_PROCESSOR_ID,
+  SLEEP_PROCESSOR_VERSION_ID,
+  SLEEP_SYNTHETIC_FIXTURES,
 } from '@journal/processors';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
@@ -124,6 +128,8 @@ const processorSeeds: (typeof processorInstallations.$inferInsert)[] = [
 const LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID =
   '019c5b90-0000-7000-8000-000000000011';
 const LEGACY_MOOD_PROCESSOR_VERSION_ID = '019c5b90-0000-7000-8000-000000000012';
+const LEGACY_SLEEP_PROCESSOR_VERSION_ID =
+  '019c5b90-0000-7000-8000-000000000013';
 
 function sha256(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -242,10 +248,28 @@ const moodProcessorVersionSeed: typeof processorVersions.$inferInsert = {
   }),
 };
 
+const sleepInstructionHash = sha256(SLEEP_DEFINITION.instructions);
+const sleepOutputSchemaHash = sha256(SLEEP_DEFINITION.outputSchema);
+const sleepProcessorVersionSeed: typeof processorVersions.$inferInsert = {
+  id: SLEEP_PROCESSOR_VERSION_ID,
+  processorId: SLEEP_PROCESSOR_ID,
+  revision: 2,
+  semanticVersion: SLEEP_DEFINITION.semanticVersion,
+  definition: SLEEP_DEFINITION,
+  instructionHash: sleepInstructionHash,
+  outputSchemaHash: sleepOutputSchemaHash,
+  promptTemplateHash: sha256({
+    instructionHash: sleepInstructionHash,
+    outputSchemaHash: sleepOutputSchemaHash,
+    policy: 'untrusted-journal-data-v1',
+  }),
+};
+
 const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] = [
   ...legacyProcessorVersionSeeds,
   foodProcessorVersionSeed,
   moodProcessorVersionSeed,
+  sleepProcessorVersionSeed,
 ];
 
 const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
@@ -285,6 +309,15 @@ const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
     payload: {
       processorVersionId: MOOD_PROCESSOR_VERSION_ID,
       cases: MOOD_SYNTHETIC_FIXTURES,
+    },
+  },
+  {
+    key: 'synthetic-sleep-and-temporal-cases',
+    fixtureType: 'processor-cases',
+    payloadSchemaVersion: 1,
+    payload: {
+      processorVersionId: SLEEP_PROCESSOR_VERSION_ID,
+      cases: SLEEP_SYNTHETIC_FIXTURES,
     },
   },
 ];
@@ -339,6 +372,18 @@ export async function seedDatabase(
           inArray(processorInstallations.currentVersionId, [
             LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
             FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+          ]),
+        ),
+      );
+    await transaction
+      .update(processorInstallations)
+      .set({ currentVersionId: SLEEP_PROCESSOR_VERSION_ID })
+      .where(
+        and(
+          eq(processorInstallations.id, SLEEP_PROCESSOR_ID),
+          inArray(processorInstallations.currentVersionId, [
+            LEGACY_SLEEP_PROCESSOR_VERSION_ID,
+            SLEEP_PROCESSOR_VERSION_ID,
           ]),
         ),
       );

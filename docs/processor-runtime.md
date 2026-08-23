@@ -65,3 +65,27 @@ The immutable instructions and deterministic validator both require
 claims before persistence. The UI repeats the non-clinical framing and shows
 the exact source revisions, UTF-16 ranges, quotes, optional audio ranges,
 processor version, provider, and model used for every result.
+
+## Built-in sleep and temporal contract
+
+The version-2 sleep processor emits each nightly sleep, nap, and other sleep
+period as a distinct logical-key item. Its immutable instructions and
+deterministic validator enforce the wake-date convention for known generated
+nightly sleep associations. Optional quality, start, end, duration,
+interruptions, context, and subjective-effect fields remain omitted when the
+source does not establish them. The result-level information status keeps
+unmentioned sleep distinct from directly evidenced explicit no sleep.
+
+Every associated date retains the original temporal phrase, known or uncertain
+state, resolved date or reviewable candidates, IANA journal timezone,
+confidence, manual-authority flag, and the exact capture/journal context plus
+versioned resolution rule. Relative dates use the contribution's effective
+Journal Day rather than processing time. In particular, `Tomorrow` for a
+contribution assigned to `2026-08-23` resolves to `2026-08-24` even when its
+actual 00:30 capture instant falls on the next local calendar date.
+
+Ambiguous late-night language remains uncertain without a forced date. A user
+correction creates a manual resolution and immutable artifact revision; later
+generated disagreement remains a reviewable candidate. The artifact card
+discloses the wake-date rule, original phrase, candidate or resolved dates,
+temporal resolution basis, exact evidence, and the existing correction action.
