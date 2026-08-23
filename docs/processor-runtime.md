@@ -89,3 +89,28 @@ correction creates a manual resolution and immutable artifact revision; later
 generated disagreement remains a reviewable candidate. The artifact card
 discloses the wake-date rule, original phrase, candidate or resolved dates,
 temporal resolution basis, exact evidence, and the existing correction action.
+
+## Built-in tasks and intentions contract
+
+The version-2 tasks and intentions processor preserves six distinct statement
+classes: completed, firm, tentative, contemplative, suggested, and general
+interest. Their lifecycle states are deterministic: completed actions are
+completed, firm intentions are pending, tentative intentions remain possible,
+and contemplation, suggestions, and interests are not actionable. Every item
+is an observation only; provider output has no path that creates or authorizes
+an external task. Broader things to remember retain their supported category,
+including media recommendations, contacts, places, purchases, and research.
+
+An absent temporal phrase means the due-date field is omitted. A present but
+unsupported phrase is retained explicitly as unsupported, without a resolved
+date. Known or ambiguous dates retain the exact phrase, evidence ordinals,
+timezone, confidence, immutable capture and Journal Day context, and versioned
+resolution rule. The deterministic validator recomputes the resolution from
+that recorded context and rejects a date whose phrase is absent from its cited
+evidence, whose evidence is not attached to the item, or whose result was
+invented. Manual task-date corrections remain authoritative and later generated
+disagreement is reviewable through the existing candidate flow.
+
+The artifact card labels intention strength and status in text, distinguishes
+supported, absent, ambiguous, and unsupported dates, discloses resolution
+context and exact evidence, and repeats that no external task was created.

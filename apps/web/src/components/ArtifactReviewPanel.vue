@@ -59,6 +59,13 @@ function isSleepArtifact(artifact: ArtifactResource): boolean {
   );
 }
 
+function isTaskArtifact(artifact: ArtifactResource): boolean {
+  return (
+    artifact.provenance?.processorKey === 'tasks-and-intentions' &&
+    typeof artifact.payload.intentionClass === 'string'
+  );
+}
+
 function textField(
   payload: Readonly<Record<string, unknown>>,
   key: string,
@@ -121,6 +128,24 @@ function sleepResolutionBasis(artifact: ArtifactResource) {
 
 function sleepCandidateDates(artifact: ArtifactResource): readonly string[] {
   const candidates = sleepAssociation(artifact)?.candidateDates;
+  return Array.isArray(candidates)
+    ? candidates.filter((value): value is string => typeof value === 'string')
+    : [];
+}
+
+function taskDueDate(artifact: ArtifactResource) {
+  return objectField(artifact.payload, 'dueDate');
+}
+
+function taskDueDateBasis(artifact: ArtifactResource) {
+  const dueDate = taskDueDate(artifact);
+  return dueDate === undefined
+    ? undefined
+    : objectField(dueDate, 'resolutionBasis');
+}
+
+function taskDueDateCandidates(artifact: ArtifactResource): readonly string[] {
+  const candidates = taskDueDate(artifact)?.candidateDates;
   return Array.isArray(candidates)
     ? candidates.filter((value): value is string => typeof value === 'string')
     : [];
@@ -679,6 +704,159 @@ async function split(artifact: ArtifactResource): Promise<void> {
                           ·
                           {{
                             sleepResolutionBasis(artifact)?.capturedTimezone ??
+                            'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </details>
+              </div>
+            </div>
+            <div
+              v-else-if="isTaskArtifact(artifact)"
+              class="card card-border mt-3 bg-base-200"
+            >
+              <div class="card-body">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="card-title">
+                    {{ textField(artifact.payload, 'description') }}
+                  </h3>
+                  <span class="badge badge-outline">{{
+                    humanizedField(artifact.payload.intentionClass)
+                  }}</span>
+                  <span
+                    v-if="artifact.payload.intentionClass === 'firm'"
+                    class="badge badge-soft"
+                    >Firm intention</span
+                  >
+                  <span
+                    v-else-if="artifact.payload.intentionClass === 'tentative'"
+                    class="badge badge-warning badge-soft"
+                    >Tentative idea</span
+                  >
+                  <span
+                    v-if="taskDueDate(artifact)?.state === 'unsupported'"
+                    class="badge badge-warning badge-soft"
+                    >Date unsupported</span
+                  >
+                  <span
+                    v-else-if="taskDueDate(artifact)?.state === 'uncertain'"
+                    class="badge badge-warning badge-soft"
+                    >Date uncertain</span
+                  >
+                </div>
+                <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt class="font-medium">Status</dt>
+                    <dd>{{ humanizedField(artifact.payload.status) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="font-medium">Remember as</dt>
+                    <dd>{{ humanizedField(artifact.payload.rememberKind) }}</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'suggestedBy')">
+                    <dt class="font-medium">Suggested by</dt>
+                    <dd>{{ textField(artifact.payload, 'suggestedBy') }}</dd>
+                  </div>
+                  <div v-if="taskDueDate(artifact)?.resolvedDate">
+                    <dt class="font-medium">Supported due date</dt>
+                    <dd>{{ taskDueDate(artifact)?.resolvedDate }}</dd>
+                  </div>
+                  <div v-if="taskDueDate(artifact)?.originalPhrase">
+                    <dt class="font-medium">Original temporal phrase</dt>
+                    <dd>“{{ taskDueDate(artifact)?.originalPhrase }}”</dd>
+                  </div>
+                </dl>
+                <div
+                  v-if="taskDueDate(artifact)?.state === 'unsupported'"
+                  role="status"
+                  class="alert alert-warning alert-soft"
+                >
+                  <div>
+                    <strong>No supported due date</strong>
+                    <p class="text-sm">
+                      The temporal phrase is retained as evidence, but no date
+                      was guessed. Correct it explicitly if needed.
+                    </p>
+                  </div>
+                </div>
+                <div
+                  v-else-if="taskDueDate(artifact)?.state === 'uncertain'"
+                  role="status"
+                  class="alert alert-warning alert-soft"
+                >
+                  <div>
+                    <strong>Ambiguous due date</strong>
+                    <p class="text-sm">
+                      The wording was not forced to one date.
+                    </p>
+                    <p
+                      v-if="taskDueDateCandidates(artifact).length > 0"
+                      class="mt-1 text-sm"
+                    >
+                      Candidate dates:
+                      {{ taskDueDateCandidates(artifact).join(', ') }}
+                    </p>
+                  </div>
+                </div>
+                <p
+                  v-else-if="!taskDueDate(artifact)"
+                  class="text-sm text-base-content/70"
+                >
+                  No due date was supported by the source.
+                </p>
+                <div role="note" class="alert alert-info alert-soft">
+                  <p class="text-sm">
+                    Journal observation only. No external task was created;
+                    explicit approval is required before external action.
+                  </p>
+                </div>
+                <details
+                  v-if="taskDueDate(artifact)"
+                  class="collapse collapse-arrow bg-base-100"
+                >
+                  <summary class="collapse-title text-sm font-medium">
+                    Due-date resolution details
+                  </summary>
+                  <div class="collapse-content">
+                    <dl class="space-y-1 text-xs">
+                      <div>
+                        <dt class="inline font-medium">Resolution rule:</dt>
+                        <dd class="inline">
+                          {{
+                            humanizedField(
+                              taskDueDateBasis(artifact)?.ruleId,
+                            ) ?? 'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">Timezone:</dt>
+                        <dd class="inline">
+                          {{ taskDueDate(artifact)?.timezone ?? 'Unknown' }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">
+                          Effective Journal Day:
+                        </dt>
+                        <dd class="inline">
+                          {{
+                            taskDueDateBasis(artifact)?.effectiveJournalDate ??
+                            'Unknown'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="inline font-medium">Capture context:</dt>
+                        <dd class="inline">
+                          {{
+                            taskDueDateBasis(artifact)?.capturedAt ?? 'Unknown'
+                          }}
+                          ·
+                          {{
+                            taskDueDateBasis(artifact)?.capturedTimezone ??
                             'Unknown'
                           }}
                         </dd>

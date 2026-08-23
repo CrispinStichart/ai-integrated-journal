@@ -391,6 +391,106 @@ function sleepArtifact(ambiguous = false): ArtifactResource {
   };
 }
 
+function taskProvenance() {
+  return {
+    resultId: '019c5b90-0000-7000-8000-000000000060',
+    runId: '019c5b90-0000-7000-8000-000000000061',
+    processorKey: 'tasks-and-intentions',
+    processorName: 'Tasks and intentions',
+    processorVersionId: '019c5b90-0000-7000-8000-000000000024',
+    semanticVersion: '2.0.0',
+    instructionHash: '7'.repeat(64),
+    promptTemplateHash: '8'.repeat(64),
+    provider: { id: 'fixture', displayName: 'Fixture provider' },
+    model: { id: 'fixture-task-model' },
+    processingTimeMilliseconds: 16,
+  };
+}
+
+function taskArtifact(
+  intentionClass: 'firm' | 'tentative',
+  unsupportedDate = false,
+): ArtifactResource {
+  const base = foodArtifact();
+  const firm = intentionClass === 'firm';
+  const quote = firm
+    ? unsupportedDate
+      ? 'I will organize the garage sometime soon.'
+      : 'I will submit the permit tomorrow.'
+    : 'Maybe I should learn pottery.';
+  return {
+    ...base,
+    id: firm
+      ? unsupportedDate
+        ? '019c5b90-0000-7000-8000-000000000062'
+        : '019c5b90-0000-7000-8000-000000000063'
+      : '019c5b90-0000-7000-8000-000000000064',
+    logicalKey: firm
+      ? unsupportedDate
+        ? 'string:organize-garage'
+        : 'string:submit-permit'
+      : 'string:learn-pottery',
+    payload: {
+      eventKey: firm
+        ? unsupportedDate
+          ? 'organize-garage'
+          : 'submit-permit'
+        : 'learn-pottery',
+      description: firm
+        ? unsupportedDate
+          ? 'organize the garage'
+          : 'submit the permit'
+        : 'learn pottery',
+      intentionClass,
+      status: firm ? 'pending' : 'possible',
+      rememberKind: firm ? 'task' : 'general_interest',
+      externalTaskPolicy: 'observation_only',
+      ...(firm
+        ? {
+            dueDate: {
+              state: unsupportedDate ? 'unsupported' : 'known',
+              originalPhrase: unsupportedDate ? 'sometime soon' : 'tomorrow',
+              ...(unsupportedDate ? {} : { resolvedDate: '2026-08-24' }),
+              timezone: 'America/Chicago',
+              confidence: unsupportedDate ? 0 : 1,
+              manualOverride: false,
+              resolutionBasis: {
+                ...sleepBasis(
+                  unsupportedDate
+                    ? 'unsupported-expression-v1'
+                    : 'relative-journal-date-v1',
+                ),
+              },
+              evidenceOrdinals: [0],
+            },
+          }
+        : {}),
+      evidenceOrdinals: [0],
+    },
+    evidence: [
+      {
+        id: firm
+          ? unsupportedDate
+            ? '019c5b90-0000-7000-8000-000000000065'
+            : '019c5b90-0000-7000-8000-000000000066'
+          : '019c5b90-0000-7000-8000-000000000067',
+        ordinal: 0,
+        sourceLabel: 'typed_text:019c5b90-0000-7000-8000-000000000068',
+        sourceType: 'typed_text',
+        sourceRevisionId: '019c5b90-0000-7000-8000-000000000068',
+        normalization: 'NFC_LF_V1',
+        offsetUnit: 'utf16_code_unit',
+        startUtf16: 0,
+        endUtf16: quote.length,
+        quote,
+        quoteHash: '9'.repeat(64),
+        resolutionStatus: 'resolved',
+      },
+    ],
+    provenance: taskProvenance(),
+  };
+}
+
 function mountPanel(items: readonly ArtifactResource[] = [artifact()]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -526,6 +626,41 @@ describe('artifact review UI', () => {
     expect(wrapper.text()).toContain('America/Chicago');
     expect(wrapper.text()).toContain('I slept badly last night.');
     expect(wrapper.text()).toContain('Sleep version 2.0.0');
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[AC-024][TASK-001–005][TIME-004][PROV-001] distinguishes tentative and firm task cards while disclosing supported, absent, and unsupported dates accessibly', async () => {
+    const { wrapper, queryClient } = mountPanel([
+      taskArtifact('tentative'),
+      taskArtifact('firm'),
+      taskArtifact('firm', true),
+    ]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('learn pottery');
+    expect(wrapper.text()).toContain('Tentative idea');
+    expect(wrapper.text()).toContain('possible');
+    expect(wrapper.text()).toContain(
+      'No due date was supported by the source.',
+    );
+    expect(wrapper.text()).toContain('submit the permit');
+    expect(wrapper.text()).toContain('Firm intention');
+    expect(wrapper.text()).toContain('pending');
+    expect(wrapper.text()).toContain('Supported due date');
+    expect(wrapper.text()).toContain('2026-08-24');
+    expect(wrapper.text()).toContain('Original temporal phrase');
+    expect(wrapper.text()).toContain('tomorrow');
+    expect(wrapper.text()).toContain('No supported due date');
+    expect(wrapper.text()).toContain('sometime soon');
+    expect(wrapper.text()).toContain('Due-date resolution details');
+    expect(wrapper.text()).toContain('relative-journal-date-v1');
+    expect(wrapper.text()).toContain('Effective Journal Day');
+    expect(wrapper.text()).toContain(
+      'Journal observation only. No external task was created;',
+    );
+    expect(wrapper.text()).toContain('I will submit the permit tomorrow.');
+    expect(wrapper.text()).toContain('Tasks and intentions version 2.0.0');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();

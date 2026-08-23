@@ -6,6 +6,8 @@ import {
   MOOD_PROCESSOR_VERSION_ID,
   SLEEP_PROCESSOR_ID,
   SLEEP_PROCESSOR_VERSION_ID,
+  TASKS_AND_INTENTIONS_PROCESSOR_ID,
+  TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
 } from '@journal/processors';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -76,7 +78,7 @@ describe('DB-JOURNAL foundation', () => {
     expect(queues).toHaveLength(7);
     expect(schedules).toHaveLength(3);
     expect(processors).toHaveLength(6);
-    expect(firstSeed.processorVersionsRequested).toBe(9);
+    expect(firstSeed.processorVersionsRequested).toBe(10);
     expect(processors.every(({ enabled }) => !enabled)).toBe(true);
     expect(
       processors.every(({ requirementMode }) => requirementMode === 'optional'),
@@ -87,6 +89,7 @@ describe('DB-JOURNAL foundation', () => {
       { key: 'synthetic-mood-cases' },
       { key: 'synthetic-owner' },
       { key: 'synthetic-sleep-and-temporal-cases' },
+      { key: 'synthetic-tasks-and-intentions-cases' },
     ]);
     const [food] = await client.database
       .select({
@@ -150,6 +153,30 @@ describe('DB-JOURNAL foundation', () => {
       .where(eq(processorInstallations.id, SLEEP_PROCESSOR_ID));
     expect(sleep).toMatchObject({
       currentVersionId: SLEEP_PROCESSOR_VERSION_ID,
+      semanticVersion: '2.0.0',
+      definition: {
+        input: { scope: 'journal_day' },
+        reconciliation: {
+          strategy: 'logical_key',
+          logicalKey: 'eventKey',
+        },
+        defaultEnabled: false,
+      },
+    });
+    const [tasks] = await client.database
+      .select({
+        currentVersionId: processorInstallations.currentVersionId,
+        semanticVersion: processorVersions.semanticVersion,
+        definition: processorVersions.definition,
+      })
+      .from(processorInstallations)
+      .innerJoin(
+        processorVersions,
+        eq(processorVersions.id, processorInstallations.currentVersionId),
+      )
+      .where(eq(processorInstallations.id, TASKS_AND_INTENTIONS_PROCESSOR_ID));
+    expect(tasks).toMatchObject({
+      currentVersionId: TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
       semanticVersion: '2.0.0',
       definition: {
         input: { scope: 'journal_day' },

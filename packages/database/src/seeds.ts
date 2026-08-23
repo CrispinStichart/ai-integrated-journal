@@ -13,6 +13,10 @@ import {
   SLEEP_PROCESSOR_ID,
   SLEEP_PROCESSOR_VERSION_ID,
   SLEEP_SYNTHETIC_FIXTURES,
+  TASKS_AND_INTENTIONS_DEFINITION,
+  TASKS_AND_INTENTIONS_PROCESSOR_ID,
+  TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
+  TASKS_AND_INTENTIONS_SYNTHETIC_FIXTURES,
 } from '@journal/processors';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
@@ -130,6 +134,8 @@ const LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID =
 const LEGACY_MOOD_PROCESSOR_VERSION_ID = '019c5b90-0000-7000-8000-000000000012';
 const LEGACY_SLEEP_PROCESSOR_VERSION_ID =
   '019c5b90-0000-7000-8000-000000000013';
+const LEGACY_TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID =
+  '019c5b90-0000-7000-8000-000000000014';
 
 function sha256(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -265,11 +271,33 @@ const sleepProcessorVersionSeed: typeof processorVersions.$inferInsert = {
   }),
 };
 
+const tasksInstructionHash = sha256(
+  TASKS_AND_INTENTIONS_DEFINITION.instructions,
+);
+const tasksOutputSchemaHash = sha256(
+  TASKS_AND_INTENTIONS_DEFINITION.outputSchema,
+);
+const tasksProcessorVersionSeed: typeof processorVersions.$inferInsert = {
+  id: TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
+  processorId: TASKS_AND_INTENTIONS_PROCESSOR_ID,
+  revision: 2,
+  semanticVersion: TASKS_AND_INTENTIONS_DEFINITION.semanticVersion,
+  definition: TASKS_AND_INTENTIONS_DEFINITION,
+  instructionHash: tasksInstructionHash,
+  outputSchemaHash: tasksOutputSchemaHash,
+  promptTemplateHash: sha256({
+    instructionHash: tasksInstructionHash,
+    outputSchemaHash: tasksOutputSchemaHash,
+    policy: 'untrusted-journal-data-v1',
+  }),
+};
+
 const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] = [
   ...legacyProcessorVersionSeeds,
   foodProcessorVersionSeed,
   moodProcessorVersionSeed,
   sleepProcessorVersionSeed,
+  tasksProcessorVersionSeed,
 ];
 
 const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
@@ -318,6 +346,15 @@ const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
     payload: {
       processorVersionId: SLEEP_PROCESSOR_VERSION_ID,
       cases: SLEEP_SYNTHETIC_FIXTURES,
+    },
+  },
+  {
+    key: 'synthetic-tasks-and-intentions-cases',
+    fixtureType: 'processor-cases',
+    payloadSchemaVersion: 1,
+    payload: {
+      processorVersionId: TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
+      cases: TASKS_AND_INTENTIONS_SYNTHETIC_FIXTURES,
     },
   },
 ];
@@ -372,6 +409,18 @@ export async function seedDatabase(
           inArray(processorInstallations.currentVersionId, [
             LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
             FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+          ]),
+        ),
+      );
+    await transaction
+      .update(processorInstallations)
+      .set({ currentVersionId: TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID })
+      .where(
+        and(
+          eq(processorInstallations.id, TASKS_AND_INTENTIONS_PROCESSOR_ID),
+          inArray(processorInstallations.currentVersionId, [
+            LEGACY_TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
+            TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
           ]),
         ),
       );

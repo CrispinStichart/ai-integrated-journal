@@ -360,7 +360,7 @@ Preserve multiple contextual observations, keep the daily aggregate separate, di
 
 Implement wake-date association, separate naps and sleep periods, ambiguity, correction, original temporal phrases, and resolution provenance. Verify AC-040–041.
 
-### 41. Tasks and intentions processor
+### 41. Tasks and intentions processor - FINISHED
 
 Distinguish completed, firm, tentative, contemplative, suggested, and general-interest statements. Resolve due dates only when supported by evidence. Verify AC-024.
 

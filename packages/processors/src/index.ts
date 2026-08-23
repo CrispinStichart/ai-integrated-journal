@@ -8,6 +8,7 @@ export * from './provenance.js';
 export * from './built-ins/food-and-drink.js';
 export * from './built-ins/mood.js';
 export * from './built-ins/sleep-and-temporal.js';
+export * from './built-ins/tasks-and-intentions.js';
 export * from './built-ins/validate.js';
 
 /** Identifies the owning workspace package without exposing implementation paths. */
