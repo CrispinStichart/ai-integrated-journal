@@ -2135,6 +2135,151 @@ export const processorApiIdempotency = journalSchema.table(
   ],
 );
 
+/** One explicitly confirmed historical reprocessing operation. */
+export const reprocessingBatches = journalSchema.table(
+  'reprocessing_batch',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull().default(1),
+    state: text('state').notNull().default('active'),
+    target: jsonb('target')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    versionBasis: jsonb('version_basis')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    impact: jsonb('impact')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    impactFingerprint: text('impact_fingerprint').notNull(),
+    correlationId: uuid('correlation_id').notNull(),
+    cancelRequestedAt: timestamp('cancel_requested_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('reprocessing_batch_owner_created_idx').on(
+      table.ownerId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'reprocessing_batch_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('reprocessing_batch_revision_positive', sql`${table.revision} > 0`),
+    check(
+      'reprocessing_batch_state_valid',
+      sql`${table.state} in ('active', 'canceled')`,
+    ),
+    check(
+      'reprocessing_batch_impact_hash_sha256',
+      sql`${table.impactFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'reprocessing_batch_cancel_consistent',
+      sql`(${table.state} = 'active' and ${table.cancelRequestedAt} is null) or (${table.state} = 'canceled' and ${table.cancelRequestedAt} is not null)`,
+    ),
+  ],
+);
+
+/** Identifier-only membership links a batch to immutable-version processor runs. */
+export const reprocessingBatchItems = journalSchema.table(
+  'reprocessing_batch_item',
+  {
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => reprocessingBatches.id, { onDelete: 'restrict' }),
+    ordinal: integer('ordinal').notNull(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    journalDayId: uuid('journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    contributionId: uuid('contribution_id').references(() => contributions.id, {
+      onDelete: 'restrict',
+    }),
+    providerOperationCount: integer('provider_operation_count')
+      .notNull()
+      .default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'reprocessing_batch_item_pk',
+      columns: [table.batchId, table.ordinal],
+    }),
+    uniqueIndex('reprocessing_batch_item_run_unique').on(table.runId),
+    index('reprocessing_batch_item_version_target_idx').on(
+      table.processorVersionId,
+      table.journalDayId,
+    ),
+    check(
+      'reprocessing_batch_item_ordinal_nonnegative',
+      sql`${table.ordinal} >= 0`,
+    ),
+    check(
+      'reprocessing_batch_item_provider_count_nonnegative',
+      sql`${table.providerOperationCount} >= 0`,
+    ),
+  ],
+);
+
+export const reprocessingApiIdempotency = journalSchema.table(
+  'reprocessing_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    batchId: uuid('batch_id')
+      .notNull()
+      .references(() => reprocessingBatches.id, { onDelete: 'restrict' }),
+    response: jsonb('response')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'reprocessing_api_idempotency_pk',
+      columns: [table.ownerId, table.operation, table.idempotencyKey],
+    }),
+    check(
+      'reprocessing_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'reprocessing_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'reprocessing_api_idempotency_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const developmentFixtures = journalSchema.table(
   'development_fixture',
   {
@@ -2241,6 +2386,9 @@ export const databaseSchema = {
   processorRuns,
   processorVersionDependencies,
   processorVersions,
+  reprocessingApiIdempotency,
+  reprocessingBatchItems,
+  reprocessingBatches,
   queueConfigurations,
   recoveryCodes,
   recordingApiIdempotency,

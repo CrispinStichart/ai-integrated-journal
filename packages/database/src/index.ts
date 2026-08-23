@@ -52,6 +52,9 @@ export {
   processorRuns,
   processorVersionDependencies,
   processorVersions,
+  reprocessingApiIdempotency,
+  reprocessingBatchItems,
+  reprocessingBatches,
 } from './schema.js';
 export {
   DeletedContributionError,

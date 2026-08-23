@@ -68,6 +68,14 @@ import {
   recordingSchema,
   recordingUploadStatusSchema,
 } from './recording.js';
+import {
+  reprocessingBatchMutationResponseSchema,
+  reprocessingBatchPageSchema,
+  reprocessingBatchSchema,
+  reprocessingPreviewRequestSchema,
+  reprocessingPreviewResponseSchema,
+  startReprocessingRequestSchema,
+} from './reprocessing.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
 import { uuidV7Schema } from './primitives.js';
 import {
@@ -660,6 +668,71 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/processing-runs/reprocessing/preview': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('ReprocessingPreviewRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Bounded impact and exact processor-version preview',
+              'ReprocessingPreviewResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+            '404': problemResponse('Reprocessing target not found'),
+            '409': problemResponse('Scope or version basis conflict'),
+          },
+        },
+      },
+      '/api/v1/reprocessing-batches': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Paginated reprocessing audit history and progress',
+              'ReprocessingBatchPage',
+            ),
+          },
+        },
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('StartReprocessingRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Transactional reprocessing batch scheduled',
+              'ReprocessingBatchMutationResponse',
+            ),
+            '409': problemResponse('Preview impact changed'),
+            '428': problemResponse('Idempotency-Key header required'),
+          },
+        },
+      },
+      '/api/v1/reprocessing-batches/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Reprocessing progress with explicit version basis',
+              'ReprocessingBatch',
+            ),
+            '404': problemResponse('Reprocessing batch not found'),
+          },
+        },
+      },
+      '/api/v1/reprocessing-batches/{id}/cancel': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Canceled remaining reprocessing work',
+              'ReprocessingBatchMutationResponse',
+            ),
+            '409': problemResponse('Reprocessing batch conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
       '/api/v1/journal-days/{id}/artifacts': {
         get: {
           security: [{ sessionCookie: [] }],
@@ -877,6 +950,20 @@ export function createOpenApiDocument(): Record<string, unknown> {
           recordingMutationResponseSchema,
         ),
         RecordingUploadStatus: componentSchema(recordingUploadStatusSchema),
+        ReprocessingBatch: componentSchema(reprocessingBatchSchema),
+        ReprocessingBatchMutationResponse: componentSchema(
+          reprocessingBatchMutationResponseSchema,
+        ),
+        ReprocessingBatchPage: componentSchema(reprocessingBatchPageSchema),
+        ReprocessingPreviewRequest: componentSchema(
+          reprocessingPreviewRequestSchema,
+        ),
+        ReprocessingPreviewResponse: componentSchema(
+          reprocessingPreviewResponseSchema,
+        ),
+        StartReprocessingRequest: componentSchema(
+          startReprocessingRequestSchema,
+        ),
         RecordingTranscriptInspector: componentSchema(
           recordingTranscriptInspectorSchema,
         ),

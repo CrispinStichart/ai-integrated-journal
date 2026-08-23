@@ -44,3 +44,13 @@ queues root replacements with identifier-only jobs. Successful replacement
 results transactionally schedule enabled current downstream versions whose
 exact dependency is now available. Historical runs, results, and bindings are
 never rewritten or deleted.
+
+## Historical reprocessing
+
+`reprocessing_batch` stores the owner-confirmed scope, impact fingerprint, and
+resolved immutable processor-version basis. `reprocessing_batch_item` links the
+batch to each exact target and newly queued run without storing journal content.
+Confirmation inserts these records and pg-boss jobs through one transaction;
+progress is derived from canonical run states. Conditional cancellation marks
+only unfinished runs canceled, leaving completed results and audit history
+intact. See `docs/reprocessing-orchestration.md` for limits and API behavior.

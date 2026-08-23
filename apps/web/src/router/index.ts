@@ -37,11 +37,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/activity',
     name: 'activity',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Follow each independent processing stage.',
-      title: 'Processing activity',
-    },
+    component: () => import('../views/ProcessingActivityView.vue'),
     meta: { title: 'Processing activity' },
   },
   {

@@ -7,6 +7,7 @@ import type { RecordingService } from './recording-service.js';
 import type { ProcessorService } from './processor-service.js';
 import type { TranscriptService } from './transcript-service.js';
 import type { ArtifactService } from './artifact-service.js';
+import type { ReprocessingService } from './reprocessing-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -49,6 +50,7 @@ export interface ApiDependencies {
   readonly journalService?: JournalService;
   readonly recordingService?: RecordingService;
   readonly processorService?: ProcessorService;
+  readonly reprocessingService?: ReprocessingService;
   readonly transcriptService?: TranscriptService;
   readonly now?: () => Date;
   readonly createCorrelationId?: () => string;

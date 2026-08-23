@@ -26,6 +26,9 @@ import {
   processorDefinitionDraftSchema,
   processorDryRunResponseSchema,
   processorRunProvenanceSchema,
+  reprocessingBatchSchema,
+  reprocessingPreviewRequestSchema,
+  reprocessingPreviewResponseSchema,
   semanticJsonValueSchema,
   serializeOpenApiDocument,
   sseEventEnvelopeSchema,
@@ -451,6 +454,101 @@ describe('CONTRACT CAP-002 CAP-004 CAP-005 recording protocol', () => {
         totalBytes: '01',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('CONTRACT EDIT-003 EDIT-004 reprocessing orchestration', () => {
+  it('[EDIT-003] accepts contribution, day, range, processor, and exact-version scopes', () => {
+    const targets = [
+      { scope: 'contribution', contributionId: UUID_V7 },
+      { scope: 'journal_day', journalDate: '2026-08-15' },
+      {
+        scope: 'date_range',
+        startDate: '2026-08-01',
+        endDate: '2026-08-15',
+      },
+      {
+        scope: 'processor',
+        processorId: UUID_V7,
+        startDate: '2026-08-01',
+        endDate: '2026-08-15',
+      },
+      {
+        scope: 'processor_version',
+        processorVersionId: UUID_V7,
+        startDate: '2026-08-01',
+        endDate: '2026-08-15',
+      },
+    ];
+    for (const target of targets)
+      expect(
+        reprocessingPreviewRequestSchema.safeParse({
+          target,
+          versionBasis: {
+            mode: 'pinned',
+            processorVersionIds: [UUID_V7],
+          },
+        }).success,
+      ).toBe(true);
+  });
+
+  it('[EDIT-004][EDIT-008][STATE-001] requires an explicit version basis and content-free impact/progress metadata', () => {
+    const versionBasis = {
+      mode: 'pinned' as const,
+      versions: [
+        {
+          processorId: UUID_V7,
+          processorName: 'Fixture processor',
+          processorVersionId: UUID_V7,
+          semanticVersion: '1.2.3',
+          inputScope: 'journal_day' as const,
+          providerOperationsPerRun: 1,
+        },
+      ],
+    };
+    const impact = {
+      journalDayCount: 2,
+      contributionCount: 3,
+      runCount: 2,
+      approximateProviderOperationCount: 2,
+      staleArtifactCount: 1,
+      manualOverrideCount: 1,
+    };
+    expect(
+      reprocessingPreviewResponseSchema.parse({
+        target: {
+          scope: 'date_range',
+          startDate: '2026-08-14',
+          endDate: '2026-08-15',
+        },
+        versionBasis,
+        impact,
+        impactFingerprint: 'a'.repeat(64),
+        warnings: ['Manual authority remains protected.'],
+        expiresAt: INSTANT,
+      }),
+    ).toMatchObject({ versionBasis, impact });
+    expect(
+      reprocessingBatchSchema.parse({
+        id: UUID_V7,
+        revision: 1,
+        status: 'running',
+        target: { scope: 'journal_day', journalDate: '2026-08-15' },
+        versionBasis,
+        impact,
+        progress: {
+          total: 2,
+          queued: 0,
+          running: 1,
+          succeeded: 1,
+          failed: 0,
+          canceled: 0,
+          percent: 50,
+        },
+        createdAt: INSTANT,
+        updatedAt: INSTANT,
+      }),
+    ).toMatchObject({ status: 'running', progress: { percent: 50 } });
   });
 });
 

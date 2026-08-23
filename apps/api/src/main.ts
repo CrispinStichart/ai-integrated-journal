@@ -19,6 +19,7 @@ import type { HealthProbe } from './types.js';
 import { PostgresJournalService } from './journal-service.js';
 import { PostgresRecordingService } from './recording-service.js';
 import { PostgresProcessorService } from './processor-service.js';
+import { PostgresReprocessingService } from './reprocessing-service.js';
 import { PostgresTranscriptService } from './transcript-service.js';
 import { PostgresArtifactService } from './artifact-service.js';
 
@@ -108,6 +109,7 @@ const app = createApiApp({
     boss,
   ),
   processorService: new PostgresProcessorService(database.database),
+  reprocessingService: new PostgresReprocessingService(database.database, boss),
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

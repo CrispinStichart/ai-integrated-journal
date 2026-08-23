@@ -186,7 +186,11 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
   ): Promise<void> {
     const runId = canonical.run.id;
     try {
-      await this.#repository.markRunning(runId, this.now());
+      if (!(await this.#repository.markRunning(runId, this.now())))
+        throw new QueueJobError(
+          'canceled',
+          'Processor run became ineligible before execution.',
+        );
       const timeoutSignal = AbortSignal.timeout(
         canonical.definition.resourceLimits.maxRuntimeMs,
       );

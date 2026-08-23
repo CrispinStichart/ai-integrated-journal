@@ -63,6 +63,11 @@ export default defineConfig({
         // real transactions; its rollback and persistence behavior is covered
         // by the separately gated Testcontainers integration suite.
         'apps/api/src/processor-service.ts',
+        // Reprocessing planning resolves owner-scoped targets, exact immutable
+        // versions, transactional queue insertion, progress, cancellation,
+        // audit history, and idempotency against real PostgreSQL. Its behavior
+        // is covered by the separately gated Testcontainers integration suite.
+        'apps/api/src/reprocessing-service.ts',
         // Transcription coordinates PostgreSQL row locks, streamed immutable
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.

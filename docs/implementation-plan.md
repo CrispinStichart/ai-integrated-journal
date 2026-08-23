@@ -336,7 +336,7 @@ Implement create, update, supersede, remove/supersede, and unchanged outcomes. A
 
 Add correction, split, merge, delete, confirmation, and manual override behavior. Generated results never overwrite active manual authority. Conflicts become reviewable generated candidates.
 
-### 36. Reprocessing orchestration
+### 36. Reprocessing orchestration - FINISHED
 
 Support contribution, day, date-range, processor, and version scopes with impact preview, approximate provider-operation count, progress, cancellation, audit history, and explicit processor-version basis.
 

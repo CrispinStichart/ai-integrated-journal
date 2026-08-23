@@ -352,6 +352,7 @@ export async function enqueueProcessorRun(input: {
   readonly target: ProcessorRunTarget;
   readonly requestedConfiguration?: Readonly<Record<string, unknown>>;
   readonly retryTerminal?: boolean;
+  readonly forceReprocess?: boolean;
   readonly now?: Date;
   readonly createId?: () => string;
 }): Promise<ProcessorRunRecord> {
@@ -385,6 +386,16 @@ export async function enqueueProcessorRun(input: {
     promptTemplateHash: published.version.promptTemplateHash,
     requestedConfiguration,
   });
+  // Attempt numbers are unique per immutable version/target. Serialize the
+  // read-and-increment boundary so concurrent retries or reprocessing batches
+  // create linked attempts instead of racing on the uniqueness constraint.
+  await input.transaction.execute(sql`
+    select pg_advisory_xact_lock(
+      hashtext(
+        ${`${published.version.id}:${input.target.scope}:${input.target.journalDayId}:${input.target.contributionId ?? ''}`}
+      )
+    )
+  `);
   const [latest] = await input.transaction
     .select()
     .from(processorRuns)
@@ -403,11 +414,13 @@ export async function enqueueProcessorRun(input: {
   if (
     latest !== undefined &&
     latest.inputFingerprint === inputFingerprint &&
-    !input.retryTerminal
+    !input.retryTerminal &&
+    !input.forceReprocess
   )
     return latest;
   if (
     latest !== undefined &&
+    !input.forceReprocess &&
     input.retryTerminal &&
     latest.inputFingerprint !== inputFingerprint
   )
@@ -416,6 +429,7 @@ export async function enqueueProcessorRun(input: {
     );
   if (
     latest !== undefined &&
+    !input.forceReprocess &&
     latest.inputFingerprint === inputFingerprint &&
     latest.status !== 'failed' &&
     latest.status !== 'canceled'
@@ -921,8 +935,8 @@ export class ProcessorRuntimeRepository {
     return { ...row, definition, sources, bundle };
   }
 
-  public async markRunning(runId: string, now = new Date()): Promise<void> {
-    await this.database
+  public async markRunning(runId: string, now = new Date()): Promise<boolean> {
+    const [started] = await this.database
       .update(processorRuns)
       .set({
         status: 'running',
@@ -938,7 +952,9 @@ export class ProcessorRuntimeRepository {
           eq(processorRuns.id, runId),
           inArray(processorRuns.status, ['queued', 'failed']),
         ),
-      );
+      )
+      .returning({ id: processorRuns.id });
+    return started !== undefined;
   }
 
   public async markCanceled(runId: string, now = new Date()): Promise<void> {
@@ -968,7 +984,9 @@ export class ProcessorRuntimeRepository {
         completedAt: now,
         updatedAt: now,
       })
-      .where(eq(processorRuns.id, runId));
+      .where(
+        and(eq(processorRuns.id, runId), eq(processorRuns.status, 'running')),
+      );
   }
 
   public async complete(input: {
