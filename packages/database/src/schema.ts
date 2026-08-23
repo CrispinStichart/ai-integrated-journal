@@ -631,9 +631,10 @@ export const transcriptRevisions = journalSchema.table(
     transcriptId: uuid('transcript_id')
       .notNull()
       .references(() => transcripts.id, { onDelete: 'restrict' }),
-    sourceRunId: uuid('source_run_id')
-      .notNull()
-      .references(() => transcriptionRuns.id, { onDelete: 'restrict' }),
+    sourceRunId: uuid('source_run_id').references(() => transcriptionRuns.id, {
+      onDelete: 'restrict',
+    }),
+    sourceRevisionId: uuid('source_revision_id'),
     revision: integer('revision').notNull(),
     text: text('text').notNull(),
     segments: jsonb('segments')
@@ -646,6 +647,10 @@ export const transcriptRevisions = journalSchema.table(
       .$type<Readonly<Record<string, unknown>>>()
       .notNull(),
     authority: contributionAuthority('authority').notNull(),
+    authorId: uuid('author_id').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    editReason: text('edit_reason'),
     contentHash: text('content_hash').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -656,7 +661,10 @@ export const transcriptRevisions = journalSchema.table(
       table.transcriptId,
       table.revision,
     ),
-    uniqueIndex('transcript_revision_source_run_unique').on(table.sourceRunId),
+    uniqueIndex('transcript_revision_source_run_unique')
+      .on(table.sourceRunId)
+      .where(sql`${table.sourceRunId} is not null`),
+    index('transcript_revision_source_revision_idx').on(table.sourceRevisionId),
     index('transcript_revision_history_idx').on(
       table.transcriptId,
       table.revision,
@@ -669,6 +677,142 @@ export const transcriptRevisions = journalSchema.table(
     check(
       'transcript_revision_content_hash_sha256',
       sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcript_revision_source_exactly_one',
+      sql`num_nonnulls(${table.sourceRunId}, ${table.sourceRevisionId}) = 1`,
+    ),
+    check(
+      'transcript_revision_authority_consistent',
+      sql`(${table.authority} = 'manual' and ${table.authorId} is not null) or (${table.authority} = 'generated' and ${table.authorId} is null)`,
+    ),
+    foreignKey({
+      columns: [table.sourceRevisionId],
+      foreignColumns: [table.id],
+      name: 'transcript_revision_source_revision_id_fk',
+    }).onDelete('restrict'),
+  ],
+);
+
+export const transcriptCleanupRuns = journalSchema.table(
+  'transcript_cleanup_run',
+  {
+    id: uuid('id').primaryKey(),
+    recordingId: uuid('recording_id')
+      .notNull()
+      .references(() => recordings.id, { onDelete: 'restrict' }),
+    sourceCorrectedRevisionId: uuid('source_corrected_revision_id')
+      .notNull()
+      .references(() => transcriptRevisions.id, { onDelete: 'restrict' }),
+    outputCleanedRevisionId: uuid('output_cleaned_revision_id').references(
+      () => transcriptRevisions.id,
+      { onDelete: 'restrict' },
+    ),
+    predecessorRunId: uuid('predecessor_run_id'),
+    attempt: integer('attempt').notNull(),
+    executionCount: integer('execution_count').notNull().default(0),
+    status: transcriptionRunStatus('status').notNull().default('queued'),
+    inputFingerprint: text('input_fingerprint').notNull(),
+    promptId: text('prompt_id').notNull(),
+    promptVersion: text('prompt_version').notNull(),
+    promptTemplateHash: text('prompt_template_hash').notNull(),
+    requestedConfiguration: jsonb('requested_configuration')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull()
+      .default({}),
+    provider: jsonb('provider').$type<Readonly<Record<string, unknown>>>(),
+    model: jsonb('model').$type<Readonly<Record<string, unknown>>>(),
+    effectiveConfiguration: jsonb('effective_configuration').$type<
+      Readonly<Record<string, unknown>>
+    >(),
+    processingTimeMilliseconds: bigint('processing_time_milliseconds', {
+      mode: 'bigint',
+    }),
+    usage: jsonb('usage').$type<Readonly<Record<string, unknown>>>(),
+    rawResponseId: uuid('raw_response_id'),
+    rawResponseBlobKey: text('raw_response_blob_key'),
+    rawResponseMediaType: text('raw_response_media_type'),
+    rawResponseByteSize: bigint('raw_response_byte_size', { mode: 'bigint' }),
+    rawResponseSha256: text('raw_response_sha256'),
+    rawResponseProviderRequestId: text('raw_response_provider_request_id'),
+    rawResponseRetention: text('raw_response_retention'),
+    rawResponseExpiresAt: timestamp('raw_response_expires_at', {
+      withTimezone: true,
+    }),
+    errorCode: text('error_code'),
+    errorRetryable: boolean('error_retryable'),
+    queuedAt: timestamp('queued_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('transcript_cleanup_run_revision_attempt_unique').on(
+      table.sourceCorrectedRevisionId,
+      table.attempt,
+    ),
+    uniqueIndex('transcript_cleanup_run_output_revision_unique')
+      .on(table.outputCleanedRevisionId)
+      .where(sql`${table.outputCleanedRevisionId} is not null`),
+    uniqueIndex('transcript_cleanup_run_raw_response_id_unique')
+      .on(table.rawResponseId)
+      .where(sql`${table.rawResponseId} is not null`),
+    uniqueIndex('transcript_cleanup_run_raw_response_blob_key_unique')
+      .on(table.rawResponseBlobKey)
+      .where(sql`${table.rawResponseBlobKey} is not null`),
+    index('transcript_cleanup_run_recording_status_idx').on(
+      table.recordingId,
+      table.status,
+    ),
+    foreignKey({
+      columns: [table.predecessorRunId],
+      foreignColumns: [table.id],
+      name: 'transcript_cleanup_run_predecessor_run_id_fk',
+    }).onDelete('restrict'),
+    check(
+      'transcript_cleanup_run_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('transcript_cleanup_run_attempt_positive', sql`${table.attempt} > 0`),
+    check(
+      'transcript_cleanup_run_execution_count_nonnegative',
+      sql`${table.executionCount} >= 0`,
+    ),
+    check(
+      'transcript_cleanup_run_input_fingerprint_valid',
+      sql`${table.inputFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcript_cleanup_run_prompt_hash_valid',
+      sql`${table.promptTemplateHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcript_cleanup_run_prompt_fields_not_blank',
+      sql`length(${table.promptId}) > 0 and length(${table.promptVersion}) > 0`,
+    ),
+    check(
+      'transcript_cleanup_run_raw_response_sha256_valid',
+      sql`${table.rawResponseSha256} is null or ${table.rawResponseSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcript_cleanup_run_error_consistent',
+      sql`(${table.status} = 'failed' and ${table.errorCode} is not null and ${table.errorRetryable} is not null) or (${table.status} <> 'failed' and ${table.errorCode} is null and ${table.errorRetryable} is null)`,
+    ),
+    check(
+      'transcript_cleanup_run_completion_consistent',
+      sql`(${table.status} in ('succeeded', 'failed', 'canceled') and ${table.completedAt} is not null) or (${table.status} in ('queued', 'running') and ${table.completedAt} is null)`,
+    ),
+    check(
+      'transcript_cleanup_run_output_consistent',
+      sql`(${table.status} = 'succeeded' and ${table.outputCleanedRevisionId} is not null) or (${table.status} <> 'succeeded' and ${table.outputCleanedRevisionId} is null)`,
+    ),
+    check(
+      'transcript_cleanup_run_raw_response_consistent',
+      sql`(${table.rawResponseId} is null and ${table.rawResponseBlobKey} is null and ${table.rawResponseMediaType} is null and ${table.rawResponseByteSize} is null and ${table.rawResponseSha256} is null and ${table.rawResponseRetention} is null and ${table.rawResponseExpiresAt} is null) or (${table.rawResponseId} is not null and ${table.rawResponseBlobKey} is not null and ${table.rawResponseMediaType} is not null and ${table.rawResponseByteSize} is not null and ${table.rawResponseSha256} is not null and ${table.rawResponseRetention} is not null and ${table.rawResponseExpiresAt} is not null)`,
     ),
   ],
 );

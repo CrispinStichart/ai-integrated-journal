@@ -18,6 +18,10 @@ import {
   transcripts,
 } from './schema.js';
 import { inTransaction } from './transaction.js';
+import {
+  enqueueTranscriptCleanup,
+  type CleanupPromptSnapshot,
+} from './transcript-cleanup-repository.js';
 
 export const TRANSCRIPTION_JOB_OPERATION = 'transcribe_recording' as const;
 
@@ -173,6 +177,11 @@ export type CanonicalTranscriptionInput = Readonly<{
 export type PersistedTranscriptionSuccess = Readonly<{
   transcriptId: string;
   revisionId: string;
+  correctedTranscriptId: string;
+  correctedRevisionId: string;
+  cleanupRunId: string;
+  cleanupPrompt: CleanupPromptSnapshot;
+  cleanupConfiguration: Readonly<Record<string, unknown>>;
   rawResponseId: string;
   rawResponseBlobKey: string;
   rawResponseMediaType: string;
@@ -280,6 +289,7 @@ export class TranscriptionRepository {
   }
 
   public async complete(
+    boss: PgBoss,
     runId: string,
     result: PersistedTranscriptionSuccess,
   ): Promise<void> {
@@ -345,6 +355,65 @@ export class TranscriptionRepository {
           updatedAt: result.now,
         })
         .where(eq(transcripts.id, transcript.id));
+
+      const [existingCorrected] = await transaction
+        .select()
+        .from(transcripts)
+        .where(
+          and(
+            eq(transcripts.recordingId, canonical.recording.id),
+            eq(transcripts.layer, 'corrected'),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (existingCorrected === undefined) {
+        const [correctedTranscript] = await transaction
+          .insert(transcripts)
+          .values({
+            id: result.correctedTranscriptId,
+            recordingId: canonical.recording.id,
+            layer: 'corrected',
+            createdAt: result.now,
+            updatedAt: result.now,
+          })
+          .returning();
+        if (correctedTranscript === undefined) {
+          throw new TranscriptionStateError(
+            'Corrected transcript was not created.',
+          );
+        }
+        await transaction.insert(transcriptRevisions).values({
+          id: result.correctedRevisionId,
+          transcriptId: correctedTranscript.id,
+          sourceRevisionId: result.revisionId,
+          revision: 1,
+          text: result.text,
+          segments: result.segments,
+          language: result.language,
+          timingAvailability: result.timingAvailability,
+          authority: 'generated',
+          contentHash: sha256(result.text),
+          createdAt: result.now,
+        });
+        await transaction
+          .update(transcripts)
+          .set({
+            currentRevisionId: result.correctedRevisionId,
+            currentRevision: 1,
+            updatedAt: result.now,
+          })
+          .where(eq(transcripts.id, correctedTranscript.id));
+        await enqueueTranscriptCleanup({
+          boss,
+          transaction,
+          sourceCorrectedRevisionId: result.correctedRevisionId,
+          prompt: result.cleanupPrompt,
+          requestedConfiguration: result.cleanupConfiguration,
+          now: result.now,
+          createId: () => result.cleanupRunId,
+        });
+      }
       await transaction
         .update(transcriptionRuns)
         .set({

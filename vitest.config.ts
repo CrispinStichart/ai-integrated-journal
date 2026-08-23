@@ -57,8 +57,8 @@ export default defineConfig({
         // Transcription coordinates PostgreSQL row locks, streamed immutable
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.
-        'apps/worker/src/{raw-response-store,transcription-pipeline}.ts',
-        'packages/database/src/transcription-repository.ts',
+        'apps/worker/src/{raw-response-store,transcription-pipeline,transcript-cleanup-pipeline}.ts',
+        'packages/database/src/{transcription-repository,transcript-cleanup-repository}.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

@@ -128,7 +128,7 @@ describe('WORKER queue runtime boundaries', () => {
 
     await provisionQueueFoundation(boss, databaseClient());
 
-    expect(boss.createQueue).toHaveBeenCalledTimes(6);
+    expect(boss.createQueue).toHaveBeenCalledTimes(allQueueDefinitions.length);
     expect(boss.schedule).toHaveBeenCalledWith(
       queueNames.maintenance,
       '0 * * * *',

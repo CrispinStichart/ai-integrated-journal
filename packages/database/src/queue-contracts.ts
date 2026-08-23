@@ -7,6 +7,7 @@ export const QUEUE_PAYLOAD_SCHEMA_VERSION = 1;
 
 export const queueNames = {
   backup: 'journal.backup',
+  cleanup: 'journal.cleanup',
   deadLetter: 'journal.dead-letter',
   maintenance: 'journal.maintenance',
   notifications: 'journal.notifications',
@@ -79,6 +80,19 @@ export const queueDefinitions: Readonly<Record<QueueName, QueueDefinition>> =
         retryLimit: 5,
       },
       1,
+    ),
+    [queueNames.cleanup]: queueDefinition(
+      queueNames.cleanup,
+      {
+        deadLetter: queueNames.deadLetter,
+        deleteAfterSeconds: 30 * 24 * 60 * 60,
+        expireInSeconds: 30 * 60,
+        retentionSeconds: 30 * 24 * 60 * 60,
+        retryBackoff: true,
+        retryDelay: 30,
+        retryLimit: 5,
+      },
+      2,
     ),
     [queueNames.maintenance]: queueDefinition(
       queueNames.maintenance,

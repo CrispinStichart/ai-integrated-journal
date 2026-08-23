@@ -30,6 +30,7 @@ export {
   recordings,
   recordingUploads,
   sessions,
+  transcriptCleanupRuns,
   transcriptionRuns,
   transcriptRevisions,
   transcripts,
@@ -64,6 +65,20 @@ export {
   type TranscriptionRecordingRecord,
   type TranscriptionRunRecord,
 } from './transcription-repository.js';
+export {
+  appendCorrectedTranscriptRevision,
+  enqueueTranscriptCleanup,
+  TRANSCRIPT_CLEANUP_JOB_OPERATION,
+  TranscriptCleanupRepository,
+  TranscriptCleanupStateError,
+  TranscriptRevisionConflictError,
+  type CanonicalTranscriptCleanupInput,
+  type CleanupPromptSnapshot,
+  type PersistedTranscriptCleanupSuccess,
+  type TranscriptCleanupRunRecord,
+  type TranscriptRecord,
+  type TranscriptRevisionRecord,
+} from './transcript-cleanup-repository.js';
 export {
   allQueueDefinitions,
   createJobFingerprint,

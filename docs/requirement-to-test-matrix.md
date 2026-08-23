@@ -1,7 +1,7 @@
 # Requirement-to-test matrix
 
-- Status: Maintained through the Phase 2 text-journal milestone
-- Date: 2026-08-16
+- Status: Maintained through Phase 4 Task 28
+- Date: 2026-08-23
 - Normative source: [`AI-Integrated-Journaling-Application-Specification.md`](../AI-Integrated-Journaling-Application-Specification.md)
 - Delivery source: [`implementation-plan.md`](implementation-plan.md)
 
@@ -69,7 +69,7 @@ Status values are:
 | DATA-013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: durable linked nudge responses. | 16–19, 43 | Complete local release | Planned |
 | DATA-020–021 | `apps/api/test/recording-service.integration.ts`, `apps/api/test/recording-routes.test.ts`, storage adapter contracts, and `apps/web/test/recording-sync.test.ts` cover preallocated recording identity, immutable streamed finalization, Journal Day recording projection, and conflicting/resumable retry behavior. Reload/suspension E2E remains in `AUDIO`. | 21–25 | Audio journal | Partial |
 | DATA-022–023 | `packages/test-support/test/fake-ai.test.ts` and `apps/worker/test/transcription-pipeline.integration.ts` cover immutable exact raw bytes plus persisted normalized provider/model/configuration/context/language/timing metadata and append-only raw revisions. | 26–27 | Transcript journal | Verified |
-| DATA-024–026 | `TRANSCRIPT`: distinct raw/corrected/cleaned layers and append-only editable history. | 28–30 | Transcript journal | Planned |
+| DATA-024–026 | `apps/worker/test/transcription-pipeline.integration.ts` covers distinct logical raw/corrected/cleaned artifacts, generated initialization, append-only manual correction history, exact corrected-revision cleanup inputs, immutable prior revisions, and cleanup retry lineage. Transcript API/UI proof remains in Task 30. | 28–30 | Transcript journal | Partial |
 | DATA-027–028 | `packages/test-support/test/fake-ai.test.ts` and `apps/worker/test/transcription-pipeline.integration.ts` cover persisted timed and explicitly untimed valid provider results; retained seek behavior remains in Tasks 29–30. | 26, 27, 29, 30 | Transcript journal | Partial |
 | DATA-030 | `PROCESSOR`: validate every required processor-definition field and stable identity/current-version behavior. | 31 | AI journal | Planned |
 | DATA-031 | `PROCESSOR`: persist and inspect every common-envelope field, direct input, authority, staleness, and provenance field. | 31–35 | AI journal | Planned |
@@ -176,7 +176,7 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-002 | `apps/web/test/recording-sync.test.ts` covers accepted-index recovery, stable identity, missing-only upload, and durable-gated cleanup; `AUDIO`/`RELEASE-E2E` still interrupt a real upload, reopen/reconnect, and assert one durable recording. | 24, 25, 51 | Audio journal | Partial |
 | AC-003 | `apps/api/test/text-journal-milestone.integration.ts` proves that worker/provider failure leaves typed sources durable and editable across restart; repeat with an original recording after audio/STT milestones. | 20, 25, 30, 51 | Source-only partial; transcript journal complete | Partial |
 | AC-010 | `TRANSCRIPT`, `RELEASE-E2E`: inspect audio and three explicitly distinct transcript layers. | 30, 51 | Transcript journal | Planned |
-| AC-011 | `TRANSCRIPT`: correction leaves raw bytes/text unchanged and stales exact dependents. | 28–30 | Transcript journal | Planned |
+| AC-011 | `apps/worker/test/transcription-pipeline.integration.ts` proves a correction leaves raw text/provider bytes unchanged and produces cleanup from the exact new corrected revision; dependency staleness and UI proof remain in Tasks 29–30. | 28–30 | Transcript journal | Partial |
 | AC-012 | `packages/test-support/test/fake-ai.test.ts` proves timed and untimed provider fixtures; `TRANSCRIPT` and `RELEASE-E2E` still cover audio seeking. | 26, 29, 30, 51 | Transcript journal | Partial |
 | AC-020 | `BUILTINS`: exact burrito/Nicolette fixture yields no user consumption. | 38 | AI journal | Planned |
 | AC-021 | `BUILTINS`: pizza clarification reconciles to one logical event. | 38 | AI journal | Planned |

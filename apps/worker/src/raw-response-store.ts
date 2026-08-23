@@ -7,7 +7,11 @@ import {
   type RawResponseStore,
   type RawResponseWrite,
 } from '@journal/ai';
-import { transcriptionRuns, type JournalDatabase } from '@journal/database';
+import {
+  transcriptCleanupRuns,
+  transcriptionRuns,
+  type JournalDatabase,
+} from '@journal/database';
 import { BlobNotFoundError, type BlobStore } from '@journal/storage';
 import { eq } from 'drizzle-orm';
 
@@ -102,7 +106,7 @@ export class BlobRawResponseStore implements RawResponseStore {
   }
 
   public async open(id: string): Promise<RawProviderResponse> {
-    const [run] = await this.database
+    const [transcriptionRun] = await this.database
       .select({
         blobKey: transcriptionRuns.rawResponseBlobKey,
         mediaType: transcriptionRuns.rawResponseMediaType,
@@ -111,6 +115,20 @@ export class BlobRawResponseStore implements RawResponseStore {
       .from(transcriptionRuns)
       .where(eq(transcriptionRuns.rawResponseId, id))
       .limit(1);
+    const [cleanupRun] =
+      transcriptionRun === undefined
+        ? await this.database
+            .select({
+              blobKey: transcriptCleanupRuns.rawResponseBlobKey,
+              mediaType: transcriptCleanupRuns.rawResponseMediaType,
+              providerRequestId:
+                transcriptCleanupRuns.rawResponseProviderRequestId,
+            })
+            .from(transcriptCleanupRuns)
+            .where(eq(transcriptCleanupRuns.rawResponseId, id))
+            .limit(1)
+        : [];
+    const run = transcriptionRun ?? cleanupRun;
     if (run?.blobKey === null || run?.mediaType === null || run === undefined) {
       throw new RawResponseNotAvailableError();
     }

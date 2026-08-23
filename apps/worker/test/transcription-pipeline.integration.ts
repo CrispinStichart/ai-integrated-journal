@@ -5,13 +5,16 @@ import path from 'node:path';
 
 import { AiProviderFactoryRegistry } from '@journal/ai';
 import {
+  appendCorrectedTranscriptRevision,
   contributions,
   createDatabaseClient,
+  enqueueTranscriptCleanup,
   enqueueTranscriptionRun,
   inTransaction,
   journalDays,
   migrateDatabase,
   recordings,
+  transcriptCleanupRuns,
   transcriptionRuns,
   transcriptRevisions,
   transcripts,
@@ -25,11 +28,15 @@ import {
   createDeterministicAiProviderFactory,
   createPostgresTestContainer,
 } from '@journal/test-support';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { BlobRawResponseStore } from '../src/raw-response-store.js';
+import {
+  TRANSCRIPT_CLEANUP_PROMPT,
+  TranscriptCleanupJobHandler,
+} from '../src/transcript-cleanup-pipeline.js';
 import { TranscriptionJobHandler } from '../src/transcription-pipeline.js';
 
 function sha256(value: Uint8Array): string {
@@ -120,7 +127,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       await rm(blobRoot, { recursive: true, force: true });
   });
 
-  it('[STT-001][DATA-022][DATA-023][DATA-027][MODEL-002] streams durable audio and preserves exact raw and normalized lineage', async () => {
+  it('[STT-001][DATA-022][DATA-023][DATA-024][DATA-025][DATA-026][ARCH-004][AC-011][MODEL-002] preserves distinct raw, corrected, and cleaned revision lineage', async () => {
     const context = [
       { text: 'Nicolette', purpose: 'approved vocabulary', version: '3' },
     ] as const;
@@ -152,6 +159,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     ]);
     const handler = new TranscriptionJobHandler(
       client,
+      boss,
       blobs,
       () =>
         registry.resolve(
@@ -173,7 +181,21 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     const [transcript] = await client.database
       .select()
       .from(transcripts)
-      .where(eq(transcripts.recordingId, recordingId));
+      .where(
+        and(
+          eq(transcripts.recordingId, recordingId),
+          eq(transcripts.layer, 'raw_stt'),
+        ),
+      );
+    const [correctedTranscript] = await client.database
+      .select()
+      .from(transcripts)
+      .where(
+        and(
+          eq(transcripts.recordingId, recordingId),
+          eq(transcripts.layer, 'corrected'),
+        ),
+      );
     const [revision] = await client.database
       .select()
       .from(transcriptRevisions)
@@ -218,9 +240,213 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     expect(new TextDecoder().decode(exact.body)).toBe(
       `{"byte_length":${String(audio.byteLength)},"language":"en","text":"hello journal","timestamps":true}`,
     );
+
+    expect(correctedTranscript).toMatchObject({
+      recordingId,
+      layer: 'corrected',
+      currentRevision: 1,
+    });
+    const [initialCorrection] = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(
+        eq(
+          transcriptRevisions.id,
+          correctedTranscript?.currentRevisionId ?? '',
+        ),
+      );
+    expect(initialCorrection).toMatchObject({
+      sourceRunId: null,
+      sourceRevisionId: revision?.id,
+      text: 'hello journal',
+      authority: 'generated',
+      authorId: null,
+    });
+    expect(queuedPayload).toMatchObject({
+      operation: 'clean_transcript',
+      identifiers: { sourceRevisionId: initialCorrection?.id },
+    });
+
+    const cleanupRegistry = new AiProviderFactoryRegistry([
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-cleanup',
+        structuredOutput: { cleanedText: 'Hello, journal.' },
+      }),
+    ]);
+    const cleanupHandler = new TranscriptCleanupJobHandler(
+      client,
+      blobs,
+      () =>
+        cleanupRegistry.resolve(
+          { providerId: 'fixture-cleanup', enabled: true, settings: {} },
+          'structured_generation',
+        ),
+      () => now,
+    );
+    if (queuedPayload === undefined) throw new Error('Expected cleanup work.');
+    const cleanupCanonical = await cleanupHandler.load(queuedPayload);
+    if (cleanupCanonical.input === undefined) {
+      throw new Error('Expected runnable cleanup work.');
+    }
+    await cleanupHandler.execute(
+      cleanupCanonical.input,
+      new AbortController().signal,
+    );
+
+    const [cleanedTranscript] = await client.database
+      .select()
+      .from(transcripts)
+      .where(
+        and(
+          eq(transcripts.recordingId, recordingId),
+          eq(transcripts.layer, 'cleaned'),
+        ),
+      );
+    const [firstCleanedRevision] = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(
+        eq(transcriptRevisions.id, cleanedTranscript?.currentRevisionId ?? ''),
+      );
+    expect(firstCleanedRevision).toMatchObject({
+      sourceRunId: null,
+      sourceRevisionId: initialCorrection?.id,
+      text: 'Hello, journal.',
+      authority: 'generated',
+    });
+
+    if (correctedTranscript === undefined || initialCorrection === undefined) {
+      throw new Error('Expected initialized corrected transcript.');
+    }
+    const correction = await appendCorrectedTranscriptRevision({
+      boss,
+      database: client.database,
+      transcriptId: correctedTranscript.id,
+      expectedRevisionId: initialCorrection.id,
+      authorId: ownerId,
+      text: 'Hello Nicolette.',
+      editReason: 'Corrected the name.',
+      prompt: TRANSCRIPT_CLEANUP_PROMPT,
+      now,
+    });
+    expect(correction.revision).toMatchObject({
+      revision: 2,
+      sourceRevisionId: initialCorrection.id,
+      text: 'Hello Nicolette.',
+      authority: 'manual',
+      authorId: ownerId,
+      editReason: 'Corrected the name.',
+    });
+    expect(queuedPayload).toMatchObject({
+      operation: 'clean_transcript',
+      identifiers: { sourceRevisionId: correction.revision.id },
+    });
+
+    const correctedCleanupRegistry = new AiProviderFactoryRegistry([
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-cleanup',
+        structuredOutput: { cleanedText: 'Hello Nicolette.' },
+      }),
+    ]);
+    const correctedCleanupHandler = new TranscriptCleanupJobHandler(
+      client,
+      blobs,
+      () =>
+        correctedCleanupRegistry.resolve(
+          { providerId: 'fixture-cleanup', enabled: true, settings: {} },
+          'structured_generation',
+        ),
+      () => now,
+    );
+    if (queuedPayload === undefined) {
+      throw new Error('Expected corrected cleanup work.');
+    }
+    const correctedCleanupCanonical =
+      await correctedCleanupHandler.load(queuedPayload);
+    if (correctedCleanupCanonical.input === undefined) {
+      throw new Error('Expected runnable corrected cleanup work.');
+    }
+    await correctedCleanupHandler.execute(
+      correctedCleanupCanonical.input,
+      new AbortController().signal,
+    );
+
+    const rawHistory = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(eq(transcriptRevisions.transcriptId, transcript?.id ?? ''));
+    const correctionHistory = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(eq(transcriptRevisions.transcriptId, correctedTranscript.id))
+      .orderBy(asc(transcriptRevisions.revision));
+    const cleanedHistory = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(eq(transcriptRevisions.transcriptId, cleanedTranscript?.id ?? ''))
+      .orderBy(asc(transcriptRevisions.revision));
+    expect(rawHistory).toHaveLength(1);
+    expect(rawHistory[0]?.text).toBe('hello journal');
+    expect(correctionHistory.map(({ text }) => text)).toEqual([
+      'hello journal',
+      'Hello Nicolette.',
+    ]);
+    expect(cleanedHistory).toMatchObject([
+      { sourceRevisionId: initialCorrection.id, text: 'Hello, journal.' },
+      {
+        sourceRevisionId: correction.revision.id,
+        text: 'Hello Nicolette.',
+      },
+    ]);
+    const cleanupRuns = await client.database
+      .select()
+      .from(transcriptCleanupRuns)
+      .where(eq(transcriptCleanupRuns.recordingId, recordingId));
+    expect(cleanupRuns).toHaveLength(2);
+    expect(cleanupRuns.every(({ status }) => status === 'succeeded')).toBe(
+      true,
+    );
+    await expect(
+      appendCorrectedTranscriptRevision({
+        boss,
+        database: client.database,
+        transcriptId: correctedTranscript.id,
+        expectedRevisionId: initialCorrection.id,
+        authorId: ownerId,
+        text: 'Conflicting edit',
+        prompt: TRANSCRIPT_CLEANUP_PROMPT,
+        now,
+      }),
+    ).rejects.toMatchObject({
+      name: 'TranscriptRevisionConflictError',
+      actualRevisionId: correction.revision.id,
+    });
+    const rejectingBoss = {
+      send: async () => null,
+    } as unknown as PgBoss;
+    await expect(
+      appendCorrectedTranscriptRevision({
+        boss: rejectingBoss,
+        database: client.database,
+        transcriptId: correctedTranscript.id,
+        expectedRevisionId: correction.revision.id,
+        authorId: ownerId,
+        text: 'This transaction must roll back.',
+        prompt: TRANSCRIPT_CLEANUP_PROMPT,
+        now,
+      }),
+    ).rejects.toMatchObject({ name: 'QueueFoundationError' });
+    const [afterRejectedQueue] = await client.database
+      .select()
+      .from(transcripts)
+      .where(eq(transcripts.id, correctedTranscript.id));
+    expect(afterRejectedQueue).toMatchObject({
+      currentRevisionId: correction.revision.id,
+      currentRevision: 2,
+    });
   });
 
-  it('[STT-002][DATA-028][MODEL-003] records failure, preserves audio, and retries with explicit unknown timing', async () => {
+  it('[STT-002][ARCH-005][DATA-025][DATA-028][MODEL-003] isolates STT and cleanup failures and retries each stage', async () => {
     const failedRecordingId = createUuidV7<'recording'>({ timestamp: 204_000 });
     const failedContributionId = createUuidV7<'contribution'>({
       timestamp: 205_000,
@@ -263,6 +489,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     if (queuedPayload === undefined) throw new Error('Expected queued work.');
     const unavailable = new TranscriptionJobHandler(
       client,
+      boss,
       blobs,
       async () => ({
         status: 'unavailable',
@@ -315,6 +542,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     ]);
     const retryHandler = new TranscriptionJobHandler(
       client,
+      boss,
       blobs,
       () =>
         retryRegistry.resolve(
@@ -363,6 +591,97 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     expect(preservedFailure).toMatchObject({
       status: 'failed',
       errorCode: 'provider_not_registered',
+    });
+
+    if (queuedPayload === undefined) throw new Error('Expected cleanup work.');
+    const unavailableCleanup = new TranscriptCleanupJobHandler(
+      client,
+      blobs,
+      async () => ({
+        status: 'unavailable',
+        providerId: 'missing',
+        capability: 'structured_generation',
+        reason: 'provider_not_registered',
+      }),
+      () => now,
+    );
+    const cleanupCanonical = await unavailableCleanup.load(queuedPayload);
+    if (cleanupCanonical.input === undefined) {
+      throw new Error('Expected runnable cleanup work.');
+    }
+    const cleanupInput = cleanupCanonical.input;
+    await expect(
+      unavailableCleanup.execute(cleanupInput, new AbortController().signal),
+    ).rejects.toMatchObject({ disposition: 'permanent' });
+
+    const [failedCleanup] = await client.database
+      .select()
+      .from(transcriptCleanupRuns)
+      .where(
+        eq(
+          transcriptCleanupRuns.sourceCorrectedRevisionId,
+          cleanupInput.sourceRevision.id,
+        ),
+      );
+    expect(failedCleanup).toMatchObject({
+      status: 'failed',
+      errorCode: 'provider_not_registered',
+      outputCleanedRevisionId: null,
+    });
+    const retryCleanup = await inTransaction(client.database, (transaction) =>
+      enqueueTranscriptCleanup({
+        boss,
+        transaction,
+        sourceCorrectedRevisionId: cleanupInput.sourceRevision.id,
+        prompt: TRANSCRIPT_CLEANUP_PROMPT,
+        retryTerminal: true,
+        now,
+      }),
+    );
+    expect(retryCleanup).toMatchObject({
+      predecessorRunId: failedCleanup?.id,
+      attempt: 2,
+      status: 'queued',
+    });
+
+    const recoveredCleanupRegistry = new AiProviderFactoryRegistry([
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-cleanup-retry',
+        structuredOutput: { cleanedText: 'Recovered transcript.' },
+      }),
+    ]);
+    const recoveredCleanup = new TranscriptCleanupJobHandler(
+      client,
+      blobs,
+      () =>
+        recoveredCleanupRegistry.resolve(
+          {
+            providerId: 'fixture-cleanup-retry',
+            enabled: true,
+            settings: {},
+          },
+          'structured_generation',
+        ),
+      () => now,
+    );
+    if (queuedPayload === undefined) {
+      throw new Error('Expected retried cleanup work.');
+    }
+    const recoveredCanonical = await recoveredCleanup.load(queuedPayload);
+    if (recoveredCanonical.input === undefined) {
+      throw new Error('Expected runnable retried cleanup work.');
+    }
+    await recoveredCleanup.execute(
+      recoveredCanonical.input,
+      new AbortController().signal,
+    );
+    const [completedCleanup] = await client.database
+      .select()
+      .from(transcriptCleanupRuns)
+      .where(eq(transcriptCleanupRuns.id, retryCleanup.id));
+    expect(completedCleanup).toMatchObject({
+      status: 'succeeded',
+      predecessorRunId: failedCleanup?.id,
     });
   });
 });

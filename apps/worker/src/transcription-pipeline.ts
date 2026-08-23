@@ -28,6 +28,10 @@ import {
   BlobRawResponseStore,
   rawResponseBlobKey,
 } from './raw-response-store.js';
+import {
+  TRANSCRIPT_CLEANUP_CONFIGURATION,
+  TRANSCRIPT_CLEANUP_PROMPT,
+} from './transcript-cleanup-pipeline.js';
 
 const RAW_RESPONSE_RETENTION = 'days_30' satisfies RawResponseRetention;
 const RAW_RESPONSE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60 * 1_000;
@@ -80,6 +84,7 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
 
   public constructor(
     database: DatabaseClient,
+    private readonly boss: PgBoss,
     private readonly blobs: BlobStore,
     private readonly resolveProvider: SpeechProviderResolver,
     private readonly now: () => Date = () => new Date(),
@@ -185,9 +190,14 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
       if (reference.state !== 'retained') {
         throw new PipelineFailure('raw_response_not_retained', false);
       }
-      await this.#repository.complete(runId, {
+      await this.#repository.complete(this.boss, runId, {
         transcriptId: this.createId(),
         revisionId: this.createId(),
+        correctedTranscriptId: this.createId(),
+        correctedRevisionId: this.createId(),
+        cleanupRunId: this.createId(),
+        cleanupPrompt: TRANSCRIPT_CLEANUP_PROMPT,
+        cleanupConfiguration: TRANSCRIPT_CLEANUP_CONFIGURATION,
         rawResponseId,
         rawResponseBlobKey: rawResponseBlobKey('speech_to_text', rawResponseId),
         rawResponseMediaType: reference.mediaType,
@@ -244,6 +254,7 @@ export async function registerTranscriptionConsumer(input: {
     boss: input.boss,
     handler: new TranscriptionJobHandler(
       input.database,
+      input.boss,
       input.blobs,
       input.resolveProvider,
     ),
