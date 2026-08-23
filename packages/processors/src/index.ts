@@ -5,6 +5,7 @@ import type {
 
 export * from './runtime.js';
 export * from './provenance.js';
+export * from './built-ins/food-and-drink.js';
 
 /** Identifies the owning workspace package without exposing implementation paths. */
 export const processorsPackageName = '@journal/processors' as const;

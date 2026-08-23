@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import {
   auditEvents,
+  contributionRevisions,
+  contributions,
   createDatabaseClient,
   inTransaction,
   journalDays,
@@ -11,6 +13,7 @@ import {
   processorArtifacts,
   processorArtifactVersions,
   processorInstallations,
+  processorResultEvidence,
   processorResults,
   processorRuns,
   processorVersions,
@@ -44,6 +47,10 @@ describe('manual artifact editing persistence', () => {
     timestamp: 704_000,
   });
   const artifactId = createUuidV7<'artifact'>({ timestamp: 705_000 });
+  const contributionId = createUuidV7<'contribution'>({ timestamp: 705_100 });
+  const contributionRevisionId = createUuidV7<'contribution-revision'>({
+    timestamp: 705_200,
+  });
   const now = new Date('2026-08-23T18:00:00.000Z');
   const definition = {
     semanticVersion: '1.0.0',
@@ -94,6 +101,30 @@ describe('manual artifact editing persistence', () => {
     await client.database
       .insert(journalDays)
       .values({ id: dayId, userId: ownerId, journalDate: '2026-08-23' });
+    await client.database.insert(contributions).values({
+      id: contributionId,
+      journalDayId: dayId,
+      authorId: ownerId,
+      sourceType: 'typed_text',
+      capturedAt: now,
+      capturedTimezone: 'UTC',
+      journalTimezone: 'UTC',
+      journalDateAssignment: 'default',
+    });
+    await client.database.insert(contributionRevisions).values({
+      id: contributionRevisionId,
+      contributionId,
+      revision: 1,
+      text: 'I drank water at breakfast.',
+      authority: 'manual',
+      authorId: ownerId,
+      contentHash: sha('I drank water at breakfast.'),
+      createdAt: now,
+    });
+    await client.database
+      .update(contributions)
+      .set({ currentRevisionId: contributionRevisionId, currentRevision: 1 })
+      .where(eq(contributions.id, contributionId));
     await client.database.insert(processorInstallations).values({
       id: processorId,
       key: 'artifact-test',
@@ -127,6 +158,9 @@ describe('manual artifact editing persistence', () => {
       inputFingerprint: sha('input'),
       promptAssemblyVersion: 'v1',
       promptTemplateHash: sha('prompt'),
+      provider: { id: 'deterministic', displayName: 'Local fixture' },
+      model: { id: 'food-v2' },
+      processingTimeMilliseconds: 12n,
       queuedAt: now,
       startedAt: now,
       updatedAt: now,
@@ -142,6 +176,22 @@ describe('manual artifact editing persistence', () => {
       payload: {
         items: [{ logicalKey: 'water', amount: 1, context: 'breakfast' }],
       },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await client.database.insert(processorResultEvidence).values({
+      id: createUuidV7<'evidence'>({ timestamp: 707_100 }),
+      processorResultId: resultId,
+      ordinal: 0,
+      sourceLabel: `typed_text:${contributionRevisionId}`,
+      contributionRevisionId,
+      normalization: 'NFC_LF_V1',
+      offsetUnit: 'utf16_code_unit',
+      startUtf16: 0,
+      endUtf16: 13,
+      quote: 'I drank water',
+      quoteHash: sha('I drank water'),
+      resolutionStatus: 'resolved',
       createdAt: now,
       updatedAt: now,
     });
@@ -197,6 +247,22 @@ describe('manual artifact editing persistence', () => {
       authority: 'manual',
       payload: { logicalKey: 'water', amount: 2, context: 'breakfast' },
       overridePaths: ['/amount'],
+      evidence: [
+        {
+          ordinal: 0,
+          sourceType: 'typed_text',
+          sourceRevisionId: contributionRevisionId,
+          quote: 'I drank water',
+          resolutionStatus: 'resolved',
+        },
+      ],
+      provenance: {
+        processorKey: 'artifact-test',
+        processorVersionId,
+        provider: { id: 'deterministic', displayName: 'Local fixture' },
+        model: { id: 'food-v2' },
+        processingTimeMilliseconds: 12,
+      },
     });
     expect(
       (

@@ -117,9 +117,9 @@ Status values are:
 | TIME-004–006 | `DOMAIN-KERNEL`, `BUILTINS`: relative/ambiguous language uses immutable contribution context and retains basis/uncertainty. | 9, 40 | AI journal | Planned |
 | TIME-007 | `DOMAIN-KERNEL`, `PROCESSOR`: corrected date/time remains authoritative through reprocessing. | 9, 35, 40 | AI journal | Planned |
 | SLEEP-001–004 | `BUILTINS`: wake-date default, disclosed correction, distinct naps/periods, and unknown optional fields. | 40 | AI journal | Planned |
-| FOOD-001–002 | `BUILTINS`: consumption and ownership evidence exclude buying/planning/others eating. | 38 | AI journal | Planned |
-| FOOD-003–004 | `BUILTINS`: optional food fields remain semantic values and qualitative quantity is not fabricated. | 38 | AI journal | Planned |
-| FOOD-005–007 | Reconciliation tests cover generic day updates; artifact domain/database/API/UI tests cover atomic manual split/merge/correct/delete/confirm behavior. Food-specific extraction fixtures remain in Task 38. | 34, 35, 38 | AI journal | Partial |
+| FOOD-001–002 | `packages/processors/test/food-and-drink.test.ts` covers the exact AC-020 ownership fixture, consumption-only prompt contract, retained evidence links, and semantic rejection of non-owner events. | 38 | AI journal | Verified |
+| FOOD-003–004 | Food schema/validator tests preserve supported optional fields, omit unknown caffeine/alcohol, retain “some” as qualitative, and reject fabricated normalized precision. The food result-card test preserves those distinctions in the UI. | 38 | AI journal | Verified |
+| FOOD-005–007 | Food-specific stable-key tests reconcile later clarification across the whole day; domain/database/API/UI tests protect field corrections and explicit split/merge/correct/delete/confirm behavior under manual authority. | 34, 35, 38 | AI journal | Verified |
 | MOOD-001–003 | `BUILTINS`: contextual observations remain separate from inspectable aggregate interpretation. | 39 | AI journal | Planned |
 | MOOD-004 | `BUILTINS`: no mention produces insufficient information, never neutral. | 39, 43 | Complete local release | Planned |
 | MOOD-005 | `BUILTINS`, `PROCESSOR`: manual observation/rating values survive reprocessing. | 35, 39 | AI journal | Planned |
@@ -178,8 +178,8 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-010 | `apps/api/test/transcript-service.integration.ts`, `apps/api/test/transcript-routes.test.ts`, and `apps/web/test/transcript-inspector.test.ts` inspect original audio beside explicitly distinct raw STT, corrected, and cleaned artifacts. | 30, 51 | Transcript journal | Verified |
 | AC-011 | `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, and `apps/web/test/transcript-inspector.test.ts` prove a correction leaves raw text/provider bytes unchanged, preserves manual authority/history, marks exact prior cleanup/evidence stale, and visibly queues replacement cleanup. | 28–30 | Transcript journal | Verified |
 | AC-012 | Domain/provider/database/worker evidence tests plus `apps/api/test/transcript-service.integration.ts` and `apps/web/test/transcript-inspector.test.ts` prove exact timed audio navigation and a clear valid-but-timing-unavailable state. | 26, 29, 30, 51 | Transcript journal | Verified |
-| AC-020 | `BUILTINS`: exact burrito/Nicolette fixture yields no user consumption. | 38 | AI journal | Planned |
-| AC-021 | `BUILTINS`: pizza clarification reconciles to one logical event. | 38 | AI journal | Planned |
+| AC-020 | `packages/processors/test/food-and-drink.test.ts`: exact burrito/Nicolette fixture yields an empty consumption-event set. | 38 | AI journal | Verified |
+| AC-021 | `packages/processors/test/food-and-drink.test.ts` and `apps/web/test/artifact-review-panel.test.ts`: pizza clarification retains one stable logical key and renders one event with both exact evidence spans. | 38 | AI journal | Verified |
 | AC-022 | `BUILTINS`: absent mood yields insufficient information and is excluded from averages. | 39, 43 | Complete local release | Planned |
 | AC-023 | `BUILTINS`: morning/evening observations remain separate beneath an inspectable aggregate. | 39 | AI journal | Planned |
 | AC-024 | `BUILTINS`: tentative idea and firm dated obligation retain different classifications. | 41 | AI journal | Planned |

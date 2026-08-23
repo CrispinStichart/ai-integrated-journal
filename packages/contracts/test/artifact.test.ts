@@ -83,6 +83,7 @@ describe('manual artifact contracts', () => {
       manualOperation: 'correct',
       overridePaths: ['/value'],
       candidates: [],
+      evidence: [],
       history: [],
       createdAt: '2026-08-23T18:00:00.000Z',
       updatedAt: '2026-08-23T18:00:00.000Z',

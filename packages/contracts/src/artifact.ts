@@ -55,6 +55,45 @@ export const artifactCandidateSchema = z.strictObject({
   conflictsWithManualVersionId: uuidV7Schema,
   createdAt: utcInstantSchema,
 });
+export const artifactEvidenceSchema = z.strictObject({
+  id: uuidV7Schema,
+  ordinal: z.number().int().nonnegative(),
+  sourceLabel: z.string().min(1),
+  sourceType: z.enum([
+    'typed_text',
+    'corrected_transcript',
+    'cleaned_transcript',
+  ]),
+  sourceRevisionId: uuidV7Schema,
+  normalization: z.literal('NFC_LF_V1'),
+  offsetUnit: z.literal('utf16_code_unit'),
+  startUtf16: z.number().int().nonnegative(),
+  endUtf16: z.number().int().positive(),
+  quote: z.string().min(1),
+  quoteHash: z.string().regex(/^[0-9a-f]{64}$/),
+  resolutionStatus: z.enum(['resolved', 'unresolved', 'stale']),
+  unresolvedReason: z.string().optional(),
+  audioRange: z
+    .strictObject({
+      startMs: z.number().int().nonnegative(),
+      endMs: z.number().int().positive(),
+    })
+    .optional(),
+});
+export const artifactProvenanceSchema = z.strictObject({
+  resultId: uuidV7Schema,
+  runId: uuidV7Schema,
+  processorKey: z.string().min(1),
+  processorName: z.string().min(1),
+  processorVersionId: uuidV7Schema,
+  semanticVersion: z.string().min(1),
+  instructionHash: z.string().regex(/^[0-9a-f]{64}$/),
+  promptTemplateHash: z.string().regex(/^[0-9a-f]{64}$/),
+  provider: jsonObjectSchema.optional(),
+  model: jsonObjectSchema.optional(),
+  processingTimeMilliseconds: z.number().int().nonnegative().optional(),
+  completedAt: utcInstantSchema.optional(),
+});
 export const artifactResourceSchema = z.strictObject({
   id: uuidV7Schema,
   processorId: uuidV7Schema,
@@ -71,6 +110,8 @@ export const artifactResourceSchema = z.strictObject({
   overridePaths: z.array(z.string()),
   generatedCandidate: artifactCandidateSchema.optional(),
   candidates: z.array(artifactCandidateSchema),
+  evidence: z.array(artifactEvidenceSchema),
+  provenance: artifactProvenanceSchema.optional(),
   history: z.array(artifactVersionSchema),
   createdAt: utcInstantSchema,
   updatedAt: utcInstantSchema,

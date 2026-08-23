@@ -2056,6 +2056,7 @@ export const processorResultEvidence = journalSchema.table(
     processorResultId: uuid('processor_result_id')
       .notNull()
       .references(() => processorResults.id, { onDelete: 'restrict' }),
+    ordinal: integer('ordinal').notNull(),
     sourceLabel: text('source_label').notNull(),
     contributionRevisionId: uuid('contribution_revision_id').references(
       () => contributionRevisions.id,
@@ -2085,6 +2086,10 @@ export const processorResultEvidence = journalSchema.table(
       .defaultNow(),
   },
   (table) => [
+    uniqueIndex('processor_result_evidence_result_ordinal_unique').on(
+      table.processorResultId,
+      table.ordinal,
+    ),
     index('processor_result_evidence_result_idx').on(table.processorResultId),
     index('processor_result_evidence_transcript_idx').on(
       table.transcriptRevisionId,
@@ -2092,6 +2097,10 @@ export const processorResultEvidence = journalSchema.table(
     check(
       'processor_result_evidence_id_uuid_v7',
       sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_result_evidence_ordinal_nonnegative',
+      sql`${table.ordinal} >= 0`,
     ),
     check(
       'processor_result_evidence_exactly_one_source',

@@ -1,4 +1,8 @@
 import { createPostgresTestContainer } from '@journal/test-support';
+import {
+  FOOD_AND_DRINK_PROCESSOR_ID,
+  FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+} from '@journal/processors';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -7,6 +11,8 @@ import {
   FoundationRepository,
   inTransaction,
   migrateDatabase,
+  processorInstallations,
+  processorVersions,
   seedDatabase,
   type DatabaseClient,
 } from '../src/index.js';
@@ -52,7 +58,7 @@ describe('DB-JOURNAL foundation', () => {
   });
 
   it('seeds queues, schedules, disabled optional processors, and dev fixtures idempotently', async () => {
-    await seedDatabase(client.database, 'development');
+    const firstSeed = await seedDatabase(client.database, 'development');
     await seedDatabase(client.database, 'development');
 
     const repository = new FoundationRepository(client.database);
@@ -66,14 +72,40 @@ describe('DB-JOURNAL foundation', () => {
     expect(queues).toHaveLength(7);
     expect(schedules).toHaveLength(3);
     expect(processors).toHaveLength(6);
+    expect(firstSeed.processorVersionsRequested).toBe(7);
     expect(processors.every(({ enabled }) => !enabled)).toBe(true);
     expect(
       processors.every(({ requirementMode }) => requirementMode === 'optional'),
     ).toBe(true);
     expect(fixtures.rows).toEqual([
+      { key: 'synthetic-food-and-drink-cases' },
       { key: 'synthetic-journal-day' },
       { key: 'synthetic-owner' },
     ]);
+    const [food] = await client.database
+      .select({
+        currentVersionId: processorInstallations.currentVersionId,
+        semanticVersion: processorVersions.semanticVersion,
+        definition: processorVersions.definition,
+      })
+      .from(processorInstallations)
+      .innerJoin(
+        processorVersions,
+        eq(processorVersions.id, processorInstallations.currentVersionId),
+      )
+      .where(eq(processorInstallations.id, FOOD_AND_DRINK_PROCESSOR_ID));
+    expect(food).toMatchObject({
+      currentVersionId: FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+      semanticVersion: '2.0.0',
+      definition: {
+        input: { scope: 'journal_day' },
+        reconciliation: {
+          strategy: 'logical_key',
+          logicalKey: 'eventKey',
+        },
+        defaultEnabled: false,
+      },
+    });
   });
 
   it('does not insert development fixtures in production or overwrite operator configuration', async () => {

@@ -348,7 +348,7 @@ Distinguish occurrence-only corrections from “correct and remember.” Impleme
 
 After the generic processor contracts are stable, tasks 38–42 may run in parallel in separate worktrees and modules. Each task owns its processor schema, prompt/instructions, deterministic validators, synthetic fixtures, reconciliation tests, UI result cards, and evidence inspection.
 
-### 38. Food and drink processor
+### 38. Food and drink processor - FINISHED
 
 Cover consumption versus mention, ownership, qualitative quantity, whole-day reconciliation, corrections, split/merge behavior, and later clarification. Verify AC-020–021.
 

@@ -22,11 +22,13 @@ import {
 } from '@journal/database';
 import { createUuidV7, DomainInvariantError } from '@journal/domain';
 import {
+  FoodAndDrinkValidationError,
   ProcessorRuntimeValidationError,
   processorGenerationMessages,
   processorOutputJsonSchema,
   validateProcessorOutput,
   type ProposedProcessorOutput,
+  validateBuiltInProcessorOutput,
 } from '@journal/processors';
 import {
   BlobConflictError,
@@ -70,15 +72,18 @@ function classify(error: unknown): ProcessorPipelineFailure {
   if (error instanceof ProcessorPipelineFailure) return error;
   if (
     error instanceof ProcessorRuntimeValidationError ||
+    error instanceof FoodAndDrinkValidationError ||
     error instanceof DomainInvariantError ||
     error instanceof TypeError
   )
     return new ProcessorPipelineFailure(
       error instanceof ProcessorRuntimeValidationError
         ? error.code
-        : error instanceof DomainInvariantError
-          ? 'invalid_reconciliation_output'
-          : 'invalid_provider_result',
+        : error instanceof FoodAndDrinkValidationError
+          ? error.code
+          : error instanceof DomainInvariantError
+            ? 'invalid_reconciliation_output'
+            : 'invalid_provider_result',
       false,
     );
   if (error instanceof BlobConflictError)
@@ -332,6 +337,7 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
         sources: canonical.sources,
         output: proposed,
       });
+      validateBuiltInProcessorOutput(canonical.processor.key, output);
       await this.#repository.complete({
         runId,
         resultId: this.createId(),

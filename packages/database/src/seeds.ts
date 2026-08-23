@@ -1,5 +1,15 @@
-import type { ApplicationEnvironment } from './environment.js';
+import { createHash } from 'node:crypto';
+
+import {
+  FOOD_AND_DRINK_DEFINITION,
+  FOOD_AND_DRINK_PROCESSOR_ID,
+  FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+  FOOD_AND_DRINK_SYNTHETIC_FIXTURES,
+} from '@journal/processors';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+
 import type { JournalDatabase } from './client.js';
+import type { ApplicationEnvironment } from './environment.js';
 import {
   developmentFixtures,
   processorInstallations,
@@ -107,6 +117,8 @@ const processorSeeds: (typeof processorInstallations.$inferInsert)[] = [
     purpose: 'Produce grounded notable-event and accomplishment bullets.',
   },
 ];
+const LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID =
+  '019c5b90-0000-7000-8000-000000000011';
 
 function sha256(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -165,7 +177,7 @@ function builtInDefinition(name: string, kind: string) {
   } as const;
 }
 
-const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] =
+const legacyProcessorVersionSeeds: (typeof processorVersions.$inferInsert)[] =
   processorSeeds.map((processor, index) => {
     const definition = builtInDefinition(
       processor.displayName,
@@ -191,6 +203,28 @@ const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] =
     };
   });
 
+const foodInstructionHash = sha256(FOOD_AND_DRINK_DEFINITION.instructions);
+const foodOutputSchemaHash = sha256(FOOD_AND_DRINK_DEFINITION.outputSchema);
+const foodProcessorVersionSeed: typeof processorVersions.$inferInsert = {
+  id: FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+  processorId: FOOD_AND_DRINK_PROCESSOR_ID,
+  revision: 2,
+  semanticVersion: FOOD_AND_DRINK_DEFINITION.semanticVersion,
+  definition: FOOD_AND_DRINK_DEFINITION,
+  instructionHash: foodInstructionHash,
+  outputSchemaHash: foodOutputSchemaHash,
+  promptTemplateHash: sha256({
+    instructionHash: foodInstructionHash,
+    outputSchemaHash: foodOutputSchemaHash,
+    policy: 'untrusted-journal-data-v1',
+  }),
+};
+
+const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] = [
+  ...legacyProcessorVersionSeeds,
+  foodProcessorVersionSeed,
+];
+
 const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
   {
     key: 'synthetic-owner',
@@ -210,6 +244,15 @@ const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
       journalDate: '2026-01-15',
       ownerFixtureKey: 'synthetic-owner',
       text: 'Synthetic journal fixture sentence.',
+    },
+  },
+  {
+    key: 'synthetic-food-and-drink-cases',
+    fixtureType: 'processor-cases',
+    payloadSchemaVersion: 1,
+    payload: {
+      processorVersionId: FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+      cases: FOOD_AND_DRINK_SYNTHETIC_FIXTURES,
     },
   },
 ];
@@ -244,7 +287,7 @@ export async function seedDatabase(
       .insert(processorVersions)
       .values(processorVersionSeeds)
       .onConflictDoNothing();
-    for (const version of processorVersionSeeds) {
+    for (const version of legacyProcessorVersionSeeds) {
       await transaction
         .update(processorInstallations)
         .set({ currentVersionId: version.id })
@@ -255,6 +298,18 @@ export async function seedDatabase(
           ),
         );
     }
+    await transaction
+      .update(processorInstallations)
+      .set({ currentVersionId: FOOD_AND_DRINK_PROCESSOR_VERSION_ID })
+      .where(
+        and(
+          eq(processorInstallations.id, FOOD_AND_DRINK_PROCESSOR_ID),
+          inArray(processorInstallations.currentVersionId, [
+            LEGACY_FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+            FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+          ]),
+        ),
+      );
 
     const requestedDevelopmentFixtures =
       appEnvironment === 'development' ? developmentFixtureSeeds : [];
@@ -274,6 +329,3 @@ export async function seedDatabase(
     });
   });
 }
-import { createHash } from 'node:crypto';
-
-import { and, eq, isNull } from 'drizzle-orm';

@@ -32,6 +32,7 @@ const artifact: ArtifactResource = {
   manualOperation: 'correct',
   overridePaths: ['/amount'],
   candidates: [],
+  evidence: [],
   history: [
     {
       id: RESULT_ID,

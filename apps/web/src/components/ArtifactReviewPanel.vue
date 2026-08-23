@@ -34,6 +34,65 @@ const active = computed(() =>
 );
 const items = computed(() => query.data.value ?? []);
 
+function isFoodArtifact(artifact: ArtifactResource): boolean {
+  return artifact.provenance?.processorKey === 'food-and-drink';
+}
+
+function textField(
+  payload: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = payload[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function foodQuantity(artifact: ArtifactResource): string | undefined {
+  const quantity = artifact.payload.quantity;
+  if (
+    quantity === null ||
+    typeof quantity !== 'object' ||
+    Array.isArray(quantity)
+  )
+    return undefined;
+  const record = quantity as Readonly<Record<string, unknown>>;
+  const quantityText =
+    typeof record.text === 'string' ? record.text : undefined;
+  const normalized = record.normalizedQuantity;
+  if (
+    normalized === null ||
+    typeof normalized !== 'object' ||
+    Array.isArray(normalized)
+  )
+    return quantityText;
+  const value = (normalized as Readonly<Record<string, unknown>>).value;
+  const unit = (normalized as Readonly<Record<string, unknown>>).unit;
+  return quantityText === undefined ||
+    typeof value !== 'number' ||
+    typeof unit !== 'string'
+    ? quantityText
+    : quantityText + ' (' + String(value) + ' ' + unit + ')';
+}
+
+function artifactEvidence(artifact: ArtifactResource) {
+  const ordinals = artifact.payload.evidenceOrdinals;
+  if (!Array.isArray(ordinals)) return artifact.evidence;
+  const selected = new Set(
+    ordinals.filter((value): value is number => Number.isSafeInteger(value)),
+  );
+  return artifact.evidence.filter(({ ordinal }) => selected.has(ordinal));
+}
+
+function lineageLabel(value: Readonly<Record<string, unknown>> | undefined) {
+  if (value === undefined) return undefined;
+  const displayName = value.displayName;
+  const id = value.id;
+  return typeof displayName === 'string'
+    ? displayName
+    : typeof id === 'string'
+      ? id
+      : 'Recorded';
+}
+
 function csrfToken(): string {
   const token = auth.status.value?.csrfToken;
   if (token === undefined)
@@ -273,7 +332,61 @@ async function split(artifact: ArtifactResource): Promise<void> {
                 >Deleted</span
               ></span
             >
+            <div
+              v-if="isFoodArtifact(artifact)"
+              class="mt-3 rounded-box bg-base-200 p-4"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-lg font-semibold">
+                  {{ textField(artifact.payload, 'description') }}
+                </h3>
+                <span class="badge">{{
+                  textField(artifact.payload, 'classification')?.replaceAll(
+                    '_',
+                    ' ',
+                  )
+                }}</span>
+                <span
+                  v-if="
+                    textField(artifact.payload, 'certainty') === 'uncertain'
+                  "
+                  class="badge badge-warning badge-soft"
+                  >Uncertain</span
+                >
+              </div>
+              <dl class="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                <div v-if="foodQuantity(artifact)">
+                  <dt class="font-medium">Quantity</dt>
+                  <dd>{{ foodQuantity(artifact) }}</dd>
+                </div>
+                <div v-if="textField(artifact.payload, 'meal')">
+                  <dt class="font-medium">Meal</dt>
+                  <dd>{{ textField(artifact.payload, 'meal') }}</dd>
+                </div>
+                <div v-if="textField(artifact.payload, 'timeOfDay')">
+                  <dt class="font-medium">Time of day</dt>
+                  <dd>{{ textField(artifact.payload, 'timeOfDay') }}</dd>
+                </div>
+                <div v-if="textField(artifact.payload, 'ownership')">
+                  <dt class="font-medium">Consumption</dt>
+                  <dd>
+                    {{
+                      textField(artifact.payload, 'ownership') === 'shared'
+                        ? 'Shared by you'
+                        : 'Consumed by you'
+                    }}
+                  </dd>
+                </div>
+              </dl>
+              <p
+                v-if="textField(artifact.payload, 'notes')"
+                class="mt-3 text-sm text-base-content/70"
+              >
+                {{ textField(artifact.payload, 'notes') }}
+              </p>
+            </div>
             <pre
+              v-else
               class="mt-3 max-h-48 overflow-auto rounded-box bg-base-200 p-3 text-xs whitespace-pre-wrap"
               >{{ JSON.stringify(artifact.payload, null, 2) }}</pre>
             <div
@@ -344,6 +457,74 @@ async function split(artifact: ArtifactResource): Promise<void> {
                     {{ candidate.status }} · revision {{ candidate.versionId }}
                   </li>
                 </ol>
+              </div>
+            </details>
+            <details
+              v-if="artifact.evidence.length > 0 || artifact.provenance"
+              class="collapse collapse-arrow mt-3 bg-base-200"
+            >
+              <summary class="collapse-title text-sm font-medium">
+                Evidence and processing details
+              </summary>
+              <div class="collapse-content space-y-4">
+                <ul
+                  v-if="artifactEvidence(artifact).length > 0"
+                  class="space-y-3"
+                  aria-label="Supporting evidence"
+                >
+                  <li
+                    v-for="evidence in artifactEvidence(artifact)"
+                    :key="evidence.id"
+                    class="rounded-box border border-base-300 bg-base-100 p-3"
+                  >
+                    <blockquote class="font-medium">
+                      “{{ evidence.quote }}”
+                    </blockquote>
+                    <p class="mt-1 break-all text-xs text-base-content/70">
+                      {{ evidence.sourceType.replaceAll('_', ' ') }} revision
+                      {{ evidence.sourceRevisionId }} · UTF-16
+                      {{ evidence.startUtf16 }}–{{ evidence.endUtf16 }} ·
+                      {{ evidence.resolutionStatus }}
+                    </p>
+                    <p
+                      v-if="evidence.audioRange"
+                      class="mt-1 text-xs text-base-content/70"
+                    >
+                      Audio {{ evidence.audioRange.startMs }}–{{
+                        evidence.audioRange.endMs
+                      }}
+                      ms
+                    </p>
+                  </li>
+                </ul>
+                <p v-else class="text-sm text-base-content/70">
+                  No evidence spans are attached to this result.
+                </p>
+                <dl v-if="artifact.provenance" class="space-y-1 text-xs">
+                  <div>
+                    <dt class="inline font-medium">Processor:</dt>
+                    <dd class="inline">
+                      {{ artifact.provenance.processorName }} version
+                      {{ artifact.provenance.semanticVersion }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Provider/model:</dt>
+                    <dd class="inline">
+                      {{
+                        lineageLabel(artifact.provenance.provider) ?? 'Unknown'
+                      }}
+                      /
+                      {{ lineageLabel(artifact.provenance.model) ?? 'Unknown' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Processor version ID:</dt>
+                    <dd class="inline break-all">
+                      {{ artifact.provenance.processorVersionId }}
+                    </dd>
+                  </div>
+                </dl>
               </div>
             </details>
             <div class="mt-3 flex flex-wrap gap-2">

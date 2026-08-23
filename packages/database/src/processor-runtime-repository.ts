@@ -1085,9 +1085,10 @@ export class ProcessorRuntimeRepository {
         );
       if (input.output.evidence.length > 0) {
         const persistedEvidence: (typeof processorResultEvidence.$inferInsert)[] =
-          input.output.evidence.map((evidence) => ({
+          input.output.evidence.map((evidence, ordinal) => ({
             id: createId(),
             processorResultId: result.id,
+            ordinal,
             sourceLabel: evidence.sourceLabel,
             ...(evidence.sourceType === 'typed_text'
               ? { contributionRevisionId: evidence.sourceRevisionId }

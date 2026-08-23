@@ -9,6 +9,13 @@ import {
   processorArtifactManualRevisions,
   processorArtifacts,
   processorArtifactVersions,
+  processorInstallations,
+  processorResultEvidence,
+  processorResults,
+  processorRuns,
+  processorVersions,
+  transcriptRevisions,
+  transcripts,
   type JournalDatabase,
   type JournalTransaction,
 } from '@journal/database';
@@ -173,6 +180,77 @@ async function resource(
     activeManual?.operation === 'delete' ||
     activeManual?.operation === 'split_source' ||
     activeManual?.operation === 'merge_source';
+  const basisResultId =
+    activeGenerated?.sourceResultId ?? generatedBasis?.sourceResultId;
+  const evidence =
+    basisResultId === undefined
+      ? []
+      : await context
+          .select({
+            evidence: processorResultEvidence,
+            transcriptLayer: transcripts.layer,
+          })
+          .from(processorResultEvidence)
+          .leftJoin(
+            processorResults,
+            eq(processorResults.id, processorResultEvidence.processorResultId),
+          )
+          .leftJoin(
+            processorArtifactVersions,
+            eq(processorArtifactVersions.sourceResultId, processorResults.id),
+          )
+          .leftJoin(
+            transcriptRevisions,
+            eq(
+              transcriptRevisions.id,
+              processorResultEvidence.transcriptRevisionId,
+            ),
+          )
+          .leftJoin(
+            transcripts,
+            eq(transcripts.id, transcriptRevisions.transcriptId),
+          )
+          .where(
+            and(
+              eq(processorResultEvidence.processorResultId, basisResultId),
+              eq(processorArtifactVersions.artifactId, artifactId),
+            ),
+          )
+          .orderBy(asc(processorResultEvidence.ordinal));
+  const [provenance] =
+    basisResultId === undefined
+      ? []
+      : await context
+          .select({
+            resultId: processorResults.id,
+            runId: processorRuns.id,
+            processorKey: processorInstallations.key,
+            processorName: processorInstallations.displayName,
+            processorVersionId: processorVersions.id,
+            semanticVersion: processorVersions.semanticVersion,
+            instructionHash: processorVersions.instructionHash,
+            promptTemplateHash: processorRuns.promptTemplateHash,
+            provider: processorRuns.provider,
+            model: processorRuns.model,
+            processingTimeMilliseconds:
+              processorRuns.processingTimeMilliseconds,
+            completedAt: processorRuns.completedAt,
+          })
+          .from(processorResults)
+          .innerJoin(
+            processorRuns,
+            eq(processorRuns.id, processorResults.runId),
+          )
+          .innerJoin(
+            processorVersions,
+            eq(processorVersions.id, processorResults.processorVersionId),
+          )
+          .innerJoin(
+            processorInstallations,
+            eq(processorInstallations.id, processorResults.processorId),
+          )
+          .where(eq(processorResults.id, basisResultId))
+          .limit(1);
   return artifactResourceSchema.parse({
     id: row.artifact.id,
     processorId: row.artifact.processorId,
@@ -217,6 +295,65 @@ async function resource(
       conflictsWithManualVersionId: item.conflictsWithManualRevisionId,
       createdAt: item.createdAt.toISOString(),
     })),
+    evidence: evidence.map(({ evidence: item, transcriptLayer }) => ({
+      id: item.id,
+      ordinal: item.ordinal,
+      sourceLabel: item.sourceLabel,
+      sourceType:
+        item.contributionRevisionId === null
+          ? transcriptLayer === 'cleaned'
+            ? 'cleaned_transcript'
+            : 'corrected_transcript'
+          : 'typed_text',
+      sourceRevisionId:
+        item.contributionRevisionId ?? (item.transcriptRevisionId as string),
+      normalization: item.normalization,
+      offsetUnit: item.offsetUnit,
+      startUtf16: item.startUtf16,
+      endUtf16: item.endUtf16,
+      quote: item.quote,
+      quoteHash: item.quoteHash,
+      resolutionStatus: item.resolutionStatus,
+      ...(item.unresolvedReason === null
+        ? {}
+        : { unresolvedReason: item.unresolvedReason }),
+      ...(item.startMs === null || item.endMs === null
+        ? {}
+        : {
+            audioRange: {
+              startMs: Number(item.startMs),
+              endMs: Number(item.endMs),
+            },
+          }),
+    })),
+    ...(provenance === undefined
+      ? {}
+      : {
+          provenance: {
+            resultId: provenance.resultId,
+            runId: provenance.runId,
+            processorKey: provenance.processorKey,
+            processorName: provenance.processorName,
+            processorVersionId: provenance.processorVersionId,
+            semanticVersion: provenance.semanticVersion,
+            instructionHash: provenance.instructionHash,
+            promptTemplateHash: provenance.promptTemplateHash,
+            ...(provenance.provider === null
+              ? {}
+              : { provider: provenance.provider }),
+            ...(provenance.model === null ? {} : { model: provenance.model }),
+            ...(provenance.processingTimeMilliseconds === null
+              ? {}
+              : {
+                  processingTimeMilliseconds: Number(
+                    provenance.processingTimeMilliseconds,
+                  ),
+                }),
+            ...(provenance.completedAt === null
+              ? {}
+              : { completedAt: provenance.completedAt.toISOString() }),
+          },
+        }),
     history: [
       ...generated.map((item) => ({
         id: item.id,

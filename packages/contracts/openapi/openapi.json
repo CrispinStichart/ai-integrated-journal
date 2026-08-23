@@ -2910,6 +2910,193 @@
                     "additionalProperties": false
                   }
                 },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "sourceLabel": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": [
+                          "typed_text",
+                          "corrected_transcript",
+                          "cleaned_transcript"
+                        ]
+                      },
+                      "sourceRevisionId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "normalization": {
+                        "type": "string",
+                        "const": "NFC_LF_V1"
+                      },
+                      "offsetUnit": {
+                        "type": "string",
+                        "const": "utf16_code_unit"
+                      },
+                      "startUtf16": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "endUtf16": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quoteHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "resolutionStatus": {
+                        "type": "string",
+                        "enum": [
+                          "resolved",
+                          "unresolved",
+                          "stale"
+                        ]
+                      },
+                      "unresolvedReason": {
+                        "type": "string"
+                      },
+                      "audioRange": {
+                        "type": "object",
+                        "properties": {
+                          "startMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "startMs",
+                          "endMs"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "ordinal",
+                      "sourceLabel",
+                      "sourceType",
+                      "sourceRevisionId",
+                      "normalization",
+                      "offsetUnit",
+                      "startUtf16",
+                      "endUtf16",
+                      "quote",
+                      "quoteHash",
+                      "resolutionStatus"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "resultId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "runId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "processorKey": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "processorName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "processorVersionId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "semanticVersion": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "instructionHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "promptTemplateHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "provider": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "model": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "processingTimeMilliseconds": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "UTC RFC 3339 instant with a trailing Z."
+                    }
+                  },
+                  "required": [
+                    "resultId",
+                    "runId",
+                    "processorKey",
+                    "processorName",
+                    "processorVersionId",
+                    "semanticVersion",
+                    "instructionHash",
+                    "promptTemplateHash"
+                  ],
+                  "additionalProperties": false
+                },
                 "history": {
                   "type": "array",
                   "items": {
@@ -3032,6 +3219,7 @@
                 "payload",
                 "overridePaths",
                 "candidates",
+                "evidence",
                 "history",
                 "createdAt",
                 "updatedAt"
@@ -3373,6 +3561,193 @@
                     "additionalProperties": false
                   }
                 },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "ordinal": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "sourceLabel": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sourceType": {
+                        "type": "string",
+                        "enum": [
+                          "typed_text",
+                          "corrected_transcript",
+                          "cleaned_transcript"
+                        ]
+                      },
+                      "sourceRevisionId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "normalization": {
+                        "type": "string",
+                        "const": "NFC_LF_V1"
+                      },
+                      "offsetUnit": {
+                        "type": "string",
+                        "const": "utf16_code_unit"
+                      },
+                      "startUtf16": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "endUtf16": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "quoteHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "resolutionStatus": {
+                        "type": "string",
+                        "enum": [
+                          "resolved",
+                          "unresolved",
+                          "stale"
+                        ]
+                      },
+                      "unresolvedReason": {
+                        "type": "string"
+                      },
+                      "audioRange": {
+                        "type": "object",
+                        "properties": {
+                          "startMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "endMs": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "startMs",
+                          "endMs"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "ordinal",
+                      "sourceLabel",
+                      "sourceType",
+                      "sourceRevisionId",
+                      "normalization",
+                      "offsetUnit",
+                      "startUtf16",
+                      "endUtf16",
+                      "quote",
+                      "quoteHash",
+                      "resolutionStatus"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "provenance": {
+                  "type": "object",
+                  "properties": {
+                    "resultId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "runId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "processorKey": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "processorName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "processorVersionId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "semanticVersion": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "instructionHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "promptTemplateHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "provider": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "model": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "processingTimeMilliseconds": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "UTC RFC 3339 instant with a trailing Z."
+                    }
+                  },
+                  "required": [
+                    "resultId",
+                    "runId",
+                    "processorKey",
+                    "processorName",
+                    "processorVersionId",
+                    "semanticVersion",
+                    "instructionHash",
+                    "promptTemplateHash"
+                  ],
+                  "additionalProperties": false
+                },
                 "history": {
                   "type": "array",
                   "items": {
@@ -3495,6 +3870,7 @@
                 "payload",
                 "overridePaths",
                 "candidates",
+                "evidence",
                 "history",
                 "createdAt",
                 "updatedAt"
@@ -3763,6 +4139,193 @@
               "additionalProperties": false
             }
           },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "ordinal": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "sourceLabel": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceType": {
+                  "type": "string",
+                  "enum": [
+                    "typed_text",
+                    "corrected_transcript",
+                    "cleaned_transcript"
+                  ]
+                },
+                "sourceRevisionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "normalization": {
+                  "type": "string",
+                  "const": "NFC_LF_V1"
+                },
+                "offsetUnit": {
+                  "type": "string",
+                  "const": "utf16_code_unit"
+                },
+                "startUtf16": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "endUtf16": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "quote": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "quoteHash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "resolutionStatus": {
+                  "type": "string",
+                  "enum": [
+                    "resolved",
+                    "unresolved",
+                    "stale"
+                  ]
+                },
+                "unresolvedReason": {
+                  "type": "string"
+                },
+                "audioRange": {
+                  "type": "object",
+                  "properties": {
+                    "startMs": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "endMs": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "startMs",
+                    "endMs"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "ordinal",
+                "sourceLabel",
+                "sourceType",
+                "sourceRevisionId",
+                "normalization",
+                "offsetUnit",
+                "startUtf16",
+                "endUtf16",
+                "quote",
+                "quoteHash",
+                "resolutionStatus"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "resultId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "runId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "processorKey": {
+                "type": "string",
+                "minLength": 1
+              },
+              "processorName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "processorVersionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "semanticVersion": {
+                "type": "string",
+                "minLength": 1
+              },
+              "instructionHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "promptTemplateHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "provider": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "model": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "processingTimeMilliseconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "resultId",
+              "runId",
+              "processorKey",
+              "processorName",
+              "processorVersionId",
+              "semanticVersion",
+              "instructionHash",
+              "promptTemplateHash"
+            ],
+            "additionalProperties": false
+          },
           "history": {
             "type": "array",
             "items": {
@@ -3885,6 +4448,7 @@
           "payload",
           "overridePaths",
           "candidates",
+          "evidence",
           "history",
           "createdAt",
           "updatedAt"

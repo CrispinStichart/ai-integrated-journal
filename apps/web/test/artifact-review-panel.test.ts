@@ -65,6 +65,7 @@ function artifact(id = ARTIFACT_ID): ArtifactResource {
         createdAt: NOW,
       },
     ],
+    evidence: [],
     history: [
       {
         id: '019c5b90-0000-7000-8000-000000000026',
@@ -92,6 +93,82 @@ function artifact(id = ARTIFACT_ID): ArtifactResource {
     ],
     createdAt: NOW,
     updatedAt: NOW,
+  };
+}
+
+function foodArtifact(): ArtifactResource {
+  const {
+    manualOperation: _manualOperation,
+    generatedCandidate: _generatedCandidate,
+    ...base
+  } = artifact();
+  void _manualOperation;
+  void _generatedCandidate;
+  return {
+    ...base,
+    authority: 'generated',
+    overridePaths: [],
+    candidates: [],
+    logicalKey: 'string:lunch-pizza',
+    payload: {
+      eventKey: 'lunch-pizza',
+      description: 'pepperoni pizza',
+      classification: 'food',
+      ownership: 'self',
+      certainty: 'known',
+      meal: 'lunch',
+      quantity: {
+        text: 'two slices',
+        kind: 'exact',
+        normalizedQuantity: { value: 2, unit: 'slice' },
+      },
+      evidenceOrdinals: [0, 1],
+    },
+    evidence: [
+      {
+        id: '019c5b90-0000-7000-8000-000000000030',
+        ordinal: 0,
+        sourceLabel: 'typed_text:019c5b90-0000-7000-8000-000000000031',
+        sourceType: 'typed_text',
+        sourceRevisionId: '019c5b90-0000-7000-8000-000000000031',
+        normalization: 'NFC_LF_V1',
+        offsetUnit: 'utf16_code_unit',
+        startUtf16: 0,
+        endUtf16: 21,
+        quote: 'I had pizza for lunch',
+        quoteHash: 'd'.repeat(64),
+        resolutionStatus: 'resolved',
+      },
+      {
+        id: '019c5b90-0000-7000-8000-000000000032',
+        ordinal: 1,
+        sourceLabel:
+          'corrected_transcript:019c5b90-0000-7000-8000-000000000033',
+        sourceType: 'corrected_transcript',
+        sourceRevisionId: '019c5b90-0000-7000-8000-000000000033',
+        normalization: 'NFC_LF_V1',
+        offsetUnit: 'utf16_code_unit',
+        startUtf16: 0,
+        endUtf16: 36,
+        quote: 'it was two slices of pepperoni pizza',
+        quoteHash: 'e'.repeat(64),
+        resolutionStatus: 'resolved',
+        audioRange: { startMs: 1200, endMs: 4400 },
+      },
+    ],
+    provenance: {
+      resultId: '019c5b90-0000-7000-8000-000000000034',
+      runId: '019c5b90-0000-7000-8000-000000000035',
+      processorKey: 'food-and-drink',
+      processorName: 'Food and drink',
+      processorVersionId: '019c5b90-0000-7000-8000-000000000021',
+      semanticVersion: '2.0.0',
+      instructionHash: 'a'.repeat(64),
+      promptTemplateHash: 'b'.repeat(64),
+      provider: { id: 'fixture', displayName: 'Fixture provider' },
+      model: { id: 'fixture-model' },
+      processingTimeMilliseconds: 12,
+    },
   };
 }
 
@@ -137,6 +214,23 @@ describe('artifact review UI', () => {
     expect(wrapper.text()).toContain('Generated candidate needs review');
     expect(wrapper.text()).toContain('Your manual value is still active');
     expect(wrapper.text()).toContain('Revision and provenance history');
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[FOOD-003][PROV-001][PROV-004][AC-021] presents one readable food card with exact evidence and processor lineage', async () => {
+    const { wrapper, queryClient } = mountPanel([foodArtifact()]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('pepperoni pizza');
+    expect(wrapper.text()).toContain('two slices (2 slice)');
+    expect(wrapper.text()).toContain('Consumed by you');
+    expect(wrapper.text()).toContain('Evidence and processing details');
+    expect(wrapper.text()).toContain('I had pizza for lunch');
+    expect(wrapper.text()).toContain('it was two slices of pepperoni pizza');
+    expect(wrapper.text()).toContain('Audio 1200–4400 ms');
+    expect(wrapper.text()).toContain('Food and drink version 2.0.0');
+    expect(wrapper.text()).toContain('Fixture provider / fixture-model');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();
