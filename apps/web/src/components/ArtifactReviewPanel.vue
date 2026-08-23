@@ -38,6 +38,18 @@ function isFoodArtifact(artifact: ArtifactResource): boolean {
   return artifact.provenance?.processorKey === 'food-and-drink';
 }
 
+function isMoodArtifact(artifact: ArtifactResource): boolean {
+  return (
+    artifact.provenance?.processorKey === 'mood' &&
+    (artifact.payload.artifactType === 'mood_observation' ||
+      artifact.payload.artifactType === 'daily_mood_aggregate')
+  );
+}
+
+function isMoodAggregate(artifact: ArtifactResource): boolean {
+  return artifact.payload.artifactType === 'daily_mood_aggregate';
+}
+
 function textField(
   payload: Readonly<Record<string, unknown>>,
   key: string,
@@ -71,6 +83,35 @@ function foodQuantity(artifact: ArtifactResource): string | undefined {
     typeof unit !== 'string'
     ? quantityText
     : quantityText + ' (' + String(value) + ' ' + unit + ')';
+}
+
+function objectField(
+  payload: Readonly<Record<string, unknown>>,
+  key: string,
+): Readonly<Record<string, unknown>> | undefined {
+  const value = payload[key];
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
+}
+
+function moodSemanticLabel(
+  payload: Readonly<Record<string, unknown>>,
+  key: 'rating' | 'valence',
+): string {
+  const semantic = objectField(payload, key);
+  const state = semantic?.state;
+  const value = semantic?.value;
+  if (state === 'unknown') return 'Unknown';
+  if (state === 'neutral') return 'Explicitly neutral';
+  if (state === 'known' && typeof value === 'number')
+    return `${String(value)} / 5`;
+  if (state === 'known' && typeof value === 'string')
+    return value.replaceAll('_', ' ');
+  if (state === 'uncertain' && value !== undefined)
+    return `Uncertain: ${String(value)}`;
+  if (state === 'uncertain') return 'Uncertain';
+  return 'Not recorded';
 }
 
 function artifactEvidence(artifact: ArtifactResource) {
@@ -384,6 +425,90 @@ async function split(artifact: ArtifactResource): Promise<void> {
               >
                 {{ textField(artifact.payload, 'notes') }}
               </p>
+            </div>
+            <div
+              v-else-if="isMoodArtifact(artifact)"
+              class="card card-border mt-3 bg-base-200"
+            >
+              <div class="card-body">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="card-title">
+                    {{
+                      isMoodAggregate(artifact)
+                        ? 'Daily mood aggregate'
+                        : textField(artifact.payload, 'characterization')
+                    }}
+                  </h3>
+                  <span class="badge badge-outline">{{
+                    isMoodAggregate(artifact)
+                      ? 'Interpretation'
+                      : 'Mood observation'
+                  }}</span>
+                  <span
+                    v-if="
+                      textField(artifact.payload, 'certainty') === 'uncertain'
+                    "
+                    class="badge badge-warning badge-soft"
+                    >Uncertain</span
+                  >
+                </div>
+                <div
+                  v-if="
+                    isMoodAggregate(artifact) &&
+                    textField(artifact.payload, 'informationStatus') ===
+                      'insufficient_information'
+                  "
+                  role="status"
+                  class="alert alert-info alert-soft"
+                >
+                  <div>
+                    <strong>Insufficient information</strong>
+                    <p class="text-sm">
+                      Mood was not established. This is unknown, not neutral,
+                      and is excluded from numerical averages.
+                    </p>
+                  </div>
+                </div>
+                <dl
+                  v-else
+                  class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2"
+                >
+                  <div v-if="isMoodAggregate(artifact)">
+                    <dt class="font-medium">Overall rating</dt>
+                    <dd>{{ moodSemanticLabel(artifact.payload, 'rating') }}</dd>
+                  </div>
+                  <div v-else>
+                    <dt class="font-medium">Valence</dt>
+                    <dd>
+                      {{ moodSemanticLabel(artifact.payload, 'valence') }}
+                    </dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'timePeriod')">
+                    <dt class="font-medium">Time period</dt>
+                    <dd>{{ textField(artifact.payload, 'timePeriod') }}</dd>
+                  </div>
+                  <div v-if="textField(artifact.payload, 'context')">
+                    <dt class="font-medium">Context</dt>
+                    <dd>{{ textField(artifact.payload, 'context') }}</dd>
+                  </div>
+                </dl>
+                <p
+                  v-if="textField(artifact.payload, 'summary')"
+                  class="text-sm"
+                >
+                  {{ textField(artifact.payload, 'summary') }}
+                </p>
+                <p
+                  v-if="objectField(artifact.payload, 'derivation')?.ruleId"
+                  class="text-xs text-base-content/70"
+                >
+                  Disclosed derivation rule:
+                  {{ objectField(artifact.payload, 'derivation')?.ruleId }}
+                </p>
+                <p class="text-xs text-base-content/70">
+                  Journaling analysis, not a clinical assessment.
+                </p>
+              </div>
             </div>
             <pre
               v-else

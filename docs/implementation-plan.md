@@ -352,7 +352,7 @@ After the generic processor contracts are stable, tasks 38–42 may run in paral
 
 Cover consumption versus mention, ownership, qualitative quantity, whole-day reconciliation, corrections, split/merge behavior, and later clarification. Verify AC-020–021.
 
-### 39. Mood processor
+### 39. Mood processor - FINISHED
 
 Preserve multiple contextual observations, keep the daily aggregate separate, distinguish unknown from neutral, protect manual ratings, and prohibit clinical claims. Verify AC-022–023.
 

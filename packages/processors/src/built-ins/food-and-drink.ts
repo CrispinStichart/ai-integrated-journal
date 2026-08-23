@@ -213,15 +213,6 @@ export function validateFoodAndDrinkOutput(
   }
 }
 
-/** Routes immutable built-in semantic checks after generic schema validation. */
-export function validateBuiltInProcessorOutput(
-  processorKey: string,
-  output: Pick<ProposedProcessorOutput, 'payload' | 'evidence'>,
-): void {
-  if (processorKey === FOOD_AND_DRINK_PROCESSOR_KEY)
-    validateFoodAndDrinkOutput(output);
-}
-
 export interface FoodAndDrinkSyntheticFixture {
   readonly id: string;
   readonly sources: readonly string[];

@@ -172,6 +172,129 @@ function foodArtifact(): ArtifactResource {
   };
 }
 
+function moodEvidence() {
+  return [
+    {
+      id: '019c5b90-0000-7000-8000-000000000040',
+      ordinal: 0,
+      sourceLabel: 'typed_text:019c5b90-0000-7000-8000-000000000041',
+      sourceType: 'typed_text' as const,
+      sourceRevisionId: '019c5b90-0000-7000-8000-000000000041',
+      normalization: 'NFC_LF_V1' as const,
+      offsetUnit: 'utf16_code_unit' as const,
+      startUtf16: 2,
+      endUtf16: 29,
+      quote: 'felt awful and discouraged',
+      quoteHash: 'f'.repeat(64),
+      resolutionStatus: 'resolved' as const,
+    },
+    {
+      id: '019c5b90-0000-7000-8000-000000000042',
+      ordinal: 1,
+      sourceLabel: 'corrected_transcript:019c5b90-0000-7000-8000-000000000043',
+      sourceType: 'corrected_transcript' as const,
+      sourceRevisionId: '019c5b90-0000-7000-8000-000000000043',
+      normalization: 'NFC_LF_V1' as const,
+      offsetUnit: 'utf16_code_unit' as const,
+      startUtf16: 13,
+      endUtf16: 35,
+      quote: 'felt hopeful and happy',
+      quoteHash: '0'.repeat(64),
+      resolutionStatus: 'resolved' as const,
+      audioRange: { startMs: 800, endMs: 3200 },
+    },
+  ];
+}
+
+function moodProvenance() {
+  return {
+    resultId: '019c5b90-0000-7000-8000-000000000044',
+    runId: '019c5b90-0000-7000-8000-000000000045',
+    processorKey: 'mood',
+    processorName: 'Mood',
+    processorVersionId: '019c5b90-0000-7000-8000-000000000022',
+    semanticVersion: '2.0.0',
+    instructionHash: '1'.repeat(64),
+    promptTemplateHash: '2'.repeat(64),
+    provider: { id: 'fixture', displayName: 'Fixture provider' },
+    model: { id: 'fixture-mood-model' },
+    processingTimeMilliseconds: 18,
+  };
+}
+
+function moodObservationArtifact(): ArtifactResource {
+  const base = foodArtifact();
+  return {
+    ...base,
+    id: '019c5b90-0000-7000-8000-000000000046',
+    logicalKey: 'string:morning-discouraged',
+    payload: {
+      eventKey: 'morning-discouraged',
+      artifactType: 'mood_observation',
+      characterization: 'awful and discouraged',
+      valence: { state: 'known', value: 'negative' },
+      certainty: 'known',
+      timePeriod: 'morning',
+      context: 'before work',
+      clinicalFrame: 'journaling_analysis',
+      evidenceOrdinals: [0],
+    },
+    evidence: moodEvidence(),
+    provenance: moodProvenance(),
+  };
+}
+
+function moodAggregateArtifact(
+  insufficientInformation = false,
+): ArtifactResource {
+  const base = foodArtifact();
+  return {
+    ...base,
+    id: '019c5b90-0000-7000-8000-000000000047',
+    logicalKey: 'string:daily-mood-aggregate',
+    authority: insufficientInformation ? 'generated' : 'manual',
+    overridePaths: insufficientInformation ? [] : ['/rating'],
+    ...(insufficientInformation
+      ? {}
+      : {
+          generatedCandidate: {
+            id: '019c5b90-0000-7000-8000-000000000048',
+            versionId: '019c5b90-0000-7000-8000-000000000048',
+            payload: { rating: { state: 'known', value: 3 } },
+            payloadHash: '3'.repeat(64),
+            status: 'reviewable',
+            conflictsWithManualVersionId:
+              '019c5b90-0000-7000-8000-000000000049',
+            createdAt: NOW,
+          },
+        }),
+    payload: insufficientInformation
+      ? {
+          eventKey: 'daily-mood-aggregate',
+          artifactType: 'daily_mood_aggregate',
+          informationStatus: 'insufficient_information',
+          rating: { state: 'unknown' },
+          clinicalFrame: 'journaling_analysis',
+          evidenceOrdinals: [],
+        }
+      : {
+          eventKey: 'daily-mood-aggregate',
+          artifactType: 'daily_mood_aggregate',
+          informationStatus: 'known',
+          rating: { state: 'known', value: 4 },
+          summary: 'Mood changed across the day.',
+          derivation: {
+            ruleId: 'contextual-observations-scale-1-5-v1',
+            disclosed: true,
+          },
+          clinicalFrame: 'journaling_analysis',
+          evidenceOrdinals: [0, 1],
+        },
+    evidence: insufficientInformation ? [] : moodEvidence(),
+    provenance: moodProvenance(),
+  };
+}
+
 function mountPanel(items: readonly ArtifactResource[] = [artifact()]) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -231,6 +354,51 @@ describe('artifact review UI', () => {
     expect(wrapper.text()).toContain('Audio 1200–4400 ms');
     expect(wrapper.text()).toContain('Food and drink version 2.0.0');
     expect(wrapper.text()).toContain('Fixture provider / fixture-model');
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[AC-023][MOOD-001–003][MOOD-005][MOOD-006][PROV-001] presents contextual observations and a separate manual aggregate with exact evidence and non-clinical framing', async () => {
+    const { wrapper, queryClient } = mountPanel([
+      moodObservationArtifact(),
+      moodAggregateArtifact(),
+    ]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('awful and discouraged');
+    expect(wrapper.text()).toContain('Mood observation');
+    expect(wrapper.text()).toContain('Time period');
+    expect(wrapper.text()).toContain('morning');
+    expect(wrapper.text()).toContain('Context');
+    expect(wrapper.text()).toContain('before work');
+    expect(wrapper.text()).toContain('Daily mood aggregate');
+    expect(wrapper.text()).toContain('Interpretation');
+    expect(wrapper.text()).toContain('Overall rating');
+    expect(wrapper.text()).toContain('4 / 5');
+    expect(wrapper.text()).toContain('Mood changed across the day.');
+    expect(wrapper.text()).toContain('Disclosed derivation rule:');
+    expect(wrapper.text()).toContain('contextual-observations-scale-1-5-v1');
+    expect(wrapper.text()).toContain(
+      'Journaling analysis, not a clinical assessment.',
+    );
+    expect(wrapper.text()).toContain('Manual authority');
+    expect(wrapper.text()).toContain('Your manual value is still active.');
+    expect(wrapper.text()).toContain('felt awful and discouraged');
+    expect(wrapper.text()).toContain('felt hopeful and happy');
+    expect(wrapper.text()).toContain('Audio 800–3200 ms');
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[AC-022][MOOD-004][SEM-002][SEM-004] labels absent mood as unknown insufficient information rather than neutral', async () => {
+    const { wrapper, queryClient } = mountPanel([moodAggregateArtifact(true)]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Insufficient information');
+    expect(wrapper.text()).toContain(
+      'This is unknown, not neutral, and is excluded from numerical averages.',
+    );
+    expect(wrapper.text()).not.toContain('Explicitly neutral');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();

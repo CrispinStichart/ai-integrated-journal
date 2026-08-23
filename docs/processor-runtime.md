@@ -41,3 +41,27 @@ separate approved command, and later processing retains generated disagreement
 as a reviewable candidate. Newly queued STT runs include only approved visible
 transcription memories and bind their exact immutable revision IDs in the
 existing context snapshot and input fingerprint.
+
+## Built-in mood contract
+
+The version-2 mood processor consumes the complete Journal Day and reconciles
+logical-key items. Every contextual statement is an independent
+`mood_observation` artifact with exact evidence. The single reserved
+`daily-mood-aggregate` item is a separately inspectable interpretation; it does
+not replace morning, evening, or otherwise changing observations. This shape
+also lets an active manual aggregate rating remain authoritative while unrelated
+generated observations continue to reconcile normally.
+
+The aggregate rating is a tagged semantic value. No observation produces
+`informationStatus: "insufficient_information"` and `{ state: "unknown" }`,
+with no fabricated evidence. Explicitly neutral mood uses `{ state: "neutral" }`.
+Only `{ state: "known", value: number }` is eligible for numerical averages;
+unknown, neutral, and uncertain states are excluded unless a future versioned
+rule explicitly discloses imputation. Known aggregates must cite evidence also
+cited by their source observations and record a disclosed derivation rule.
+
+The immutable instructions and deterministic validator both require
+`clinicalFrame: "journaling_analysis"`. They reject clinical or diagnostic
+claims before persistence. The UI repeats the non-clinical framing and shows
+the exact source revisions, UTF-16 ranges, quotes, optional audio ranges,
+processor version, provider, and model used for every result.

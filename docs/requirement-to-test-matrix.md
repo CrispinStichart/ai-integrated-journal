@@ -110,8 +110,8 @@ Status values are:
 | NUDGE-005–006 | `NUDGE`: digest consolidation, limits, answer/defer/dismiss/not-applicable, and durable response linkage. | 43 | Complete local release | Planned |
 | NUDGE-007 | `NUDGE`, `RELEASE-E2E`: failure is visually and semantically distinct from omitted information. | 43, 51 | Complete local release | Planned |
 | SEM-001 | `DOMAIN-KERNEL`, `CONTRACT`: property-based round trips preserve every ADR-0003 tagged state including known zero. | 9, 10 | Foundation | Planned |
-| SEM-002–003 | `DOMAIN-KERNEL`, `BUILTINS`: absent mood/food/other domains never become neutral, none, or zero. | 9, 38, 39 | AI journal | Planned |
-| SEM-004 | `BUILTINS`, `SEARCH`: statistics/summaries exclude or separately label unknown values and disclosed imputation. | 39, 42, 46 | Complete local release | Planned |
+| SEM-002–003 | Domain tests plus food and mood built-in tests prove absent mood and food do not become neutral, none, or zero; later built-ins retain the same invariant. | 9, 38, 39 | AI journal | Partial |
+| SEM-004 | Mood processor and UI tests exclude unknown, neutral, and uncertain aggregate states from numeric averages and label the distinction; summary/search policy remains in Tasks 42 and 46. | 39, 42, 46 | Complete local release | Partial |
 | SEM-005 | `CONTRACT`, `UI-PWA`, `PORTABILITY`: UI and export/import retain state distinctions. | 10, 18, 48 | Complete local release | Planned |
 | TIME-001–003 | Domain/database tests, `apps/api/test/text-journal-milestone.integration.ts`, and `playwright/shell.spec.ts`: capture instant/date/zones round trip and manual moves do not silently reassign. | 9, 16–20 | Source-only journal | Verified |
 | TIME-004–006 | `DOMAIN-KERNEL`, `BUILTINS`: relative/ambiguous language uses immutable contribution context and retains basis/uncertainty. | 9, 40 | AI journal | Planned |
@@ -120,10 +120,10 @@ Status values are:
 | FOOD-001–002 | `packages/processors/test/food-and-drink.test.ts` covers the exact AC-020 ownership fixture, consumption-only prompt contract, retained evidence links, and semantic rejection of non-owner events. | 38 | AI journal | Verified |
 | FOOD-003–004 | Food schema/validator tests preserve supported optional fields, omit unknown caffeine/alcohol, retain “some” as qualitative, and reject fabricated normalized precision. The food result-card test preserves those distinctions in the UI. | 38 | AI journal | Verified |
 | FOOD-005–007 | Food-specific stable-key tests reconcile later clarification across the whole day; domain/database/API/UI tests protect field corrections and explicit split/merge/correct/delete/confirm behavior under manual authority. | 34, 35, 38 | AI journal | Verified |
-| MOOD-001–003 | `BUILTINS`: contextual observations remain separate from inspectable aggregate interpretation. | 39 | AI journal | Planned |
-| MOOD-004 | `BUILTINS`: no mention produces insufficient information, never neutral. | 39, 43 | Complete local release | Planned |
-| MOOD-005 | `BUILTINS`, `PROCESSOR`: manual observation/rating values survive reprocessing. | 35, 39 | AI journal | Planned |
-| MOOD-006 | `BUILTINS`: validators and UI copy prohibit clinical-diagnosis framing. | 39 | AI journal | Planned |
+| MOOD-001–003 | `packages/processors/test/mood.test.ts` and the artifact-card component test preserve mixed contextual observations as independent logical artifacts beneath one separately inspectable aggregate with exact evidence. | 39 | AI journal | Verified |
+| MOOD-004 | Mood schema/validator/statistics/UI tests preserve absent mood as explicit unknown insufficient information, never neutral or numeric. Task 43 will consume the same state for nudge evaluation. | 39, 43 | Complete local release | Verified |
+| MOOD-005 | Mood reconciliation tests retain a manual aggregate rating while exposing the generated disagreement as a candidate; generic database/API/UI tests enforce the same authority rule. | 35, 39 | AI journal | Verified |
+| MOOD-006 | Immutable mood instructions, deterministic validation tests, and result-card copy prohibit clinical/diagnostic claims and label output as journaling analysis. | 39 | AI journal | Verified |
 | TASK-001–003 | `BUILTINS`: fixtures distinguish action/intention classes and prevent unapproved external-task creation. | 41 | AI journal | Planned |
 | TASK-004–005 | `BUILTINS`: broader remember categories remain representable and completed-only actions do not create pending tasks. | 41 | AI journal | Planned |
 | SUM-001–003 | `BUILTINS`: narrative and bullets remain separate, grounded, and free of invented significance/tone. | 42 | AI journal | Planned |
@@ -180,12 +180,12 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-012 | Domain/provider/database/worker evidence tests plus `apps/api/test/transcript-service.integration.ts` and `apps/web/test/transcript-inspector.test.ts` prove exact timed audio navigation and a clear valid-but-timing-unavailable state. | 26, 29, 30, 51 | Transcript journal | Verified |
 | AC-020 | `packages/processors/test/food-and-drink.test.ts`: exact burrito/Nicolette fixture yields an empty consumption-event set. | 38 | AI journal | Verified |
 | AC-021 | `packages/processors/test/food-and-drink.test.ts` and `apps/web/test/artifact-review-panel.test.ts`: pizza clarification retains one stable logical key and renders one event with both exact evidence spans. | 38 | AI journal | Verified |
-| AC-022 | `BUILTINS`: absent mood yields insufficient information and is excluded from averages. | 39, 43 | Complete local release | Planned |
-| AC-023 | `BUILTINS`: morning/evening observations remain separate beneath an inspectable aggregate. | 39 | AI journal | Planned |
+| AC-022 | `packages/processors/test/mood.test.ts` and `apps/web/test/artifact-review-panel.test.ts` prove absent mood yields explicit unknown insufficient information, is never neutral, and is excluded from averages. | 39, 43 | Complete local release | Verified |
+| AC-023 | Mood processor and accessible result-card tests preserve morning/evening observations as separate logical artifacts with exact evidence beneath a separately inspectable aggregate. | 39 | AI journal | Verified |
 | AC-024 | `BUILTINS`: tentative idea and firm dated obligation retain different classifications. | 41 | AI journal | Planned |
 | AC-030 | Transcript, feedback-dialog, service, and domain tests prove a transcript edit creates no global rule without the distinct explicitly approved remember command. | 37, 51 | AI journal | Verified |
 | AC-031 | Memory route/service/component/accessibility tests list, search, edit, disable, and soft-delete active persistent memories while preserving immutable history. | 37, 51 | AI journal | Verified |
-| AC-032 | Generic artifact integration/UI tests reprocess a manually corrected structured field and assert the manual effective value survives while the generated disagreement remains reviewable; Task 37 reruns this invariant alongside memory integration. Named mood/food/task/summary fixtures remain in Tasks 38–42 and 51. | 35–37, 51 | AI journal | Partial |
+| AC-032 | Generic artifact integration/UI tests reprocess a manually corrected structured field and assert the manual effective value survives while the generated disagreement remains reviewable; food and mood built-in tests now exercise named quantity/rating fixtures. Task, summary, and release fixtures remain in Tasks 41–42 and 51. | 35–39, 51 | AI journal | Partial |
 | AC-040 | `apps/web/test/recording-sync.test.ts`, `apps/web/test/journal-components.test.ts`, and `apps/api/test/journal-routes.test.ts` cover the 00:30 prior-day reassignment UI/protocol while retaining instant and timezone; `AUDIO`/`BUILTINS` still verify the full workflow. | 24, 25, 40 | AI journal | Partial |
 | AC-041 | `BUILTINS`: tomorrow retains phrase, contextual basis, timezone, and resolved date. | 40 | AI journal | Planned |
 | AC-042 | `NUDGE`, `RELEASE-E2E`: three missing requirements form one digest and day dismissal prevents repeat default prompts. | 43, 51 | Complete local release | Planned |

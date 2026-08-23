@@ -2,6 +2,8 @@ import { createPostgresTestContainer } from '@journal/test-support';
 import {
   FOOD_AND_DRINK_PROCESSOR_ID,
   FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+  MOOD_PROCESSOR_ID,
+  MOOD_PROCESSOR_VERSION_ID,
 } from '@journal/processors';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -72,7 +74,7 @@ describe('DB-JOURNAL foundation', () => {
     expect(queues).toHaveLength(7);
     expect(schedules).toHaveLength(3);
     expect(processors).toHaveLength(6);
-    expect(firstSeed.processorVersionsRequested).toBe(7);
+    expect(firstSeed.processorVersionsRequested).toBe(8);
     expect(processors.every(({ enabled }) => !enabled)).toBe(true);
     expect(
       processors.every(({ requirementMode }) => requirementMode === 'optional'),
@@ -80,6 +82,7 @@ describe('DB-JOURNAL foundation', () => {
     expect(fixtures.rows).toEqual([
       { key: 'synthetic-food-and-drink-cases' },
       { key: 'synthetic-journal-day' },
+      { key: 'synthetic-mood-cases' },
       { key: 'synthetic-owner' },
     ]);
     const [food] = await client.database
@@ -96,6 +99,30 @@ describe('DB-JOURNAL foundation', () => {
       .where(eq(processorInstallations.id, FOOD_AND_DRINK_PROCESSOR_ID));
     expect(food).toMatchObject({
       currentVersionId: FOOD_AND_DRINK_PROCESSOR_VERSION_ID,
+      semanticVersion: '2.0.0',
+      definition: {
+        input: { scope: 'journal_day' },
+        reconciliation: {
+          strategy: 'logical_key',
+          logicalKey: 'eventKey',
+        },
+        defaultEnabled: false,
+      },
+    });
+    const [mood] = await client.database
+      .select({
+        currentVersionId: processorInstallations.currentVersionId,
+        semanticVersion: processorVersions.semanticVersion,
+        definition: processorVersions.definition,
+      })
+      .from(processorInstallations)
+      .innerJoin(
+        processorVersions,
+        eq(processorVersions.id, processorInstallations.currentVersionId),
+      )
+      .where(eq(processorInstallations.id, MOOD_PROCESSOR_ID));
+    expect(mood).toMatchObject({
+      currentVersionId: MOOD_PROCESSOR_VERSION_ID,
       semanticVersion: '2.0.0',
       definition: {
         input: { scope: 'journal_day' },
