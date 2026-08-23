@@ -13,6 +13,8 @@ import {
   inTransaction,
   journalDays,
   migrateDatabase,
+  memories,
+  memoryRevisions,
   recordings,
   TranscriptEvidenceRepository,
   transcriptCleanupRuns,
@@ -562,6 +564,103 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       currentRevisionId: correction.revision.id,
       currentRevision: 2,
     });
+  });
+
+  it('[STT-003][STT-004][STT-005][MEM-003][MEM-006] assembles only approved enabled global memories by exact immutable revision', async () => {
+    const contextRecordingId = createUuidV7<'recording'>({
+      timestamp: 260_000,
+    });
+    const contextContributionId = createUuidV7<'contribution'>({
+      timestamp: 261_000,
+    });
+    const approvedMemoryId = createUuidV7<'memory'>({ timestamp: 262_000 });
+    const approvedRevisionId = createUuidV7<'memory-revision'>({
+      timestamp: 263_000,
+    });
+    const pendingMemoryId = createUuidV7<'memory'>({ timestamp: 264_000 });
+    const pendingRevisionId = createUuidV7<'memory-revision'>({
+      timestamp: 265_000,
+    });
+    await client.database.insert(contributions).values({
+      id: contextContributionId,
+      journalDayId: dayId,
+      authorId: ownerId,
+      sourceType: 'recording',
+      capturedAt: now,
+      capturedTimezone: 'UTC',
+      journalTimezone: 'UTC',
+      journalDateAssignment: 'default',
+    });
+    await client.database.insert(recordings).values({
+      id: contextRecordingId,
+      contributionId: contextContributionId,
+      mimeType: 'audio/webm',
+      finalByteSize: BigInt(audio.byteLength),
+      finalSha256: sha256(audio),
+      finalBlobKey: `audio/${contextRecordingId}/original.audio`,
+      persistenceState: 'durable',
+    });
+    await client.database.insert(memories).values([
+      {
+        id: approvedMemoryId,
+        ownerId,
+        currentRevisionId: approvedRevisionId,
+        currentRevision: 1,
+        approvalState: 'approved',
+        enabled: true,
+      },
+      {
+        id: pendingMemoryId,
+        ownerId,
+        currentRevisionId: pendingRevisionId,
+        currentRevision: 1,
+        approvalState: 'pending',
+        enabled: false,
+      },
+    ]);
+    await client.database.insert(memoryRevisions).values([
+      {
+        id: approvedRevisionId,
+        memoryId: approvedMemoryId,
+        revision: 1,
+        type: 'known_entity',
+        content: 'Nicolette is a known name.',
+        rationale: 'Approved pronunciation context.',
+        creator: 'user',
+        approvalState: 'approved',
+        scope: { kind: 'global_transcription' },
+        enabled: true,
+      },
+      {
+        id: pendingRevisionId,
+        memoryId: pendingMemoryId,
+        revision: 1,
+        type: 'known_fact',
+        content: 'Unapproved inferred profile data.',
+        rationale: 'AI suggestion awaiting review.',
+        creator: 'ai',
+        approvalState: 'pending',
+        scope: { kind: 'global_known_fact' },
+        enabled: false,
+      },
+    ]);
+    const run = await inTransaction(client.database, (transaction) =>
+      enqueueTranscriptionRun({
+        boss,
+        transaction,
+        recordingId: contextRecordingId,
+        now,
+      }),
+    );
+    expect(run.requestedContext).toEqual([
+      {
+        text: 'Nicolette is a known name.',
+        purpose: 'memory:known_entity',
+        version: approvedRevisionId,
+        memoryId: approvedMemoryId,
+        memoryRevisionId: approvedRevisionId,
+      },
+    ]);
   });
 
   it('[STT-002][ARCH-005][DATA-025][DATA-028][MODEL-003] isolates STT and cleanup failures and retries each stage', async () => {

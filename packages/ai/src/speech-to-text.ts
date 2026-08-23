@@ -16,6 +16,8 @@ export type SpeechContextItem = Readonly<{
   text: string;
   purpose: string;
   version?: string;
+  memoryId?: string;
+  memoryRevisionId?: string;
 }>;
 
 export type SpeechToTextRequest = Readonly<{

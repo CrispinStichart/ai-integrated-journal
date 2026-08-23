@@ -89,13 +89,13 @@ Status values are:
 | CAP-006 | `apps/web/test/capture-controller.test.ts`, `apps/web/test/recording-sync.test.ts`, and `apps/web/test/journal-components.test.ts` cover accessible recording, locally saved, uploading, durable, transcription-pending, storage, failure, and safe-retry states. Physical browser verification remains in `AUDIO`. | 23–25 | Audio journal | Partial |
 | CAP-007 | `apps/web/test/capture-controller.test.ts`, `apps/web/test/recording-sync.test.ts`, `apps/web/test/journal-components.test.ts`, and `apps/api/test/journal-routes.test.ts` cover alternate-day assignment/reassignment while retaining immutable capture time and timezone. Full workflow verification remains in `AUDIO`. | 22–25 | Audio journal | Partial |
 | STT-001–002 | `apps/api/test/recording-service.integration.ts`, `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/recording-routes.test.ts`, and `apps/web/test/journal-components.test.ts` cover durable-gated asynchronous STT, visible failure, preserved audio, and linked safe retry. | 27, 30 | Transcript journal | Verified |
-| STT-003–005 | `apps/worker/test/transcription-pipeline.integration.ts` covers exact requested/effective versioned context snapshots; approved memory assembly and future scope remain in Task 37. | 26, 27, 37 | AI journal | Partial |
-| MEM-001–002 | `PROCESSOR`, `RELEASE-E2E`: occurrence correction remains local unless remember is explicitly chosen. | 37 | AI journal | Planned |
-| MEM-003 | `PROCESSOR`: suggested memory stays inactive until approval under the default policy. | 37 | AI journal | Planned |
-| MEM-004–005 | `PROCESSOR`: active memories are searchable/manageable and retain scoped revision/audit metadata. | 37 | AI journal | Planned |
-| MEM-006–007 | `PROCESSOR`, `SECURITY`: no hidden prompt profile; inferred facts remain visible unapproved suggestions. | 37, 53 | AI journal | Planned |
-| FB-001–003 | `PROCESSOR`: all named artifact surfaces accept scoped feedback and display the resulting persistent rule. | 37 | AI journal | Planned |
-| FB-004 | `PROCESSOR`: ambiguous feedback resolves to occurrence-only/narrowest safe scope. | 37 | AI journal | Planned |
+| STT-003–005 | `apps/worker/test/transcription-pipeline.integration.ts` and memory persistence tests cover exact requested/effective context plus deterministic approved-memory snapshots bound to immutable revision IDs. | 26, 27, 37 | AI journal | Verified |
+| MEM-001–002 | Domain, API, integration, transcript, and feedback-dialog tests prove occurrence correction remains local unless remember is explicitly chosen. | 37 | AI journal | Verified |
+| MEM-003 | `apps/api/test/memory-service.integration.ts` proves an AI suggestion is visible but inactive until explicit approval. | 37 | AI journal | Verified |
+| MEM-004–005 | API/service and accessible Vue tests cover bounded search, visible scopes/creator/approval, immutable edit history, enable/disable, and soft deletion. | 37 | AI journal | Verified |
+| MEM-006–007 | Memory/STT integration proves only visible approved eligible memory revisions enter context; inferred facts remain inactive suggestions. Later adversarial security review remains Task 53. | 37, 53 | AI journal | Partial |
+| FB-001–003 | Transcript and generic artifact surfaces expose the same feedback flow; API/service tests bind targets exactly and return the visible resulting rule. | 37 | AI journal | Verified |
+| FB-004 | Domain and service tests prove omitted or incomplete intent resolves to occurrence-only and incompatible broad scopes fail closed. | 37 | AI journal | Verified |
 
 ## Processor, semantic, temporal, and built-in behavior
 
@@ -183,9 +183,9 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-022 | `BUILTINS`: absent mood yields insufficient information and is excluded from averages. | 39, 43 | Complete local release | Planned |
 | AC-023 | `BUILTINS`: morning/evening observations remain separate beneath an inspectable aggregate. | 39 | AI journal | Planned |
 | AC-024 | `BUILTINS`: tentative idea and firm dated obligation retain different classifications. | 41 | AI journal | Planned |
-| AC-030 | `PROCESSOR`, `RELEASE-E2E`: transcript edit creates no global rule without explicit remember approval. | 37, 51 | AI journal | Planned |
-| AC-031 | `PROCESSOR`, `RELEASE-E2E`: list/edit/disable/delete every active persistent memory. | 37, 51 | AI journal | Planned |
-| AC-032 | Generic artifact integration/UI tests reprocess a manually corrected structured field and assert the manual effective value survives while the generated disagreement remains reviewable. Named mood/food/task/summary fixtures remain in Tasks 38–42 and 51. | 35–37, 51 | AI journal | Partial |
+| AC-030 | Transcript, feedback-dialog, service, and domain tests prove a transcript edit creates no global rule without the distinct explicitly approved remember command. | 37, 51 | AI journal | Verified |
+| AC-031 | Memory route/service/component/accessibility tests list, search, edit, disable, and soft-delete active persistent memories while preserving immutable history. | 37, 51 | AI journal | Verified |
+| AC-032 | Generic artifact integration/UI tests reprocess a manually corrected structured field and assert the manual effective value survives while the generated disagreement remains reviewable; Task 37 reruns this invariant alongside memory integration. Named mood/food/task/summary fixtures remain in Tasks 38–42 and 51. | 35–37, 51 | AI journal | Partial |
 | AC-040 | `apps/web/test/recording-sync.test.ts`, `apps/web/test/journal-components.test.ts`, and `apps/api/test/journal-routes.test.ts` cover the 00:30 prior-day reassignment UI/protocol while retaining instant and timezone; `AUDIO`/`BUILTINS` still verify the full workflow. | 24, 25, 40 | AI journal | Partial |
 | AC-041 | `BUILTINS`: tomorrow retains phrase, contextual basis, timezone, and resolved date. | 40 | AI journal | Planned |
 | AC-042 | `NUDGE`, `RELEASE-E2E`: three missing requirements form one digest and day dismissal prevents repeat default prompts. | 43, 51 | Complete local release | Planned |

@@ -60,6 +60,30 @@ export const transcriptLayer = pgEnum('transcript_layer', [
   'cleaned',
 ]);
 
+export const memoryType = pgEnum('memory_type', [
+  'transcription_context',
+  'known_entity',
+  'alias',
+  'correction_rule',
+  'processor_rule',
+  'known_fact',
+  'application_preference',
+]);
+
+export const memoryApprovalState = pgEnum('memory_approval_state', [
+  'pending',
+  'approved',
+  'rejected',
+]);
+
+export const memoryCreator = pgEnum('memory_creator', ['user', 'ai']);
+
+export const feedbackTargetKind = pgEnum('feedback_target_kind', [
+  'transcript_revision',
+  'artifact_version',
+  'processor_result',
+]);
+
 export const evidenceResolutionStatus = pgEnum('evidence_resolution_status', [
   'resolved',
   'unresolved',
@@ -494,6 +518,8 @@ export const transcriptionRuns = journalSchema.table(
           text: string;
           purpose: string;
           version?: string;
+          memoryId?: string;
+          memoryRevisionId?: string;
         }>[]
       >()
       .notNull()
@@ -503,6 +529,8 @@ export const transcriptionRuns = journalSchema.table(
         text: string;
         purpose: string;
         version?: string;
+        memoryId?: string;
+        memoryRevisionId?: string;
       }>[]
     >(),
     requestedConfiguration: jsonb('requested_configuration')
@@ -2306,6 +2334,179 @@ export const developmentFixtures = journalSchema.table(
   ],
 );
 
+export const memories = journalSchema.table(
+  'memory',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    currentRevisionId: uuid('current_revision_id').notNull(),
+    currentRevision: integer('current_revision').notNull(),
+    approvalState: memoryApprovalState('approval_state').notNull(),
+    enabled: boolean('enabled').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('memory_owner_current_idx').on(table.ownerId, table.id),
+    index('memory_owner_active_idx')
+      .on(table.ownerId, table.enabled, table.id)
+      .where(sql`${table.deletedAt} is null`),
+    uniqueIndex('memory_current_revision_id_unique').on(
+      table.currentRevisionId,
+    ),
+    check(
+      'memory_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'memory_current_revision_positive',
+      sql`${table.currentRevision} > 0`,
+    ),
+    check(
+      'memory_activation_consistent',
+      sql`${table.enabled} = false or (${table.approvalState} = 'approved' and ${table.deletedAt} is null)`,
+    ),
+  ],
+);
+
+export const memoryRevisions = journalSchema.table(
+  'memory_revision',
+  {
+    id: uuid('id').primaryKey(),
+    memoryId: uuid('memory_id')
+      .notNull()
+      .references(() => memories.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    type: memoryType('type').notNull(),
+    content: text('content').notNull(),
+    rationale: text('rationale').notNull(),
+    creator: memoryCreator('creator').notNull(),
+    approvalState: memoryApprovalState('approval_state').notNull(),
+    scope: jsonb('scope').$type<Readonly<Record<string, unknown>>>().notNull(),
+    enabled: boolean('enabled').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_revision_number_unique').on(
+      table.memoryId,
+      table.revision,
+    ),
+    index('memory_revision_history_idx').on(table.memoryId, table.revision),
+    check(
+      'memory_revision_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('memory_revision_positive', sql`${table.revision} > 0`),
+    check(
+      'memory_revision_content_not_blank',
+      sql`length(btrim(${table.content})) > 0`,
+    ),
+    check(
+      'memory_revision_rationale_not_blank',
+      sql`length(btrim(${table.rationale})) > 0`,
+    ),
+    check(
+      'memory_revision_activation_consistent',
+      sql`${table.enabled} = false or (${table.approvalState} = 'approved' and ${table.deletedAt} is null)`,
+    ),
+  ],
+);
+
+export const feedback = journalSchema.table(
+  'feedback',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    targetKind: feedbackTargetKind('target_kind').notNull(),
+    targetId: uuid('target_id').notNull(),
+    message: text('message').notNull(),
+    classifiedScope: jsonb('classified_scope')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    resultingMemoryId: uuid('resulting_memory_id').references(
+      () => memories.id,
+      { onDelete: 'restrict' },
+    ),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('feedback_owner_target_idx').on(
+      table.ownerId,
+      table.targetKind,
+      table.targetId,
+    ),
+    check(
+      'feedback_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'feedback_message_not_blank',
+      sql`length(btrim(${table.message})) > 0`,
+    ),
+  ],
+);
+
+export const memoryApiIdempotency = journalSchema.table(
+  'memory_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    feedbackId: uuid('feedback_id').references(() => feedback.id, {
+      onDelete: 'restrict',
+    }),
+    memoryId: uuid('memory_id').references(() => memories.id, {
+      onDelete: 'restrict',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_api_idempotency_owner_operation_key_unique').on(
+      table.ownerId,
+      table.operation,
+      table.idempotencyKey,
+    ),
+    check(
+      'memory_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'memory_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'memory_api_idempotency_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'memory_api_idempotency_result_present',
+      sql`num_nonnulls(${table.feedbackId}, ${table.memoryId}) > 0`,
+    ),
+  ],
+);
+
 export const auditEvents = journalSchema.table(
   'audit_event',
   {
@@ -2369,8 +2570,12 @@ export const databaseSchema = {
   contributionRevisions,
   contributions,
   developmentFixtures,
+  feedback,
   journalDays,
   journalApiIdempotency,
+  memories,
+  memoryApiIdempotency,
+  memoryRevisions,
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,

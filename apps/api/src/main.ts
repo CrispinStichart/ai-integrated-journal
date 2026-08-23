@@ -22,6 +22,7 @@ import { PostgresProcessorService } from './processor-service.js';
 import { PostgresReprocessingService } from './reprocessing-service.js';
 import { PostgresTranscriptService } from './transcript-service.js';
 import { PostgresArtifactService } from './artifact-service.js';
+import { PostgresMemoryService } from './memory-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -103,6 +104,7 @@ const app = createApiApp({
     undefined,
     boss,
   ),
+  memoryService: new PostgresMemoryService(database.database),
   recordingService: new PostgresRecordingService(
     database.database,
     new LocalBlobStore(config.blobDataDirectory),

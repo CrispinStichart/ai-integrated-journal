@@ -10,6 +10,7 @@ import { useAuthentication } from '../auth';
 import { createUuidV7 } from '../journal/api';
 import { editArtifact, listArtifacts, mergeArtifacts } from '../artifact/api';
 import AppDialog from './AppDialog.vue';
+import FeedbackMemoryDialog from './FeedbackMemoryDialog.vue';
 
 const props = defineProps<{ journalDayId: string }>();
 const auth = useAuthentication();
@@ -20,6 +21,7 @@ const selected = ref<string[]>([]);
 const editing = ref<ArtifactResource>();
 const jsonDraft = ref('');
 const error = ref('');
+const feedbackMessage = ref('');
 const busy = ref(false);
 const pendingAction = ref<'delete' | 'merge'>('delete');
 
@@ -205,6 +207,13 @@ async function split(artifact: ArtifactResource): Promise<void> {
       </button>
     </div>
     <div
+      v-if="feedbackMessage"
+      role="status"
+      class="alert alert-success alert-soft mt-4"
+    >
+      {{ feedbackMessage }}
+    </div>
+    <div
       v-if="query.isPending.value"
       class="mt-5 flex min-h-24 items-center justify-center"
       role="status"
@@ -244,8 +253,9 @@ async function split(artifact: ArtifactResource): Promise<void> {
             type="checkbox"
             :value="artifact.id"
             :disabled="!artifact.active"
-            :aria-label="`Select ${artifact.logicalKey} for merge`"
-          /><span class="list-col-grow min-w-0">
+            :aria-label="`Select ${artifact.logicalKey} for merge`" /><span
+            class="list-col-grow min-w-0"
+          >
             <span class="flex flex-wrap items-center gap-2"
               ><strong class="break-all">{{ artifact.logicalKey }}</strong
               ><span class="badge badge-outline">{{
@@ -378,9 +388,16 @@ async function split(artifact: ArtifactResource): Promise<void> {
               >
                 Delete
               </button>
-            </div>
-          </span></label
-        >
+              <FeedbackMemoryDialog
+                v-if="artifact.history[0]"
+                :target="{
+                  kind: 'artifact_version',
+                  id: artifact.history[0].id,
+                }"
+                @saved="feedbackMessage = $event"
+              />
+            </div> </span
+        ></label>
       </li>
     </ul>
 

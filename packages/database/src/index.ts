@@ -22,8 +22,12 @@ export {
   authenticators,
   contributionRevisions,
   contributions,
+  feedback,
   journalDays,
   journalApiIdempotency,
+  memories,
+  memoryApiIdempotency,
+  memoryRevisions,
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,
@@ -74,6 +78,12 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  assembleApprovedTranscriptionContext,
+  MAX_STT_MEMORY_CONTEXT_ITEMS,
+  MAX_STT_MEMORY_CONTEXT_UTF16,
+  type VersionedMemoryContextItem,
+} from './memory-repository.js';
 export {
   enqueueProcessorRun,
   invalidateProcessorDependents,

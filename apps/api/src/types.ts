@@ -8,6 +8,7 @@ import type { ProcessorService } from './processor-service.js';
 import type { TranscriptService } from './transcript-service.js';
 import type { ArtifactService } from './artifact-service.js';
 import type { ReprocessingService } from './reprocessing-service.js';
+import type { MemoryService } from './memory-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -48,6 +49,7 @@ export interface ApiDependencies {
   readonly healthProbes: readonly HealthProbe[];
   readonly logger: ContentSafeLogger;
   readonly journalService?: JournalService;
+  readonly memoryService?: MemoryService;
   readonly recordingService?: RecordingService;
   readonly processorService?: ProcessorService;
   readonly reprocessingService?: ReprocessingService;

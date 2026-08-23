@@ -6,6 +6,7 @@ export * from './artifact.js';
 export * from './events.js';
 export * from './http-metadata.js';
 export * from './journal.js';
+export * from './memory.js';
 export * from './operations.js';
 export * from './openapi.js';
 export * from './pagination.js';

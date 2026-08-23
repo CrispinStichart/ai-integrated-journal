@@ -68,6 +68,12 @@ export default defineConfig({
         // audit history, and idempotency against real PostgreSQL. Its behavior
         // is covered by the separately gated Testcontainers integration suite.
         'apps/api/src/reprocessing-service.ts',
+        // Memory and feedback lifecycle policy uses owner-scoped polymorphic
+        // target joins, append-only revisions, row/advisory locks, audit and
+        // idempotency transactions. Real behavioral coverage lives in the
+        // separately gated Testcontainers integration suite.
+        'apps/api/src/memory-service.ts',
+        'packages/database/src/memory-repository.ts',
         // Transcription coordinates PostgreSQL row locks, streamed immutable
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.

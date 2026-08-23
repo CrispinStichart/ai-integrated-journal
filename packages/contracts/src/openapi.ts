@@ -35,6 +35,15 @@ import {
   moveContributionRequestSchema,
 } from './journal.js';
 import {
+  createFeedbackRequestSchema,
+  feedbackMutationResponseSchema,
+  memoryMutationRequestSchema,
+  memoryMutationResponseSchema,
+  memoryPageSchema,
+  memoryResourceSchema,
+  memorySearchRequestSchema,
+} from './memory.js';
+import {
   cursorPageMetadataSchema,
   cursorPaginationRequestSchema,
 } from './pagination.js';
@@ -778,6 +787,58 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/memories': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Bounded searchable visible memory page',
+              'MemoryPage',
+            ),
+            '400': problemResponse('Invalid search request'),
+          },
+        },
+      },
+      '/api/v1/memories/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse('Revisioned memory', 'MemoryResource'),
+            '404': problemResponse('Memory not found'),
+          },
+        },
+      },
+      '/api/v1/memories/{id}/mutations': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('MemoryMutationRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Immutable memory lifecycle revision',
+              'MemoryMutationResponse',
+            ),
+            '409': problemResponse('Memory conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/feedback': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('CreateFeedbackRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Occurrence-only feedback or explicitly approved memory',
+              'FeedbackMutationResponse',
+            ),
+            '400': problemResponse('Unsafe or invalid feedback scope'),
+            '404': problemResponse('Feedback target not found'),
+            '428': problemResponse('Idempotency-Key header required'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -892,6 +953,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
         CreateContributionRequest: componentSchema(
           createContributionRequestSchema,
         ),
+        CreateFeedbackRequest: componentSchema(createFeedbackRequestSchema),
         CreateRecordingRequest: componentSchema(createRecordingRequestSchema),
         CursorPageMetadata: componentSchema(cursorPageMetadataSchema),
         CursorPaginationRequest: componentSchema(cursorPaginationRequestSchema),
@@ -913,8 +975,16 @@ export function createOpenApiDocument(): Record<string, unknown> {
         LivenessResponse: componentSchema(livenessResponseSchema),
         JournalDaySummaryPage: componentSchema(journalDaySummaryPageSchema),
         JournalDayView: componentSchema(journalDayViewSchema),
+        FeedbackMutationResponse: componentSchema(
+          feedbackMutationResponseSchema,
+        ),
         LogoutResponse: componentSchema(logoutResponseSchema),
         MoveContributionRequest: componentSchema(moveContributionRequestSchema),
+        MemoryMutationRequest: componentSchema(memoryMutationRequestSchema),
+        MemoryMutationResponse: componentSchema(memoryMutationResponseSchema),
+        MemoryPage: componentSchema(memoryPageSchema),
+        MemoryResource: componentSchema(memoryResourceSchema),
+        MemorySearchRequest: componentSchema(memorySearchRequestSchema),
         FinalizeRecordingRequest: componentSchema(
           finalizeRecordingRequestSchema,
         ),

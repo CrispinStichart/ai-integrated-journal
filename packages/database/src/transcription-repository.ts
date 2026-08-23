@@ -11,7 +11,10 @@ import type {
 } from './client.js';
 import { createQueueJobPayload, queueNames } from './queue-contracts.js';
 import { enqueueJobInTransaction, QueueJobError } from './queue-runtime.js';
+import { assembleApprovedTranscriptionContext } from './memory-repository.js';
 import {
+  contributions,
+  journalDays,
   recordings,
   transcriptionRuns,
   transcriptRevisions,
@@ -34,6 +37,8 @@ export type PersistedSpeechContextItem = Readonly<{
   text: string;
   purpose: string;
   version?: string;
+  memoryId?: string;
+  memoryRevisionId?: string;
 }>;
 
 export type TranscriptionRunRecord = typeof transcriptionRuns.$inferSelect;
@@ -112,9 +117,26 @@ export async function enqueueTranscriptionRun(input: {
     );
   }
 
-  const requestedContext = Object.freeze([
-    ...(input.requestedContext ?? latest?.requestedContext ?? []),
-  ]);
+  let context = input.requestedContext;
+  if (context === undefined) {
+    const [ownership] = await input.transaction
+      .select({ ownerId: journalDays.userId })
+      .from(recordings)
+      .innerJoin(contributions, eq(contributions.id, recordings.contributionId))
+      .innerJoin(journalDays, eq(journalDays.id, contributions.journalDayId))
+      .where(eq(recordings.id, recording.id))
+      .limit(1);
+    if (ownership === undefined) {
+      throw new TranscriptionStateError(
+        'Recording owner could not be resolved.',
+      );
+    }
+    context = await assembleApprovedTranscriptionContext(
+      input.transaction,
+      ownership.ownerId,
+    );
+  }
+  const requestedContext = Object.freeze([...context]);
   const requestedConfiguration = Object.freeze({
     ...(input.requestedConfiguration ?? latest?.requestedConfiguration ?? {}),
   });

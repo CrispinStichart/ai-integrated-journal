@@ -33,3 +33,11 @@ The provenance endpoint exposes reconciliation strategy, completeness, a content
 Migration `20260823063713_aromatic_doctor_strange.sql` adds processor runs, results, immutable run inputs, and evidence. Migration `20260823065040_exotic_bloodstorm.sql` replaces the initial nullable-target uniqueness index with scope-specific unique attempt indexes. Migration `20260823164705_free_thunderbolt_ross.sql` adds stable artifacts, immutable artifact versions, reconciliation records, and database idempotency constraints. Migration `20260823171935_manual-artifact-overrides.sql` adds artifact edit revisions, reviewable generated candidates, edit idempotency, and monotonic artifact ETags.
 
 The runtime schedules contribution and Journal Day source inputs, binds exact processor-result dependency edges, reconciles completed output into stable logical artifacts, and protects active manual authority. Date-range orchestration, previews, public execution/cancellation APIs, and progress remain task 36.
+
+Task 37 adds the separate feedback and memory lifecycle described in
+`docs/feedback-and-memories.md`. It does not weaken artifact authority:
+occurrence edits still create manual revisions, persistent rules require a
+separate approved command, and later processing retains generated disagreement
+as a reviewable candidate. Newly queued STT runs include only approved visible
+transcription memories and bind their exact immutable revision IDs in the
+existing context snapshot and input fingerprint.

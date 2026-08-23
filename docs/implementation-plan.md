@@ -340,7 +340,7 @@ Add correction, split, merge, delete, confirmation, and manual override behavior
 
 Support contribution, day, date-range, processor, and version scopes with impact preview, approximate provider-operation count, progress, cancellation, audit history, and explicit processor-version basis.
 
-### 37. Feedback and memories
+### 37. Feedback and memories - FINISHED
 
 Distinguish occurrence-only corrections from “correct and remember.” Implement narrow-safe scope classification, explicit approval, searchable and revisioned memory management, enable/disable/delete controls, and versioned STT context assembly. Verify AC-030–032.
 

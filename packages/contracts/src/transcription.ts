@@ -82,6 +82,8 @@ export const transcriptProcessingRunSchema = z.strictObject({
         text: z.string(),
         purpose: z.string(),
         version: z.string().optional(),
+        memoryId: uuidV7Schema.optional(),
+        memoryRevisionId: uuidV7Schema.optional(),
       }),
     )
     .optional(),

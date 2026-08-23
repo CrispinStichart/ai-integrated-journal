@@ -49,11 +49,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/memories',
     name: 'memories',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Review the context you have explicitly approved.',
-      title: 'Memories & rules',
-    },
+    component: () => import('../views/MemoriesView.vue'),
     meta: { title: 'Memories & rules' },
   },
   {

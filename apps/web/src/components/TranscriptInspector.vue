@@ -15,6 +15,7 @@ import {
   listTranscriptRevisions,
   retryTranscriptCleanup,
 } from '../transcript/api';
+import FeedbackMemoryDialog from './FeedbackMemoryDialog.vue';
 
 const props = defineProps<{ recordingId: string }>();
 const emit = defineEmits<{
@@ -451,6 +452,10 @@ function formatMilliseconds(value: string): string {
           >
             Edit corrected transcript
           </button>
+          <FeedbackMemoryDialog
+            :target="{ kind: 'transcript_revision', id: activeRevision.id }"
+            @saved="message = $event"
+          />
         </div>
 
         <div
