@@ -98,6 +98,13 @@ describe('feedback and memory API', () => {
       includeDisabled: true,
       includeDeleted: false,
     });
+    const detail = await request(app(memoryService))
+      .get(`/api/v1/memories/${MEMORY_ID}`)
+      .set('authorization', 'Bearer valid')
+      .expect(200)
+      .expect('etag', '"memory-1"');
+    expect(detail.body).toMatchObject({ id: MEMORY_ID, revision: 1 });
+    expect(memoryService.get).toHaveBeenCalledWith(OWNER_ID, MEMORY_ID);
   });
 
   it('[MEM-001][FB-003][STATE-004] requires explicit idempotency and approval for a persistent feedback command', async () => {

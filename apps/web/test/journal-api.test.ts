@@ -16,6 +16,7 @@ import {
   JournalApiError,
   listContributionRevisions,
   listJournalDays,
+  moveContribution,
   setContributionDeleted,
 } from '../src/journal/api';
 
@@ -168,6 +169,38 @@ describe('Journal REST browser client (DATA-001â€“DATA-013, DATA-026, TIME-001â€
     expect(uuidV7Schema.safeParse(createUuidV7()).success).toBe(true);
   });
 
+  it('[DATA-009][STATE-004] moves a contribution to an explicit journal day with its current revision', async () => {
+    const destinationDayId = '018f0000-0000-7000-8000-000000000005';
+    const fetchMock = vi.fn(async () => json(mutationResponse()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      moveContribution(
+        contribution,
+        '2026-08-17',
+        destinationDayId,
+        'csrf',
+        'move-key',
+      ),
+    ).resolves.toEqual(contribution);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/v1/contributions/${IDS.contribution}/move`,
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      headers: {
+        'idempotency-key': 'move-key',
+        'if-match': '"revision-1"',
+        'x-csrf-token': 'csrf',
+      },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      journalDate: '2026-08-17',
+      proposedJournalDayId: destinationDayId,
+    });
+  });
+
   it('exposes stable problem codes for edit conflict handling', async () => {
     vi.stubGlobal(
       'fetch',
@@ -188,5 +221,20 @@ describe('Journal REST browser client (DATA-001â€“DATA-013, DATA-026, TIME-001â€
     await expect(getContribution(IDS.contribution)).rejects.toMatchObject<
       Partial<JournalApiError>
     >({ status: 412, code: 'etag_mismatch' });
+  });
+
+  it('uses a stable generic error when an upstream failure is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('gateway unavailable', { status: 502 })),
+    );
+
+    await expect(getContribution(IDS.contribution)).rejects.toMatchObject<
+      Partial<JournalApiError>
+    >({
+      message: 'The journal request failed. Please try again.',
+      status: 502,
+      code: 'unknown',
+    });
   });
 });

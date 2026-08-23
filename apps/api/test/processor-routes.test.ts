@@ -228,6 +228,16 @@ describe('Processor definition management API', () => {
       id: PROCESSOR_ID,
       versions: [{ id: VERSION_ID }],
     });
+    const detail = await request(app(processorService))
+      .get(`/api/v1/processors/${PROCESSOR_ID}`)
+      .set('authorization', 'Bearer valid')
+      .expect(200)
+      .expect('etag', '"processor-1"');
+    expect(detail.body).toMatchObject({
+      id: PROCESSOR_ID,
+      currentVersion: { id: VERSION_ID },
+    });
+    expect(processorService.get).toHaveBeenCalledWith(OWNER_ID, PROCESSOR_ID);
   });
 
   it('[PROC-006][SEC-005] dry-runs a non-authoritative bounded definition without publishing', async () => {

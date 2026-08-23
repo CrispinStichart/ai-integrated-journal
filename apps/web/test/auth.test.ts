@@ -74,6 +74,9 @@ describe('browser authentication workflow (SEC-001, SEC-002)', () => {
       }),
     ).resolves.toMatchObject({ recoveryCodes });
     expect(auth.authenticated.value).toBe(true);
+    expect(auth.recoveryCodes.value).toEqual(recoveryCodes);
+    auth.acknowledgeRecoveryCodes();
+    expect(auth.recoveryCodes.value).toEqual([]);
 
     await auth.registerPasskey();
     expect(startRegistration).toHaveBeenCalledOnce();

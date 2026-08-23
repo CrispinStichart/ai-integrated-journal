@@ -51,5 +51,8 @@ describe('API-OPS in-memory event feed', () => {
     feed.publish('owner', second);
 
     await expect(feed.poll('owner', first.eventId)).resolves.toEqual([second]);
+    await expect(
+      feed.poll('owner', '019c5b90-0000-7000-8000-000000000099'),
+    ).resolves.toEqual([first, second]);
   });
 });

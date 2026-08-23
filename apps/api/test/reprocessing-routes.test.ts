@@ -186,6 +186,20 @@ describe('Reprocessing orchestration API', () => {
       .expect('etag', '"reprocessing-1"');
   });
 
+  it('[SEC-002] rejects malformed batch identifiers before service access', async () => {
+    const reprocessingService = service();
+    const response = await request(app(reprocessingService))
+      .get('/api/v1/reprocessing-batches/not-a-uuid')
+      .set('authorization', 'Bearer valid')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'validation_failed',
+      invalidParameters: [{ name: 'id', location: 'path' }],
+    });
+    expect(reprocessingService.get).not.toHaveBeenCalled();
+  });
+
   it('[STATE-001][STATE-004] conditionally cancels remaining work', async () => {
     const reprocessingService = service();
     await request(app(reprocessingService))
