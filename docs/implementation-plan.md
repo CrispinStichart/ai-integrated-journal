@@ -44,7 +44,7 @@ Each numbered step below is intended to be one focused agent assignment and one 
 
 ## 3. Phase 0: Resolve blocking design details
 
-### 1. Architecture decision pack
+### 1. Architecture decision pack - FINISHED
 
 Create the initial ADRs and requirement-to-test matrix. Freeze:
 
@@ -55,7 +55,7 @@ Create the initial ADRs and requirement-to-test matrix. Freeze:
 - Processor dependency and versioning rules.
 - The boundary of the first usable release.
 
-### 2. Queue transactionality spike
+### 2. Queue transactionality spike - FINISHED
 
 Prove that `pg-boss` jobs can be created inside the same PostgreSQL transaction used by Drizzle. If the selected library versions cannot share a transaction safely, adopt and document a transactional outbox rather than weakening atomicity.
 
@@ -65,7 +65,7 @@ Deliverables:
 - An ADR selecting direct transactional insertion or an outbox.
 - Crash and retry semantics for the chosen approach.
 
-### 3. Audio finalization spike
+### 3. Audio finalization spike - FINISHED
 
 Define and test the recovery protocol between blob finalization and PostgreSQL confirmation. These systems cannot commit atomically, so the design must cover:
 
@@ -76,7 +76,7 @@ Define and test the recovery protocol between blob finalization and PostgreSQL c
 - Orphan discovery and safe sweeping.
 
 
-### 4. Privacy, evidence, and retention decisions
+### 4. Privacy, evidence, and retention decisions - FINISHED
 
 Record decisions for:
 
@@ -90,13 +90,13 @@ Record decisions for:
 - Default deletion grace periods, backup retention, nudge limits, quiet hours, and enabled processors.
 - Concrete local backup and encryption technology.
 
-### 5. Recording resource policy
+### 5. Recording resource policy - FINISHED
 
 Formalize “no maximum recording length” as no application-imposed final duration or size cap. Individual chunks and HTTP requests remain bounded. The system must monitor browser quota and disk space, surface exhaustion immediately, preserve already captured chunks, and never assemble an entire logical recording in memory.
 
 ## 4. Phase 1: Engineering foundation
 
-### 7. Monorepo and toolchain
+### 7. Monorepo and toolchain - FINISHED
 
 Scaffold the specified pnpm workspace:
 
@@ -128,7 +128,7 @@ Definition of done:
 - All applications and packages build as empty operational shells.
 - Cross-package imports use declared exports rather than source-relative paths.
 
-### 8. Local infrastructure and typed configuration
+### 8. Local infrastructure and typed configuration - FINISHED
 
 Add:
 
@@ -139,7 +139,7 @@ Add:
 - Testcontainers support and synthetic fixtures.
 - Explicit migration and seed commands.
 
-### 9. Shared domain kernel
+### 9. Shared domain kernel - FINISHED
 
 Implement and test:
 
@@ -154,7 +154,7 @@ Implement and test:
 
 The domain package must not depend on applications, frameworks, persistence, queues, or providers.
 
-### 10. Shared API contracts
+### 10. Shared API contracts - FINISHED
 
 Create Zod schemas for requests, responses, events, and persisted extensible values. Add:
 
@@ -165,13 +165,13 @@ Create Zod schemas for requests, responses, events, and persisted extensible val
 - Generated OpenAPI 3.1.
 - A generation-drift check.
 
-### 11. Database foundation
+### 11. Database foundation - FINISHED
 
 Configure Drizzle, forward-only migrations, transaction helpers, repository conventions, and migration compatibility testing. Seed commands must create queue configuration, schedules, built-in processors, and development fixtures idempotently.
 
 Only one active agent may own database schema changes at a time.
 
-### 12. API operational shell
+### 12. API operational shell - FINISHED
 
 Build the Express application factory and add:
 
@@ -184,13 +184,13 @@ Build the Express application factory and add:
 - Authenticated SSE with reconnect/replay semantics and a polling fallback.
 - Graceful shutdown.
 
-### 13. Worker and queue foundation
+### 13. Worker and queue foundation - FINISHED
 
 Establish shared queue names and options, schema-version checks, the selected atomic job mechanism, worker heartbeats, retry classification, fingerprints, concurrency controls, cancellation, dead-letter behavior, scheduling, and crash recovery.
 
 Jobs contain identifiers, not journal content. Workers reload canonical inputs from PostgreSQL and blob storage.
 
-### 14. Frontend and PWA shell
+### 14. Frontend and PWA shell - FINISHED
 
 Build the responsive Vue application shell with:
 
@@ -205,7 +205,7 @@ Build the responsive Vue application shell with:
 
 Frontend agents must read and follow the repository daisyUI skill before implementation.
 
-### 15. Authentication vertical slice
+### 15. Authentication vertical slice - FINISHED
 
 Implement:
 
@@ -222,13 +222,13 @@ Implement:
 
 ## 5. Phase 2: First usable release — durable text journal
 
-### 16. Journal domain and persistence
+### 16. Journal domain and persistence - FINISHED
 
 Implement journal days, contribution identities, append-only contribution revisions, past and future dates, capture and journal timezones, day reassignment, audit history, soft deletion, and restoration.
 
 Primary requirements: ARCH-001–005, DATA-001–013, TIME-001–003, STATE-006–007.
 
-### 17. Journal REST API
+### 17. Journal REST API - FINISHED
 
 Add APIs for:
 
@@ -241,25 +241,25 @@ Add APIs for:
 
 Mutations enforce idempotency keys and editable resources enforce ETags.
 
-### 18. Journal Day and calendar UI
+### 18. Journal Day and calendar UI - FINISHED
 
 Build a mobile-first day timeline that appears coherent while retaining visible contribution boundaries and provenance. Include text creation/editing, date selection, calendar summaries, history, edit conflicts, deletion warnings, and restoration.
 
-### 19. Offline text outbox and cached reads
+### 19. Offline text outbox and cached reads - FINISHED
 
 Store text mutations in IndexedDB before network submission. Replay them in order after startup, connectivity restoration, and visibility changes. Preserve client UUIDs, deduplicate retries, surface edit conflicts, bound cached reads, and enforce the selected offline privacy policy.
 
-### 20. Text-journal milestone
+### 20. Text-journal milestone - FINISHED
 
 Run the complete source-only workflow and verify AC-001 and AC-003. This is the first usable release and must remain useful without any AI provider or worker.
 
 ## 6. Phase 3: Recoverable audio
 
-### 21. BlobStore and local adapter
+### 21. BlobStore and local adapter - FINISHED
 
 Implement the capability-oriented `BlobStore`, including streaming immutable writes, staging chunks, finalization, SHA-256, byte ranges, opaque-key validation, atomic local renames, owner-only permissions, and an adapter contract suite.
 
-### 22. Recording persistence and upload API
+### 22. Recording persistence and upload API - FINISHED
 
 Add recording, upload, and chunk persistence plus the specified protocol:
 
@@ -272,21 +272,21 @@ Add recording, upload, and chunk persistence plus the specified protocol:
 
 Enforce duplicate and checksum behavior with database constraints as well as application checks.
 
-### 23. Browser capture controller
+### 23. Browser capture controller - FINISHED
 
 Generate recording and contribution UUIDs before capture. Use MediaRecorder timeslices, supported MIME negotiation, immediate IndexedDB persistence, quota monitoring, and a top-level controller that survives route changes.
 
-### 24. Audio synchronization and playback UI
+### 24. Audio synchronization and playback UI - FINISHED
 
 Resume missing chunks, display every local/durable/processing state, delay local cleanup until durable confirmation, expose safe retry, support range playback, and allow assignment to a different Journal Day.
 
-### 25. Audio reliability milestone
+### 25. Audio reliability milestone - FINISHED
 
 Test interrupted upload, reload, suspension, duplicate retry, checksum conflict, storage exhaustion, very long recordings, crash during finalization, and staging cleanup. Cover CAP-001–007 and AC-002–003.
 
 ## 7. Phase 4: Transcript lineage
 
-### 26. Provider-neutral AI ports
+### 26. Provider-neutral AI ports - FINISHED
 
 Implement provider factories and capability ports for:
 
@@ -296,15 +296,15 @@ Implement provider factories and capability ports for:
 
 Define normalized results, provider/model/configuration snapshots, capability absence, raw-response storage, and deterministic fake providers. A real provider selection is not required for the provider-neutral foundation.
 
-### 27. Transcription pipeline
+### 27. Transcription pipeline - FINISHED
 
 After durable audio confirmation, run asynchronous STT and preserve the exact raw response, normalized segments, language, effective context, configuration, timings, model identity, attempt lineage, and visible failure state.
 
-### 28. Corrected and cleaned transcript pipeline
+### 28. Corrected and cleaned transcript pipeline - FINISHED
 
 Initialize corrected text from raw STT, add append-only corrected revisions, and derive cleanup only from an exact corrected revision. Raw, corrected, and cleaned transcript layers remain distinct.
 
-### 29. Transcript dependency and evidence model
+### 29. Transcript dependency and evidence model - FINISHED
 
 Store stable segment IDs, exact revision references, defined text offsets, optional audio ranges, quote hashes, unresolved-evidence states, and targeted staleness propagation.
 
