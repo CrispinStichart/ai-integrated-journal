@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  artifactAddRequestSchema,
   artifactEditRequestSchema,
   artifactMergeRequestSchema,
   artifactResourceSchema,
@@ -14,6 +15,7 @@ describe('manual artifact contracts', () => {
     for (const value of [
       { operation: 'correct', overrides: [{ path: '/amount', value: 2 }] },
       { operation: 'confirm' },
+      { operation: 'pin', pinned: true },
       { operation: 'delete' },
       { operation: 'adopt_candidate', candidateId: ID },
       { operation: 'dismiss_candidate', candidateId: ID },
@@ -45,6 +47,31 @@ describe('manual artifact contracts', () => {
       artifactEditRequestSchema.safeParse({
         operation: 'split',
         results: [{ artifactId: ID, logicalKey: 'generated', payload: {} }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('[SUM-004] accepts bounded manual accomplishment additions and rejects generated authority claims', () => {
+    const request = {
+      artifactId: ID,
+      processorKey: 'accomplishments',
+      logicalKey: `manual:accomplishment:${ID}`,
+      kind: 'interpretation',
+      payload: {
+        bulletKey: `manual:${ID}`,
+        artifactType: 'notable_event',
+        text: 'Hosted the neighborhood picnic',
+        completionBasis: 'user_authored',
+        significanceBasis: 'user_authored',
+        pinned: true,
+        evidenceOrdinals: [],
+      },
+    };
+    expect(artifactAddRequestSchema.safeParse(request).success).toBe(true);
+    expect(
+      artifactAddRequestSchema.safeParse({
+        ...request,
+        payload: { ...request.payload, significanceBasis: 'source_explicit' },
       }).success,
     ).toBe(false);
   });

@@ -17,6 +17,13 @@ import {
   TASKS_AND_INTENTIONS_PROCESSOR_ID,
   TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
   TASKS_AND_INTENTIONS_SYNTHETIC_FIXTURES,
+  ACCOMPLISHMENTS_DEFINITION,
+  ACCOMPLISHMENTS_PROCESSOR_ID,
+  ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
+  SUMMARY_AND_ACCOMPLISHMENTS_SYNTHETIC_FIXTURES,
+  SUMMARY_DEFINITION,
+  SUMMARY_PROCESSOR_ID,
+  SUMMARY_PROCESSOR_VERSION_ID,
 } from '@journal/processors';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 
@@ -136,6 +143,10 @@ const LEGACY_SLEEP_PROCESSOR_VERSION_ID =
   '019c5b90-0000-7000-8000-000000000013';
 const LEGACY_TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID =
   '019c5b90-0000-7000-8000-000000000014';
+const LEGACY_SUMMARY_PROCESSOR_VERSION_ID =
+  '019c5b90-0000-7000-8000-000000000015';
+const LEGACY_ACCOMPLISHMENTS_PROCESSOR_VERSION_ID =
+  '019c5b90-0000-7000-8000-000000000016';
 
 function sha256(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -292,12 +303,48 @@ const tasksProcessorVersionSeed: typeof processorVersions.$inferInsert = {
   }),
 };
 
+function versionSeed(
+  id: string,
+  processorId: string,
+  definition: typeof SUMMARY_DEFINITION,
+): typeof processorVersions.$inferInsert {
+  const instructionHash = sha256(definition.instructions);
+  const outputSchemaHash = sha256(definition.outputSchema);
+  return {
+    id,
+    processorId,
+    revision: 2,
+    semanticVersion: definition.semanticVersion,
+    definition,
+    instructionHash,
+    outputSchemaHash,
+    promptTemplateHash: sha256({
+      instructionHash,
+      outputSchemaHash,
+      policy: 'untrusted-journal-data-v1',
+    }),
+  };
+}
+
+const summaryProcessorVersionSeed = versionSeed(
+  SUMMARY_PROCESSOR_VERSION_ID,
+  SUMMARY_PROCESSOR_ID,
+  SUMMARY_DEFINITION,
+);
+const accomplishmentsProcessorVersionSeed = versionSeed(
+  ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
+  ACCOMPLISHMENTS_PROCESSOR_ID,
+  ACCOMPLISHMENTS_DEFINITION,
+);
+
 const processorVersionSeeds: (typeof processorVersions.$inferInsert)[] = [
   ...legacyProcessorVersionSeeds,
   foodProcessorVersionSeed,
   moodProcessorVersionSeed,
   sleepProcessorVersionSeed,
   tasksProcessorVersionSeed,
+  summaryProcessorVersionSeed,
+  accomplishmentsProcessorVersionSeed,
 ];
 
 const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
@@ -320,6 +367,12 @@ const developmentFixtureSeeds: (typeof developmentFixtures.$inferInsert)[] = [
       ownerFixtureKey: 'synthetic-owner',
       text: 'Synthetic journal fixture sentence.',
     },
+  },
+  {
+    key: 'synthetic-summary-and-accomplishments',
+    fixtureType: 'processor-summary-and-accomplishments',
+    payloadSchemaVersion: 1,
+    payload: { fixtures: SUMMARY_AND_ACCOMPLISHMENTS_SYNTHETIC_FIXTURES },
   },
   {
     key: 'synthetic-food-and-drink-cases',
@@ -445,6 +498,30 @@ export async function seedDatabase(
           inArray(processorInstallations.currentVersionId, [
             LEGACY_MOOD_PROCESSOR_VERSION_ID,
             MOOD_PROCESSOR_VERSION_ID,
+          ]),
+        ),
+      );
+    await transaction
+      .update(processorInstallations)
+      .set({ currentVersionId: SUMMARY_PROCESSOR_VERSION_ID })
+      .where(
+        and(
+          eq(processorInstallations.id, SUMMARY_PROCESSOR_ID),
+          inArray(processorInstallations.currentVersionId, [
+            LEGACY_SUMMARY_PROCESSOR_VERSION_ID,
+            SUMMARY_PROCESSOR_VERSION_ID,
+          ]),
+        ),
+      );
+    await transaction
+      .update(processorInstallations)
+      .set({ currentVersionId: ACCOMPLISHMENTS_PROCESSOR_VERSION_ID })
+      .where(
+        and(
+          eq(processorInstallations.id, ACCOMPLISHMENTS_PROCESSOR_ID),
+          inArray(processorInstallations.currentVersionId, [
+            LEGACY_ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
+            ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
           ]),
         ),
       );

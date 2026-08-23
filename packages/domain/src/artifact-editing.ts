@@ -1,11 +1,13 @@
 import { DomainInvariantError } from './errors.js';
 
 export type ArtifactManualOperation =
+  | 'add'
   | 'confirm'
   | 'correct'
   | 'delete'
   | 'merge_result'
   | 'merge_source'
+  | 'pin'
   | 'split_result'
   | 'split_source';
 

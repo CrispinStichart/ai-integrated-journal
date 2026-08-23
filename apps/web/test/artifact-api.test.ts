@@ -4,6 +4,7 @@ import type { ArtifactResource } from '@journal/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  addArtifact,
   ArtifactApiError,
   editArtifact,
   listArtifacts,
@@ -99,6 +100,46 @@ describe('artifact API client', () => {
       expect.objectContaining({
         headers: expect.objectContaining({
           'if-match': `"artifacts-${ARTIFACT_ID}:2,${SECOND_ID}:4"`,
+        }),
+      }),
+    );
+  });
+
+  it('[SUM-004] validates and posts manual accomplishment additions with content-free headers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      response({
+        artifacts: [artifact],
+        idempotency: { key: 'add-bullet', replayed: false },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await addArtifact({
+      journalDayId: DAY_ID,
+      csrfToken: 'csrf',
+      idempotencyKey: 'add-bullet',
+      artifact: {
+        artifactId: RESULT_ID,
+        processorKey: 'accomplishments',
+        logicalKey: `manual:accomplishment:${RESULT_ID}`,
+        kind: 'interpretation',
+        payload: {
+          bulletKey: `manual:${RESULT_ID}`,
+          artifactType: 'accomplishment',
+          text: 'Helped a neighbor',
+          completionBasis: 'user_authored',
+          significanceBasis: 'user_authored',
+          pinned: true,
+          evidenceOrdinals: [],
+        },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/journal-days/${DAY_ID}/artifacts`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-csrf-token': 'csrf',
+          'idempotency-key': 'add-bullet',
         }),
       }),
     );

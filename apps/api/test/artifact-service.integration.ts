@@ -127,8 +127,8 @@ describe('manual artifact editing persistence', () => {
       .where(eq(contributions.id, contributionId));
     await client.database.insert(processorInstallations).values({
       id: processorId,
-      key: 'artifact-test',
-      displayName: 'Artifact test',
+      key: 'accomplishments',
+      displayName: 'Accomplishments',
       enabled: true,
       builtIn: false,
       currentVersionId: processorVersionId,
@@ -257,7 +257,7 @@ describe('manual artifact editing persistence', () => {
         },
       ],
       provenance: {
-        processorKey: 'artifact-test',
+        processorKey: 'accomplishments',
         processorVersionId,
         provider: { id: 'deterministic', displayName: 'Local fixture' },
         model: { id: 'food-v2' },
@@ -300,6 +300,62 @@ describe('manual artifact editing persistence', () => {
       metadata: { operation: 'correct', overrideCount: 1 },
     });
     expect(JSON.stringify(audits)).not.toContain('breakfast');
+  });
+
+  it('[SUM-004][AC-032] stores added and pinned bullets as immutable manual authority with content-free audit metadata', async () => {
+    const addedId = createUuidV7<'artifact'>({ timestamp: 715_000 });
+    const added = await service.add(
+      ownerId,
+      dayId,
+      {
+        artifactId: addedId,
+        processorKey: 'accomplishments',
+        logicalKey: `manual:accomplishment:${addedId}`,
+        kind: 'interpretation',
+        payload: {
+          bulletKey: `manual:${addedId}`,
+          artifactType: 'notable_event',
+          text: 'Helped a neighbor',
+          completionBasis: 'user_authored',
+          significanceBasis: 'user_authored',
+          pinned: true,
+          evidenceOrdinals: [],
+        },
+      },
+      'add-manual-bullet',
+      createUuidV7<'correlation'>({ timestamp: 715_100 }),
+    );
+    expect(added.artifacts[0]).toMatchObject({
+      authority: 'manual',
+      manualOperation: 'add',
+      payload: { text: 'Helped a neighbor', pinned: true },
+      evidence: [],
+    });
+    const addedArtifact = added.artifacts[0];
+    if (addedArtifact === undefined) throw new Error('Expected added bullet.');
+    const unpinned = await service.edit(
+      ownerId,
+      addedId,
+      addedArtifact.revision,
+      { operation: 'pin', pinned: false },
+      'unpin-manual-bullet',
+      createUuidV7<'correlation'>({ timestamp: 715_200 }),
+    );
+    expect(unpinned.artifacts[0]).toMatchObject({
+      authority: 'manual',
+      manualOperation: 'pin',
+      payload: { text: 'Helped a neighbor', pinned: false },
+      overridePaths: [''],
+    });
+    const audits = await client.database
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.entityId, addedId));
+    expect(audits.map(({ action }) => action)).toEqual([
+      'artifact.add',
+      'artifact.pin',
+    ]);
+    expect(JSON.stringify(audits)).not.toContain('Helped a neighbor');
   });
 
   it('[ARCH-004][EDIT-006][EDIT-007][AC-032] reprocessing preserves manual authority and retains a generated conflict candidate', async () => {

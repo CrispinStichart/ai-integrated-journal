@@ -12,6 +12,12 @@ import {
   TASKS_AND_INTENTIONS_PROCESSOR_KEY,
   validateTasksAndIntentionsOutput,
 } from './tasks-and-intentions.js';
+import {
+  ACCOMPLISHMENTS_PROCESSOR_KEY,
+  SUMMARY_PROCESSOR_KEY,
+  validateAccomplishmentsOutput,
+  validateSummaryOutput,
+} from './summary-and-accomplishments.js';
 
 /** Routes immutable built-in semantic checks after generic schema validation. */
 export function validateBuiltInProcessorOutput(
@@ -25,4 +31,7 @@ export function validateBuiltInProcessorOutput(
     validateSleepAndTemporalOutput(output);
   if (processorKey === TASKS_AND_INTENTIONS_PROCESSOR_KEY)
     validateTasksAndIntentionsOutput(output);
+  if (processorKey === SUMMARY_PROCESSOR_KEY) validateSummaryOutput(output);
+  if (processorKey === ACCOMPLISHMENTS_PROCESSOR_KEY)
+    validateAccomplishmentsOutput(output);
 }

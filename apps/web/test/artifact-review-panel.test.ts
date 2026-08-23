@@ -8,6 +8,7 @@ import { ref } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  add: vi.fn(),
   edit: vi.fn(),
   list: vi.fn(),
   merge: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../src/journal/api', () => ({
   createUuidV7: () => '019c5b90-0000-7000-8000-000000000099',
 }));
 vi.mock('../src/artifact/api', () => ({
+  addArtifact: mocks.add,
   editArtifact: mocks.edit,
   listArtifacts: mocks.list,
   mergeArtifacts: mocks.merge,
@@ -496,6 +498,7 @@ function mountPanel(items: readonly ArtifactResource[] = [artifact()]) {
     defaultOptions: { queries: { retry: false } },
   });
   mocks.list.mockResolvedValue(items);
+  mocks.add.mockResolvedValue(items);
   mocks.edit.mockResolvedValue(items);
   mocks.merge.mockResolvedValue(items);
   const wrapper = mount(ArtifactReviewPanel, {
@@ -504,6 +507,59 @@ function mountPanel(items: readonly ArtifactResource[] = [artifact()]) {
     global: { plugins: [[VueQueryPlugin, { queryClient }]] },
   });
   return { wrapper, queryClient };
+}
+
+function summaryArtifact(): ArtifactResource {
+  const base = foodArtifact();
+  const provenance = base.provenance;
+  if (provenance === undefined) throw new Error('Expected provenance fixture.');
+  return {
+    ...base,
+    id: '019c5b90-0000-7000-8000-000000000070',
+    processorId: '019c5b90-0000-7000-8000-000000000005',
+    logicalKey: 'string:daily-narrative',
+    kind: 'interpretation',
+    payload: {
+      summaryKey: 'daily-narrative',
+      artifactType: 'narrative_summary',
+      narrative: 'The day included finishing the garden gate and a picnic.',
+      tonePolicy: 'source_only',
+      unknownValuePolicy: 'exclude_or_report',
+      evidenceOrdinals: [0],
+    },
+    provenance: {
+      ...provenance,
+      processorKey: 'summary',
+      processorName: 'Summary',
+    },
+  };
+}
+
+function accomplishmentArtifact(): ArtifactResource {
+  const base = foodArtifact();
+  const provenance = base.provenance;
+  if (provenance === undefined) throw new Error('Expected provenance fixture.');
+  return {
+    ...base,
+    id: '019c5b90-0000-7000-8000-000000000071',
+    processorId: '019c5b90-0000-7000-8000-000000000006',
+    logicalKey: 'string:finished-garden-gate',
+    kind: 'interpretation',
+    payload: {
+      bulletKey: 'finished-garden-gate',
+      artifactType: 'accomplishment',
+      text: 'Finished the garden gate',
+      completionBasis: 'source_explicit',
+      significanceBasis: 'source_explicit',
+      pinned: false,
+      evidenceOrdinals: [0],
+    },
+    provenance: {
+      ...provenance,
+      processorKey: 'accomplishments',
+      processorName: 'Accomplishments',
+    },
+  };
 }
 
 function button(wrapper: ReturnType<typeof mount>, label: string) {
@@ -534,6 +590,58 @@ describe('artifact review UI', () => {
     expect(wrapper.text()).toContain('Your manual value is still active');
     expect(wrapper.text()).toContain('Revision and provenance history');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[SUM-001–004][SEM-004][AC-032] renders separate grounded narrative and accomplishment cards and preserves pin as a manual action', async () => {
+    const { wrapper, queryClient } = mountPanel([
+      summaryArtifact(),
+      accomplishmentArtifact(),
+    ]);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Daily narrative summary');
+    expect(wrapper.text()).toContain(
+      'The day included finishing the garden gate and a picnic.',
+    );
+    expect(wrapper.text()).toContain('Finished the garden gate');
+    expect(wrapper.text()).toContain('Accomplishment');
+    expect(wrapper.text()).toContain(
+      'Unknown values are excluded or reported separately',
+    );
+    await button(wrapper, 'Pin').trigger('click');
+    await flushPromises();
+    expect(mocks.edit).toHaveBeenCalledWith(
+      expect.objectContaining({ edit: { operation: 'pin', pinned: true } }),
+    );
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[SUM-004] adds an authoritative pinned bullet without claiming generated evidence', async () => {
+    const { wrapper, queryClient } = mountPanel([]);
+    await flushPromises();
+    await button(wrapper, 'Add notable bullet').trigger('click');
+    await wrapper
+      .get('#artifact-bullet-add textarea')
+      .setValue('Helped a neighbor');
+    await button(wrapper, 'Add bullet').trigger('click');
+    await flushPromises();
+    expect(mocks.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        journalDayId: DAY_ID,
+        artifact: expect.objectContaining({
+          processorKey: 'accomplishments',
+          kind: 'interpretation',
+          payload: expect.objectContaining({
+            text: 'Helped a neighbor',
+            pinned: true,
+            evidenceOrdinals: [],
+          }),
+        }),
+      }),
+    );
     queryClient.clear();
     wrapper.unmount();
   });

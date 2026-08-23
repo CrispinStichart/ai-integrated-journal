@@ -1,0 +1,2 @@
+ALTER TABLE "journal"."processor_artifact_manual_revision" DROP CONSTRAINT "processor_artifact_manual_operation_valid";--> statement-breakpoint
+ALTER TABLE "journal"."processor_artifact_manual_revision" ADD CONSTRAINT "processor_artifact_manual_operation_valid" CHECK ("journal"."processor_artifact_manual_revision"."operation" in ('add', 'confirm', 'correct', 'delete', 'merge_result', 'merge_source', 'pin', 'split_result', 'split_source'));

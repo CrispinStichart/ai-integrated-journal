@@ -8,7 +8,12 @@ import { computed, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
 import { createUuidV7 } from '../journal/api';
-import { editArtifact, listArtifacts, mergeArtifacts } from '../artifact/api';
+import {
+  addArtifact,
+  editArtifact,
+  listArtifacts,
+  mergeArtifacts,
+} from '../artifact/api';
 import AppDialog from './AppDialog.vue';
 import FeedbackMemoryDialog from './FeedbackMemoryDialog.vue';
 
@@ -17,6 +22,7 @@ const auth = useAuthentication();
 const queryClient = useQueryClient();
 const editor = ref<HTMLDialogElement & { open(): void; close(): void }>();
 const confirmation = ref<HTMLDialogElement & { open(): void; close(): void }>();
+const bulletEditor = ref<HTMLDialogElement & { open(): void; close(): void }>();
 const selected = ref<string[]>([]);
 const editing = ref<ArtifactResource>();
 const jsonDraft = ref('');
@@ -24,6 +30,8 @@ const error = ref('');
 const feedbackMessage = ref('');
 const busy = ref(false);
 const pendingAction = ref<'delete' | 'merge'>('delete');
+const bulletDraft = ref('');
+const bulletType = ref<'accomplishment' | 'notable_event'>('accomplishment');
 
 const query = useQuery({
   queryKey: computed(() => ['artifacts', props.journalDayId]),
@@ -63,6 +71,21 @@ function isTaskArtifact(artifact: ArtifactResource): boolean {
   return (
     artifact.provenance?.processorKey === 'tasks-and-intentions' &&
     typeof artifact.payload.intentionClass === 'string'
+  );
+}
+
+function isSummaryArtifact(artifact: ArtifactResource): boolean {
+  return (
+    artifact.provenance?.processorKey === 'summary' ||
+    artifact.payload.artifactType === 'narrative_summary'
+  );
+}
+
+function isAccomplishmentArtifact(artifact: ArtifactResource): boolean {
+  return (
+    artifact.provenance?.processorKey === 'accomplishments' ||
+    artifact.payload.artifactType === 'accomplishment' ||
+    artifact.payload.artifactType === 'notable_event'
   );
 }
 
@@ -327,6 +350,55 @@ async function split(artifact: ArtifactResource): Promise<void> {
     })),
   });
 }
+
+function openBulletEditor(): void {
+  bulletDraft.value = '';
+  bulletType.value = 'accomplishment';
+  error.value = '';
+  bulletEditor.value?.open();
+}
+
+async function saveBullet(): Promise<void> {
+  const text = bulletDraft.value.trim();
+  if (text.length === 0) {
+    error.value = 'Enter a notable event or accomplishment.';
+    return;
+  }
+  busy.value = true;
+  error.value = '';
+  try {
+    const identity = createUuidV7();
+    await addArtifact({
+      journalDayId: props.journalDayId,
+      csrfToken: csrfToken(),
+      idempotencyKey: createUuidV7(),
+      artifact: {
+        artifactId: identity,
+        processorKey: 'accomplishments',
+        logicalKey: `manual:accomplishment:${identity}`,
+        kind: 'interpretation',
+        payload: {
+          bulletKey: `manual:${identity}`,
+          artifactType: bulletType.value,
+          text,
+          completionBasis: 'user_authored',
+          significanceBasis: 'user_authored',
+          pinned: true,
+          evidenceOrdinals: [],
+        },
+      },
+    });
+    bulletEditor.value?.close();
+    await refresh();
+  } catch (caught) {
+    error.value =
+      caught instanceof Error
+        ? caught.message
+        : 'The bullet could not be added.';
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -346,14 +418,19 @@ async function split(artifact: ArtifactResource): Promise<void> {
           disagreements appear as candidates for your review.
         </p>
       </div>
-      <button
-        class="btn btn-sm"
-        type="button"
-        :disabled="selected.length < 2 || busy"
-        @click="askMerge"
-      >
-        Merge selected
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn btn-sm" type="button" @click="openBulletEditor">
+          Add notable bullet
+        </button>
+        <button
+          class="btn btn-ghost btn-sm"
+          type="button"
+          :disabled="selected.length < 2 || busy"
+          @click="askMerge"
+        >
+          Merge selected
+        </button>
+      </div>
     </div>
 
     <div v-if="error" role="alert" class="alert alert-error alert-soft mt-4">
@@ -430,7 +507,58 @@ async function split(artifact: ArtifactResource): Promise<void> {
               ></span
             >
             <div
-              v-if="isFoodArtifact(artifact)"
+              v-if="isSummaryArtifact(artifact)"
+              class="card card-border mt-3 bg-base-200"
+            >
+              <div class="card-body">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="card-title">Daily narrative summary</h3>
+                  <span class="badge badge-outline">Interpretation</span>
+                </div>
+                <p class="leading-relaxed">
+                  {{ textField(artifact.payload, 'narrative') }}
+                </p>
+                <p class="text-xs text-base-content/70">
+                  Source-grounded narrative. Unknown values are excluded or
+                  reported separately, never treated as neutral or zero.
+                </p>
+              </div>
+            </div>
+            <div
+              v-else-if="isAccomplishmentArtifact(artifact)"
+              class="card card-border mt-3 bg-base-200"
+            >
+              <div class="card-body">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="card-title">
+                    {{ textField(artifact.payload, 'text') }}
+                  </h3>
+                  <span class="badge badge-outline">{{
+                    artifact.payload.artifactType === 'accomplishment'
+                      ? 'Accomplishment'
+                      : 'Notable event'
+                  }}</span>
+                  <span
+                    v-if="artifact.payload.pinned === true"
+                    class="badge badge-ghost"
+                    >Pinned manually</span
+                  >
+                </div>
+                <p class="text-sm text-base-content/70">
+                  This scan-friendly bullet is separate from the narrative
+                  summary. Generated significance and completion require exact
+                  source support.
+                </p>
+                <p
+                  v-if="artifact.manualOperation === 'add'"
+                  class="text-xs text-base-content/70"
+                >
+                  Added manually; no generated evidence span is claimed.
+                </p>
+              </div>
+            </div>
+            <div
+              v-else-if="isFoodArtifact(artifact)"
               class="mt-3 rounded-box bg-base-200 p-4"
             >
               <div class="flex flex-wrap items-center gap-2">
@@ -1010,6 +1138,20 @@ async function split(artifact: ArtifactResource): Promise<void> {
             </details>
             <div class="mt-3 flex flex-wrap gap-2">
               <button
+                v-if="isAccomplishmentArtifact(artifact) && !artifact.deleted"
+                class="btn btn-sm"
+                type="button"
+                :disabled="busy"
+                @click="
+                  perform(artifact, {
+                    operation: 'pin',
+                    pinned: artifact.payload.pinned !== true,
+                  })
+                "
+              >
+                {{ artifact.payload.pinned === true ? 'Unpin' : 'Pin' }}
+              </button>
+              <button
                 v-if="!artifact.deleted"
                 class="btn btn-sm"
                 type="button"
@@ -1089,6 +1231,44 @@ async function split(artifact: ArtifactResource): Promise<void> {
         </button></template
       ></AppDialog
     >
+    <AppDialog
+      id="artifact-bullet-add"
+      ref="bulletEditor"
+      title="Add notable bullet"
+    >
+      <label class="fieldset">
+        <span class="fieldset-legend">Type</span>
+        <select v-model="bulletType" class="select w-full">
+          <option value="accomplishment">Accomplishment</option>
+          <option value="notable_event">Notable event</option>
+        </select>
+      </label>
+      <label class="fieldset mt-3">
+        <span class="fieldset-legend">Bullet text</span>
+        <textarea
+          v-model="bulletDraft"
+          class="textarea min-h-24 w-full"
+          maxlength="500"
+          placeholder="What do you want to remember?"
+        />
+      </label>
+      <p class="mt-3 text-sm text-base-content/70">
+        User-added bullets start pinned and remain authoritative during
+        reprocessing. They do not claim generated evidence.
+      </p>
+      <template #actions>
+        <button
+          class="btn btn-ghost"
+          type="button"
+          @click="bulletEditor?.close()"
+        >
+          Cancel
+        </button>
+        <button class="btn" type="button" :disabled="busy" @click="saveBullet">
+          Add bullet
+        </button>
+      </template>
+    </AppDialog>
     <AppDialog
       id="artifact-confirmation"
       ref="confirmation"

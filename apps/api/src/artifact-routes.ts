@@ -1,4 +1,5 @@
 import {
+  artifactAddRequestSchema,
   artifactEditRequestSchema,
   artifactListResponseSchema,
   artifactMergeRequestSchema,
@@ -129,6 +130,57 @@ export function registerArtifactRoutes(
       sendValidated(response, artifactListResponseSchema, {
         items: [...(await service.list(owner.ownerId, params.id))],
       });
+    }),
+  );
+  app.post(
+    '/api/v1/journal-days/:id/artifacts',
+    wrap(async (request, response) => {
+      const owner = await principal(request, response, dependencies, true);
+      const params = parse(
+        request,
+        response,
+        paramsSchema,
+        request.params,
+        'path',
+      );
+      if (owner === undefined || params === undefined) return;
+      const headers = parse(
+        request,
+        response,
+        idempotentMutationHeadersSchema,
+        { 'idempotency-key': request.get('idempotency-key') },
+        'header',
+      );
+      const body = parse(
+        request,
+        response,
+        artifactAddRequestSchema,
+        request.body,
+        'body',
+      );
+      if (headers === undefined || body === undefined) return;
+      const result = await service.add(
+        owner.ownerId,
+        params.id,
+        body,
+        headers['idempotency-key'],
+        correlationId(response),
+      );
+      const primary = result.artifacts[0];
+      if (primary !== undefined)
+        response.set('etag', `"artifact-${primary.revision}"`);
+      sendValidated(
+        response,
+        artifactMutationResponseSchema,
+        {
+          artifacts: [...result.artifacts],
+          idempotency: {
+            key: headers['idempotency-key'],
+            replayed: result.replayed,
+          },
+        },
+        201,
+      );
     }),
   );
   app.post(

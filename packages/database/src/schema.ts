@@ -1777,7 +1777,7 @@ export const processorArtifactManualRevisions = journalSchema.table(
     ),
     check(
       'processor_artifact_manual_operation_valid',
-      sql`${table.operation} in ('confirm', 'correct', 'delete', 'merge_result', 'merge_source', 'split_result', 'split_source')`,
+      sql`${table.operation} in ('add', 'confirm', 'correct', 'delete', 'merge_result', 'merge_source', 'pin', 'split_result', 'split_source')`,
     ),
     check(
       'processor_artifact_manual_payload_hash_sha256',

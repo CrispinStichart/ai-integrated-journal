@@ -126,8 +126,8 @@ Status values are:
 | MOOD-006 | Immutable mood instructions, deterministic validation tests, and result-card copy prohibit clinical/diagnostic claims and label output as journaling analysis. | 39 | AI journal | Verified |
 | TASK-001–003 | `packages/processors/test/tasks-and-intentions.test.ts` and the accessible artifact-card test distinguish all six action/intention classes, bind due dates to exact temporal evidence, and enforce observation-only output with no external-task authority. | 41 | AI journal | Verified |
 | TASK-004–005 | Tasks/intentions schema, fixtures, validator, reconciliation tests, and cards preserve broader remember categories and ensure completed-only actions never become pending tasks. | 41 | AI journal | Verified |
-| SUM-001–003 | `BUILTINS`: narrative and bullets remain separate, grounded, and free of invented significance/tone. | 42 | AI journal | Planned |
-| SUM-004–005 | `BUILTINS`, `PROCESSOR`: edit/add/remove/pin survives reprocessing and calendar truncation preserves the full list. | 35, 42 | AI journal | Planned |
+| SUM-001–003 | `packages/processors/test/summary-and-accomplishments.test.ts` and accessible artifact-card tests keep narrative and bullets separate, grounded, and free of invented significance/tone. | 42 | AI journal | Verified |
+| SUM-004–005 | Processor reconciliation, artifact persistence/API, and accessible component tests verify edit/add/remove/pin authority survives reprocessing while the Journal Day retains the complete bullet list. | 35, 42 | AI journal | Verified |
 
 ## Editing, lifecycle, retrieval, retention, security, and portability
 

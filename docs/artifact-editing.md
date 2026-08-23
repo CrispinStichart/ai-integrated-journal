@@ -13,7 +13,8 @@ Split and merge execute atomically. Source artifacts receive manual tombstone re
 ## HTTP and privacy boundary
 
 - `GET /api/v1/journal-days/:id/artifacts` returns owner-scoped effective views, review candidates, and immutable history.
-- `POST /api/v1/artifacts/:id/edits` supports correct, confirm, delete, split, candidate adoption/dismissal, and override release.
+- `POST /api/v1/artifacts/:id/edits` supports correct, confirm, delete, split, pin/unpin, candidate adoption/dismissal, and override release.
+- `POST /api/v1/journal-days/:id/artifacts` creates a bounded user-authored accomplishment/notable bullet with reserved manual identity.
 - `POST /api/v1/artifacts/merge` requires an ETag containing every source revision and applies all changes in one transaction.
 
 Mutations require an authenticated session, same-origin CSRF validation when session auth is configured, an idempotency key, and a strong artifact ETag. PostgreSQL row locks and uniqueness constraints serialize conflicting edits. Audit events contain identifiers, actions, counts, and hashes only; payloads, journal text, reasons, prompts, and provider output never enter logs or audit metadata.

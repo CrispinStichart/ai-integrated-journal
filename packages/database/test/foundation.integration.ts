@@ -8,6 +8,10 @@ import {
   SLEEP_PROCESSOR_VERSION_ID,
   TASKS_AND_INTENTIONS_PROCESSOR_ID,
   TASKS_AND_INTENTIONS_PROCESSOR_VERSION_ID,
+  ACCOMPLISHMENTS_PROCESSOR_ID,
+  ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
+  SUMMARY_PROCESSOR_ID,
+  SUMMARY_PROCESSOR_VERSION_ID,
 } from '@journal/processors';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -78,7 +82,7 @@ describe('DB-JOURNAL foundation', () => {
     expect(queues).toHaveLength(7);
     expect(schedules).toHaveLength(3);
     expect(processors).toHaveLength(6);
-    expect(firstSeed.processorVersionsRequested).toBe(10);
+    expect(firstSeed.processorVersionsRequested).toBe(12);
     expect(processors.every(({ enabled }) => !enabled)).toBe(true);
     expect(
       processors.every(({ requirementMode }) => requirementMode === 'optional'),
@@ -89,6 +93,7 @@ describe('DB-JOURNAL foundation', () => {
       { key: 'synthetic-mood-cases' },
       { key: 'synthetic-owner' },
       { key: 'synthetic-sleep-and-temporal-cases' },
+      { key: 'synthetic-summary-and-accomplishments' },
       { key: 'synthetic-tasks-and-intentions-cases' },
     ]);
     const [food] = await client.database
@@ -187,6 +192,43 @@ describe('DB-JOURNAL foundation', () => {
         defaultEnabled: false,
       },
     });
+    for (const expected of [
+      {
+        id: SUMMARY_PROCESSOR_ID,
+        versionId: SUMMARY_PROCESSOR_VERSION_ID,
+        logicalKey: 'summaryKey',
+      },
+      {
+        id: ACCOMPLISHMENTS_PROCESSOR_ID,
+        versionId: ACCOMPLISHMENTS_PROCESSOR_VERSION_ID,
+        logicalKey: 'bulletKey',
+      },
+    ]) {
+      const [processor] = await client.database
+        .select({
+          currentVersionId: processorInstallations.currentVersionId,
+          semanticVersion: processorVersions.semanticVersion,
+          definition: processorVersions.definition,
+        })
+        .from(processorInstallations)
+        .innerJoin(
+          processorVersions,
+          eq(processorVersions.id, processorInstallations.currentVersionId),
+        )
+        .where(eq(processorInstallations.id, expected.id));
+      expect(processor).toMatchObject({
+        currentVersionId: expected.versionId,
+        semanticVersion: '2.0.0',
+        definition: {
+          kind: 'interpretation',
+          reconciliation: {
+            strategy: 'logical_key',
+            logicalKey: expected.logicalKey,
+          },
+          defaultEnabled: false,
+        },
+      });
+    }
   });
 
   it('does not insert development fixtures in production or overwrite operator configuration', async () => {

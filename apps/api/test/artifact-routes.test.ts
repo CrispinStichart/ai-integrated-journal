@@ -52,6 +52,7 @@ const artifact: ArtifactResource = {
 
 function service(): ArtifactService {
   return {
+    add: vi.fn(async () => ({ artifacts: [artifact], replayed: false })),
     list: vi.fn(async () => [artifact]),
     edit: vi.fn(async () => ({ artifacts: [artifact], replayed: false })),
     merge: vi.fn(async () => ({ artifacts: [artifact], replayed: false })),
@@ -131,6 +132,48 @@ describe('manual artifact editing API', () => {
       1,
       { operation: 'confirm' },
       'confirm-artifact-1',
+      CORRELATION_ID,
+    );
+  });
+
+  it('[SUM-004][SEC-002][STATE-004] adds a bounded manual bullet with authentication, CSRF, and idempotency', async () => {
+    const artifactService = service();
+    const body = {
+      artifactId: RESULT_ID,
+      processorKey: 'accomplishments',
+      logicalKey: `manual:accomplishment:${RESULT_ID}`,
+      kind: 'interpretation',
+      payload: {
+        bulletKey: `manual:${RESULT_ID}`,
+        artifactType: 'accomplishment',
+        text: 'Helped a neighbor',
+        completionBasis: 'user_authored',
+        significanceBasis: 'user_authored',
+        pinned: true,
+        evidenceOrdinals: [],
+      },
+    } as const;
+    await request(app(artifactService))
+      .post(`/api/v1/journal-days/${DAY_ID}/artifacts`)
+      .set('authorization', 'Bearer valid')
+      .send(body)
+      .expect(400);
+    const response = await request(app(artifactService))
+      .post(`/api/v1/journal-days/${DAY_ID}/artifacts`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'add-bullet-1')
+      .send(body)
+      .expect(201)
+      .expect('etag', '"artifact-2"');
+    expect(response.body.idempotency).toEqual({
+      key: 'add-bullet-1',
+      replayed: false,
+    });
+    expect(artifactService.add).toHaveBeenCalledWith(
+      OWNER_ID,
+      DAY_ID,
+      body,
+      'add-bullet-1',
       CORRELATION_ID,
     );
   });

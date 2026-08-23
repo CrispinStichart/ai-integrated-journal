@@ -5,11 +5,13 @@ import { utcInstantSchema, uuidV7Schema } from './primitives.js';
 
 const jsonObjectSchema = z.record(z.string(), z.json());
 export const artifactManualOperationSchema = z.enum([
+  'add',
   'confirm',
   'correct',
   'delete',
   'merge_result',
   'merge_source',
+  'pin',
   'split_result',
   'split_source',
 ]);
@@ -130,6 +132,7 @@ const manualResultSchema = z.strictObject({
   payload: jsonObjectSchema,
 });
 export const artifactEditRequestSchema = z.discriminatedUnion('operation', [
+  z.strictObject({ operation: z.literal('pin'), pinned: z.boolean() }),
   z.strictObject({
     operation: z.literal('correct'),
     overrides: z.array(artifactOverrideValueSchema).min(1).max(64),
@@ -159,6 +162,26 @@ export const artifactEditRequestSchema = z.discriminatedUnion('operation', [
     reason: z.string().trim().min(1).max(500).optional(),
   }),
 ]);
+export const manualAccomplishmentPayloadSchema = z.strictObject({
+  bulletKey: z.string().regex(/^manual:[A-Za-z0-9._:-]+$/),
+  artifactType: z.enum(['accomplishment', 'notable_event']),
+  text: z.string().trim().min(1).max(500),
+  completionBasis: z.literal('user_authored'),
+  significanceBasis: z.literal('user_authored'),
+  pinned: z.boolean(),
+  evidenceOrdinals: z.array(z.number().int().nonnegative()).max(64),
+});
+export const artifactAddRequestSchema = z.strictObject({
+  artifactId: uuidV7Schema,
+  processorKey: z.literal('accomplishments'),
+  logicalKey: z
+    .string()
+    .min(1)
+    .max(256)
+    .regex(/^manual:accomplishment:[A-Za-z0-9._:-]+$/),
+  kind: z.literal('interpretation'),
+  payload: manualAccomplishmentPayloadSchema,
+});
 export const artifactMergeRequestSchema = z.strictObject({
   sourceArtifactIds: z
     .array(uuidV7Schema)
@@ -176,5 +199,6 @@ export const artifactMutationResponseSchema = z.strictObject({
 });
 
 export type ArtifactEditRequest = z.infer<typeof artifactEditRequestSchema>;
+export type ArtifactAddRequest = z.infer<typeof artifactAddRequestSchema>;
 export type ArtifactMergeRequest = z.infer<typeof artifactMergeRequestSchema>;
 export type ArtifactResource = z.infer<typeof artifactResourceSchema>;

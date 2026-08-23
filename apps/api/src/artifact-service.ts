@@ -22,6 +22,7 @@ import {
 import {
   artifactMutationResponseSchema,
   artifactResourceSchema,
+  type ArtifactAddRequest,
   type ArtifactEditRequest,
   type ArtifactMergeRequest,
   type ArtifactResource,
@@ -67,6 +68,13 @@ export interface ArtifactService {
     ownerId: string,
     journalDayId: string,
   ): Promise<readonly ArtifactResource[]>;
+  add(
+    ownerId: string,
+    journalDayId: string,
+    input: ArtifactAddRequest,
+    idempotencyKey: string,
+    correlationId: string,
+  ): Promise<ArtifactMutationResult>;
   edit(
     ownerId: string,
     artifactId: string,
@@ -545,6 +553,88 @@ export class PostgresArtifactService implements ArtifactService {
     );
   }
 
+  public async add(
+    ownerId: string,
+    journalDayId: string,
+    input: ArtifactAddRequest,
+    idempotencyKey: string,
+    correlationId: string,
+  ): Promise<ArtifactMutationResult> {
+    const requestHash = hash({ journalDayId, input });
+    return inTransaction(this.database, async (transaction) => {
+      const operation = `add:${journalDayId}`;
+      const priorReplay = await replay(
+        transaction,
+        ownerId,
+        operation,
+        idempotencyKey,
+        requestHash,
+      );
+      if (priorReplay !== undefined) return priorReplay;
+      const [day] = await transaction
+        .select({ id: journalDays.id })
+        .from(journalDays)
+        .where(
+          and(
+            eq(journalDays.id, journalDayId),
+            eq(journalDays.userId, ownerId),
+          ),
+        )
+        .limit(1)
+        .for('update');
+      if (day === undefined) throw new ArtifactNotFoundError();
+      const [processor] = await transaction
+        .select({ id: processorInstallations.id })
+        .from(processorInstallations)
+        .where(eq(processorInstallations.key, input.processorKey))
+        .limit(1);
+      if (processor === undefined)
+        throw new ArtifactConflictError(
+          'The accomplishments processor is not installed.',
+        );
+      const now = this.now();
+      const artifact = {
+        id: input.artifactId,
+        processorId: processor.id,
+        targetJournalDayId: journalDayId,
+        targetContributionId: null,
+        logicalKey: input.logicalKey,
+        kind: input.kind,
+        authority: 'manual' as const,
+        revision: 0,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await transaction.insert(processorArtifacts).values(artifact);
+      await appendManualRevision(transaction, {
+        artifact,
+        ownerId,
+        operation: 'add',
+        payload: input.payload,
+        overrides: [{ path: '', value: input.payload }],
+        editGroupId: correlationId,
+        now,
+        createId: this.createId,
+      });
+      const artifacts = [
+        await resource(transaction, ownerId, input.artifactId),
+      ];
+      const response = artifactMutationResponseSchema
+        .pick({ artifacts: true })
+        .parse({ artifacts });
+      await transaction.insert(artifactApiIdempotency).values({
+        ownerId,
+        operation,
+        idempotencyKey,
+        requestHash,
+        response,
+        createdAt: now,
+      });
+      return { artifacts: response.artifacts, replayed: false };
+    });
+  }
+
   public async edit(
     ownerId: string,
     artifactId: string,
@@ -727,7 +817,21 @@ export class PostgresArtifactService implements ArtifactService {
             : edit.operation === 'confirm'
               ? 'confirm'
               : 'correct';
-        if (edit.operation === 'correct') {
+        if (edit.operation === 'correct' || edit.operation === 'pin') {
+          if (edit.operation === 'pin') {
+            const [processor] = await transaction
+              .select({ key: processorInstallations.key })
+              .from(processorInstallations)
+              .where(eq(processorInstallations.id, artifact.processorId))
+              .limit(1);
+            if (
+              processor?.key !== 'accomplishments' ||
+              typeof before.payload.pinned !== 'boolean'
+            )
+              throw new ArtifactConflictError(
+                'Only accomplishment bullets can be pinned.',
+              );
+          }
           const [previous] = await transaction
             .select()
             .from(processorArtifactManualRevisions)
@@ -738,11 +842,16 @@ export class PostgresArtifactService implements ArtifactService {
               ),
             )
             .limit(1);
+          const requestedOverrides =
+            edit.operation === 'pin'
+              ? [{ path: '/pinned', value: edit.pinned }]
+              : edit.overrides;
           overrides = mergeArtifactOverrides(
             (previous?.overrides ?? []) as readonly ArtifactOverrideValue[],
-            edit.overrides,
+            requestedOverrides,
           );
-          payload = applyArtifactOverrides(before.payload, edit.overrides);
+          payload = applyArtifactOverrides(before.payload, requestedOverrides);
+          if (edit.operation === 'pin') operation = 'pin';
         } else if (edit.operation === 'adopt_candidate') {
           const [candidate] = await transaction
             .select()

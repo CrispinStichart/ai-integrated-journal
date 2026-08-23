@@ -364,7 +364,7 @@ Implement wake-date association, separate naps and sleep periods, ambiguity, cor
 
 Distinguish completed, firm, tentative, contemplative, suggested, and general-interest statements. Resolve due dates only when supported by evidence. Verify AC-024.
 
-### 42. Summary and accomplishment processors
+### 42. Summary and accomplishment processors - FINISHED
 
 Keep narrative summaries separate from notable/accomplishment bullets. Support editing, adding, removal, pinning, evidence, and preservation of manual changes during reprocessing.
 

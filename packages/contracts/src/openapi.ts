@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  artifactAddRequestSchema,
   artifactEditRequestSchema,
   artifactListResponseSchema,
   artifactMergeRequestSchema,
@@ -754,6 +755,20 @@ export function createOpenApiDocument(): Record<string, unknown> {
             '404': problemResponse('Journal Day not found'),
           },
         },
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('ArtifactAddRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Authoritative user-added accomplishment bullet',
+              'ArtifactMutationResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+            '404': problemResponse('Journal Day not found'),
+            '409': problemResponse('Artifact conflict'),
+          },
+        },
       },
       '/api/v1/artifacts/{id}/edits': {
         post: {
@@ -929,6 +944,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
       },
       schemas: {
+        ArtifactAddRequest: componentSchema(artifactAddRequestSchema),
         ArtifactEditRequest: componentSchema(artifactEditRequestSchema),
         ArtifactListResponse: componentSchema(artifactListResponseSchema),
         ArtifactMergeRequest: componentSchema(artifactMergeRequestSchema),

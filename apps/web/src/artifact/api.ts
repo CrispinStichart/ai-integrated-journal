@@ -1,10 +1,12 @@
 import {
+  artifactAddRequestSchema,
   artifactEditRequestSchema,
   artifactListResponseSchema,
   artifactMergeRequestSchema,
   artifactMutationResponseSchema,
   problemDetailsSchema,
   type ArtifactEditRequest,
+  type ArtifactAddRequest,
   type ArtifactMergeRequest,
   type ArtifactResource,
 } from '@journal/contracts';
@@ -51,6 +53,25 @@ export async function listArtifacts(
   return artifactListResponseSchema.parse(
     await request(`/api/v1/journal-days/${journalDayId}/artifacts`),
   ).items;
+}
+
+export async function addArtifact(input: {
+  journalDayId: string;
+  csrfToken: string;
+  idempotencyKey: string;
+  artifact: ArtifactAddRequest;
+}): Promise<readonly ArtifactResource[]> {
+  const body = artifactAddRequestSchema.parse(input.artifact);
+  return artifactMutationResponseSchema.parse(
+    await request(`/api/v1/journal-days/${input.journalDayId}/artifacts`, {
+      method: 'POST',
+      headers: {
+        'x-csrf-token': input.csrfToken,
+        'idempotency-key': input.idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    }),
+  ).artifacts;
 }
 
 export async function editArtifact(input: {
