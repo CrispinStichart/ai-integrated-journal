@@ -37,7 +37,6 @@ describe('API-OPS graceful shutdown', () => {
     } as unknown as Server;
     const close = vi.fn(async () => undefined);
     const shutdown = createGracefulShutdown({
-      graceMilliseconds: 25,
       logger: silentLogger,
       resources: [{ close }],
       server,
@@ -45,12 +44,38 @@ describe('API-OPS graceful shutdown', () => {
 
     const completion = shutdown();
     expect(server.closeAllConnections).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(25);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
     await completion;
 
     expect(server.closeIdleConnections).toHaveBeenCalledOnce();
     expect(server.closeAllConnections).toHaveBeenCalledOnce();
     expect(close).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it('rejects a server close error without closing dependent resources', async () => {
+    vi.useFakeTimers();
+    const closeError = new Error('listener close failed');
+    const server = {
+      close: vi.fn((callback: (error?: Error) => void) => callback(closeError)),
+      closeAllConnections: vi.fn(),
+      closeIdleConnections: vi.fn(),
+    } as unknown as Server;
+    const close = vi.fn(async () => undefined);
+    const shutdown = createGracefulShutdown({
+      graceMilliseconds: 25,
+      logger: silentLogger,
+      resources: [{ close }],
+      server,
+    });
+
+    await expect(shutdown()).rejects.toBe(closeError);
+
+    expect(server.closeIdleConnections).toHaveBeenCalledOnce();
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 });

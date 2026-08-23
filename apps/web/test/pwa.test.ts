@@ -36,4 +36,8 @@ it('prompts for service-worker updates and reports offline readiness', async () 
   expect(pwaStatus.error.value?.message).toBe(
     'Service worker registration failed',
   );
+
+  const browserError = new Error('service-worker scope rejected');
+  options?.onRegisterError(browserError);
+  expect(pwaStatus.error.value).toBe(browserError);
 });

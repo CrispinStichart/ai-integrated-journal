@@ -88,6 +88,32 @@ describe('@journal/config operational shell', () => {
     ).toThrowError(expect.not.stringContaining(secret));
   });
 
+  it('enables secure cookies for a matching public HTTPS authentication origin', () => {
+    const config = parseEnvironment({
+      AUTH_ORIGIN: 'https://journal.example',
+      BLOB_DATA_DIR: '/tmp/blobs',
+      DATABASE_URL: 'postgresql://journal@localhost/journal',
+      WEBAUTHN_RP_ID: 'journal.example',
+    });
+
+    expect(config.auth).toEqual({
+      expectedOrigin: 'https://journal.example',
+      rpId: 'journal.example',
+      secureCookies: true,
+    });
+  });
+
+  it('rejects a WebAuthn relying-party ID that does not match the origin', () => {
+    expect(() =>
+      parseEnvironment({
+        AUTH_ORIGIN: 'https://journal.example',
+        BLOB_DATA_DIR: '/tmp/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+        WEBAUTHN_RP_ID: 'attacker.example',
+      }),
+    ).toThrowError(/WEBAUTHN_RP_ID: must match/);
+  });
+
   it('loads process configuration only once', async () => {
     vi.stubEnv('BLOB_DATA_DIR', '/tmp/first');
     vi.stubEnv('DATABASE_URL', 'postgresql://journal@localhost/first');

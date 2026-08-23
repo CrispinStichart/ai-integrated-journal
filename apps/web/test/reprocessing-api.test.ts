@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   cancelReprocessing,
+  getReprocessingBatch,
   listReprocessingBatches,
   previewReprocessing,
+  ReprocessingApiError,
   startReprocessing,
 } from '../src/reprocessing/api';
 
@@ -145,14 +147,85 @@ describe('reprocessing API client', () => {
   });
 
   it('[EDIT-005][STATE-001] validates paginated audit history', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({ items: [batch], page: { hasMore: false } }),
+      )
+      .mockResolvedValueOnce(response(batch));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await listReprocessingBatches()).toEqual([batch]);
+    await expect(getReprocessingBatch(ID)).resolves.toEqual(batch);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `/api/v1/reprocessing-batches/${ID}`,
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+  });
+
+  it('[STATE-003] preserves stable problem codes and the most specific safe message', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response(
+          {
+            type: 'about:blank',
+            title: 'Reprocessing conflict',
+            detail: 'The preview fingerprint is stale.',
+            status: 409,
+            code: 'preview_stale',
+            correlationId: ID,
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response(
+          {
+            type: 'about:blank',
+            title: 'Batch not found',
+            status: 404,
+            code: 'batch_not_found',
+            correlationId: ID,
+          },
+          404,
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(getReprocessingBatch(ID)).rejects.toMatchObject<
+      Partial<ReprocessingApiError>
+    >({
+      status: 409,
+      code: 'preview_stale',
+      message: 'The preview fingerprint is stale.',
+    });
+    await expect(getReprocessingBatch(ID)).rejects.toMatchObject<
+      Partial<ReprocessingApiError>
+    >({
+      status: 404,
+      code: 'batch_not_found',
+      message: 'Batch not found',
+    });
+  });
+
+  it('[STATE-003][SEC-003] does not expose a non-JSON upstream error body', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response({ items: [batch], page: { hasMore: false } }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response('<h1>proxy failure containing journal content</h1>', {
+          status: 503,
+          headers: { 'content-type': 'text/html' },
+        }),
+      ),
     );
-    expect(await listReprocessingBatches()).toEqual([batch]);
+
+    await expect(getReprocessingBatch(ID)).rejects.toMatchObject<
+      Partial<ReprocessingApiError>
+    >({
+      status: 503,
+      code: 'unknown',
+      message: 'The reprocessing request failed.',
+    });
   });
 });
