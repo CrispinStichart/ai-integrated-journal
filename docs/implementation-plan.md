@@ -328,7 +328,7 @@ Assemble bounded inputs with stable labels and exact temporal context, invoke de
 
 Record exact artifact inputs, source revisions, processor versions, prompts, providers, models, and configurations. Traverse dependencies after a revision change, mark only downstream results stale, and enqueue replacement work.
 
-### 34. Reconciliation engine
+### 34. Reconciliation engine - FINISHED
 
 Implement create, update, supersede, remove/supersede, and unchanged outcomes. Add stable logical keys, serialization or locking for concurrent day reconciliation, and database-enforced idempotency.
 

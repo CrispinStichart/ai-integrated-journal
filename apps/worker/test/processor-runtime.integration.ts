@@ -15,6 +15,10 @@ import {
   journalDays,
   migrateDatabase,
   processorInstallations,
+  processorArtifacts,
+  processorArtifactVersions,
+  processorReconciliationOutcomes,
+  processorReconciliations,
   processorResultEvidence,
   processorResults,
   processorRunInputs,
@@ -64,6 +68,9 @@ describe('WORKER generic processor runtime', () => {
   });
   const timeoutVersionId = createUuidV7<'processor-version'>({
     timestamp: 305_200,
+  });
+  const invalidReconciliationVersionId = createUuidV7<'processor-version'>({
+    timestamp: 305_300,
   });
   const now = new Date('2026-08-23T04:00:00.000Z');
   const text = 'Synthetic breakfast note.';
@@ -295,6 +302,23 @@ describe('WORKER generic processor runtime', () => {
       quote: 'Synthetic',
       resolutionStatus: 'resolved',
     });
+    const [reconciliation] = await client.database
+      .select()
+      .from(processorReconciliations)
+      .where(eq(processorReconciliations.runId, run.id));
+    const [reconciliationOutcome] = await client.database
+      .select()
+      .from(processorReconciliationOutcomes)
+      .where(eq(processorReconciliationOutcomes.runId, run.id));
+    expect(reconciliation).toMatchObject({
+      strategy: 'replace_scope',
+      completeness: 'complete',
+      sourceResultId: result.id,
+    });
+    expect(reconciliationOutcome).toMatchObject({
+      logicalKey: 'scope',
+      outcome: 'create',
+    });
     if (persistedRun?.rawResponseId === null || persistedRun === undefined)
       throw new Error('Expected retained provider response.');
     expect(
@@ -522,6 +546,31 @@ describe('WORKER generic processor runtime', () => {
       );
     if (replacementResult === undefined)
       throw new Error('Expected replacement result.');
+    const [replacementOutcome] = await client.database
+      .select()
+      .from(processorReconciliationOutcomes)
+      .where(
+        eq(
+          processorReconciliationOutcomes.runId,
+          invalidation.replacementRunIds[0] as string,
+        ),
+      );
+    expect(replacementOutcome).toMatchObject({
+      logicalKey: 'scope',
+      outcome: 'update',
+    });
+    const [stableUpstream] = await client.database
+      .select()
+      .from(processorArtifacts)
+      .where(eq(processorArtifacts.processorId, processorId));
+    if (stableUpstream === undefined)
+      throw new Error('Expected stable upstream artifact.');
+    expect(
+      await client.database
+        .select()
+        .from(processorArtifactVersions)
+        .where(eq(processorArtifactVersions.artifactId, stableUpstream.id)),
+    ).toHaveLength(2);
     const [queuedDownstream] = await client.database
       .select()
       .from(processorRuns)
@@ -673,5 +722,96 @@ describe('WORKER generic processor runtime', () => {
       errorRetryable: true,
       outputResultId: null,
     });
+  });
+
+  it('[PROC-005][STATE-003][STATE-004] rejects an unstable logical key as a permanent reconciliation failure', async () => {
+    const logicalDefinition: ProcessorDefinitionDraft = {
+      ...definition,
+      semanticVersion: '1.3.0',
+      outputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['items'],
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['logicalKey'],
+              properties: { logicalKey: { type: 'string' } },
+            },
+          },
+        },
+      },
+      reconciliation: {
+        strategy: 'logical_key',
+        logicalKey: 'logicalKey',
+      },
+      capabilityRequirements: ['deterministic'],
+    };
+    await client.database.insert(processorVersions).values({
+      id: invalidReconciliationVersionId,
+      processorId,
+      revision: 4,
+      semanticVersion: logicalDefinition.semanticVersion,
+      definition: logicalDefinition,
+      instructionHash: hash(logicalDefinition.instructions),
+      outputSchemaHash: hash(logicalDefinition.outputSchema),
+      promptTemplateHash: hash({ prompt: 'invalid-reconciliation' }),
+      createdBy: ownerId,
+    });
+    const run = await inTransaction(client.database, (transaction) =>
+      enqueueProcessorRun({
+        boss,
+        transaction,
+        processorVersionId: invalidReconciliationVersionId,
+        target: { scope: 'journal_day', journalDayId: dayId },
+        now,
+      }),
+    );
+    if (queued === undefined)
+      throw new Error('Expected invalid reconciliation processor work.');
+    const handler = new ProcessorJobHandler(
+      client,
+      blobs,
+      async () => ({
+        status: 'unavailable',
+        providerId: 'unused',
+        capability: 'structured_generation',
+        reason: 'provider_disabled',
+      }),
+      (candidateVersionId) =>
+        candidateVersionId === invalidReconciliationVersionId
+          ? () => ({
+              completeness: 'complete',
+              payload: { items: [{ logicalKey: '' }] },
+              evidence: [],
+            })
+          : undefined,
+      () => now,
+    );
+    const canonical = await handler.load(queued);
+    if (canonical.input === undefined)
+      throw new Error('Expected runnable invalid reconciliation work.');
+    await expect(
+      handler.execute(canonical.input, new AbortController().signal),
+    ).rejects.toMatchObject({ disposition: 'permanent' });
+    const [persisted] = await client.database
+      .select()
+      .from(processorRuns)
+      .where(eq(processorRuns.id, run.id));
+    expect(persisted).toMatchObject({
+      status: 'failed',
+      errorCode: 'invalid_reconciliation_output',
+      errorRetryable: false,
+      outputResultId: null,
+    });
+    expect(
+      await client.database
+        .select()
+        .from(processorReconciliations)
+        .where(eq(processorReconciliations.runId, run.id)),
+    ).toEqual([]);
   });
 });

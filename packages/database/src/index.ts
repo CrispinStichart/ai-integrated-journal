@@ -25,6 +25,8 @@ export {
   journalApiIdempotency,
   passwordCredentials,
   processorApiIdempotency,
+  processorArtifacts,
+  processorArtifactVersions,
   recoveryCodes,
   recordingApiIdempotency,
   recordingChunks,
@@ -39,6 +41,8 @@ export {
   transcripts,
   users,
   processorInstallations,
+  processorReconciliationOutcomes,
+  processorReconciliations,
   processorResultEvidence,
   processorResults,
   processorRunInputs,
@@ -77,6 +81,13 @@ export {
   type ProcessorRunRecord,
   type ProcessorRunTarget,
 } from './processor-runtime-repository.js';
+export {
+  reconcileProcessorResult,
+  ProcessorReconciliationStateError,
+  type PersistedProcessorReconciliation,
+  type ProcessorReconciliationOutcomeRecord,
+  type ProcessorReconciliationRecord,
+} from './processor-reconciliation-repository.js';
 export {
   enqueueTranscriptionRun,
   TRANSCRIPTION_JOB_OPERATION,

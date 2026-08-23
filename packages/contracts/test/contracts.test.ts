@@ -25,6 +25,7 @@ import {
   problemDetailsSchema,
   processorDefinitionDraftSchema,
   processorDryRunResponseSchema,
+  processorRunProvenanceSchema,
   semanticJsonValueSchema,
   serializeOpenApiDocument,
   sseEventEnvelopeSchema,
@@ -292,6 +293,56 @@ describe('CONTRACT DATA-030 PROC-001 PROC-006 processor definitions', () => {
         authoritative: false,
       }).authoritative,
     ).toBe(false);
+  });
+
+  it('[DATA-031][PROC-005][PROC-007][STATE-004] exposes ordered reconciliation provenance without source content', () => {
+    const provenance = processorRunProvenanceSchema.parse({
+      runId: UUID_V7,
+      processorId: UUID_V7,
+      processorVersionId: UUID_V7,
+      processorSemanticVersion: '1.0.0',
+      target: { scope: 'journal_day', journalDayId: UUID_V7 },
+      status: 'succeeded',
+      attempt: 1,
+      inputFingerprint: 'a'.repeat(64),
+      inputCompleteness: 'complete',
+      inputs: [],
+      prompt: {
+        assemblyVersion: 'processor-runtime-v1',
+        templateHash: 'b'.repeat(64),
+        instructionHash: 'c'.repeat(64),
+      },
+      requestedConfiguration: {},
+      result: {
+        id: UUID_V7,
+        kind: 'observation',
+        completeness: 'complete',
+        authority: 'generated',
+        lifecycle: 'active',
+        reconciliation: {
+          strategy: 'logical_key',
+          completeness: 'complete',
+          inputHash: 'd'.repeat(64),
+          outcomes: [
+            {
+              ordinal: 0,
+              logicalKey: 'string:synthetic-key',
+              outcome: 'create',
+              artifactId: UUID_V7,
+              versionId: UUID_V7,
+            },
+          ],
+        },
+        createdAt: INSTANT,
+      },
+      queuedAt: INSTANT,
+      startedAt: INSTANT,
+      completedAt: INSTANT,
+    });
+    expect(provenance.result?.reconciliation?.outcomes[0]).toMatchObject({
+      logicalKey: 'string:synthetic-key',
+      outcome: 'create',
+    });
   });
 });
 

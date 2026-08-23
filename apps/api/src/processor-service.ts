@@ -17,6 +17,8 @@ import {
   journalDays,
   processorApiIdempotency,
   processorInstallations,
+  processorReconciliationOutcomes,
+  processorReconciliations,
   processorResults,
   processorRunInputs,
   processorRuns,
@@ -370,6 +372,22 @@ export class PostgresProcessorService implements ProcessorService {
             .from(processorResults)
             .where(eq(processorResults.id, row.run.outputResultId))
             .limit(1);
+    const [reconciliation] =
+      result === undefined
+        ? []
+        : await this.database
+            .select()
+            .from(processorReconciliations)
+            .where(eq(processorReconciliations.runId, runId))
+            .limit(1);
+    const reconciliationOutcomes =
+      reconciliation === undefined
+        ? []
+        : await this.database
+            .select()
+            .from(processorReconciliationOutcomes)
+            .where(eq(processorReconciliationOutcomes.runId, runId))
+            .orderBy(asc(processorReconciliationOutcomes.ordinal));
     return processorRunProvenanceSchema.parse({
       runId: row.run.id,
       processorId: row.run.processorId,
@@ -440,6 +458,27 @@ export class PostgresProcessorService implements ProcessorService {
               ...(result.staleReason === null
                 ? {}
                 : { staleReason: result.staleReason }),
+              ...(reconciliation === undefined
+                ? {}
+                : {
+                    reconciliation: {
+                      strategy: reconciliation.strategy,
+                      completeness: reconciliation.completeness,
+                      inputHash: reconciliation.inputHash,
+                      outcomes: reconciliationOutcomes.map((outcome) => ({
+                        ordinal: outcome.ordinal,
+                        logicalKey: outcome.logicalKey,
+                        outcome: outcome.outcome,
+                        artifactId: outcome.artifactId,
+                        ...(outcome.versionId === null
+                          ? {}
+                          : { versionId: outcome.versionId }),
+                        ...(outcome.priorVersionId === null
+                          ? {}
+                          : { priorVersionId: outcome.priorVersionId }),
+                      })),
+                    },
+                  }),
               createdAt: result.createdAt.toISOString(),
             },
           }),

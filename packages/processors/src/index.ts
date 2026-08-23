@@ -394,6 +394,30 @@ export function validateProcessorDefinition(
     );
   }
   if (
+    definition.reconciliation.strategy === 'logical_key' &&
+    definition.reconciliation.logicalKey !== undefined
+  ) {
+    const rootProperties = objectValue(definition.outputSchema.properties);
+    const itemsSchema = objectValue(rootProperties?.items);
+    const itemSchema = objectValue(itemsSchema?.items);
+    const itemProperties = objectValue(itemSchema?.properties);
+    const required = itemSchema?.required;
+    if (
+      itemProperties === undefined ||
+      !(definition.reconciliation.logicalKey in itemProperties) ||
+      !Array.isArray(required) ||
+      !required.includes(definition.reconciliation.logicalKey)
+    ) {
+      state.issues.push(
+        issue(
+          '/outputSchema/properties/items/items',
+          'logical_key_schema_missing',
+          'Logical-key output items must require the configured stable key field.',
+        ),
+      );
+    }
+  }
+  if (
     definition.reconciliation.strategy !== 'logical_key' &&
     definition.reconciliation.logicalKey !== undefined
   ) {

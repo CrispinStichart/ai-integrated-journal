@@ -131,7 +131,10 @@ function builtInDefinition(name: string, kind: string) {
           type: 'array',
           items: {
             type: 'object',
-            properties: {},
+            properties: {
+              logicalKey: { type: 'string', minLength: 1, maxLength: 128 },
+            },
+            required: ['logicalKey'],
             additionalProperties: false,
           },
           maxItems: 100,

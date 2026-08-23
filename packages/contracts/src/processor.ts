@@ -82,7 +82,13 @@ export const processorDefinitionDraftSchema = z.strictObject({
   outputSchema: z.record(z.string(), z.json()),
   reconciliation: z.strictObject({
     strategy: processorReconciliationStrategySchema,
-    logicalKey: z.string().trim().min(1).max(128).optional(),
+    logicalKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z_][A-Za-z0-9_-]*$/)
+      .optional(),
   }),
   requirementMode: processorRequirementModeSchema,
   defaultEnabled: z.boolean(),
@@ -219,6 +225,21 @@ export const processorProvenanceInputSchema = z.strictObject({
   temporalContext: processorTemporalContextSchema,
 });
 
+export const processorReconciliationOutcomeSchema = z.strictObject({
+  ordinal: z.number().int().nonnegative(),
+  logicalKey: z.string().min(1).max(256),
+  outcome: z.enum([
+    'create',
+    'update',
+    'supersede',
+    'remove_supersede',
+    'unchanged',
+  ]),
+  artifactId: uuidV7Schema,
+  versionId: uuidV7Schema.optional(),
+  priorVersionId: uuidV7Schema.optional(),
+});
+
 export const processorRunProvenanceSchema = z.strictObject({
   runId: uuidV7Schema,
   processorId: uuidV7Schema,
@@ -262,6 +283,14 @@ export const processorRunProvenanceSchema = z.strictObject({
       lifecycle: z.enum(['active', 'superseded']),
       staleAt: utcInstantSchema.optional(),
       staleReason: z.string().optional(),
+      reconciliation: z
+        .strictObject({
+          strategy: processorReconciliationStrategySchema,
+          completeness: z.enum(['complete', 'partial']),
+          inputHash: z.string().regex(/^[0-9a-f]{64}$/),
+          outcomes: z.array(processorReconciliationOutcomeSchema),
+        })
+        .optional(),
       createdAt: utcInstantSchema,
     })
     .optional(),

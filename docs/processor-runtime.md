@@ -16,8 +16,20 @@ Generated values cross a data-only envelope and are validated against the immuta
 
 Journal content is placed only in the user data message and is explicitly declared untrusted. Provider output has no code, tool, SQL, or HTML execution channel and can only become inert validated JSONB plus evidence rows. Jobs, logs, metrics, and fingerprints contain no journal text, prompts, provider responses, storage keys, or checksums.
 
+## Reconciliation
+
+Task 34 keeps the task-32 result row as the immutable, exact validated proposal and reconciles it into a separate stable-artifact layer in the same completion transaction. `replace_scope` has the stable key `scope`; `logical_key` requires a bounded scalar key on every object in `payload.items`; and `append_only` uses the canonical payload hash. Duplicate or invalid logical keys fail the run rather than falling back to array position or journal text.
+
+For a complete logical-key or replace-scope result, the planner emits `create`, `update`, `supersede`, `remove_supersede`, or `unchanged`. A processor-version change distinguishes supersession from an update. Partial output may create or update included items but never removes unseen current items. Each generated change creates an immutable artifact version linked to its source result, run, and exact processor version. Removal only deactivates the stable artifact and supersedes its current version; all payload history remains inspectable.
+
+Processor completion takes a PostgreSQL transaction advisory lock derived only from the Journal Day ID. This serializes all processor reconciliation for that day, including different processors, so a day-level consumer cannot observe a half-reconciled state. The reconciliation run primary key, stable scope/logical-key indexes, per-artifact revision uniqueness, per-run/artifact uniqueness, and one-active-version partial index enforce idempotency even under duplicate delivery. A replay with the same run/result/hash returns the stored outcomes; attempting to reuse the run with different immutable output fails visibly.
+
+Invalidating a generated result supersedes only active logical versions sourced from the impacted exact result and deactivates their stable artifacts. A replacement run reuses the stable identity and appends history. Manual authority is never mutated or removed by the task-34 planner. Creating manual overrides, generated conflict candidates, split/merge/edit operations, and effective-value overlays remain task 35.
+
+The provenance endpoint exposes reconciliation strategy, completeness, a content-free input hash, and ordered outcome records. Jobs and logs still contain identifiers only; artifact payloads and logical keys are not emitted to queues or logs.
+
 ## Persistence and current boundary
 
-Migration `20260823063713_aromatic_doctor_strange.sql` adds processor runs, results, immutable run inputs, and evidence. Migration `20260823065040_exotic_bloodstorm.sql` replaces the initial nullable-target uniqueness index with scope-specific unique attempt indexes. Results remain generated and unmodified in this task.
+Migration `20260823063713_aromatic_doctor_strange.sql` adds processor runs, results, immutable run inputs, and evidence. Migration `20260823065040_exotic_bloodstorm.sql` replaces the initial nullable-target uniqueness index with scope-specific unique attempt indexes. Migration `20260823164705_free_thunderbolt_ross.sql` adds stable artifacts, immutable artifact versions, reconciliation records, and database idempotency constraints.
 
-The runtime currently schedules contribution and Journal Day source inputs. Exact processor-result dependency edges and artifact-set inputs begin with task 33's provenance graph. Task 34 owns reconciliation into stable logical artifacts and concurrent whole-day serialization. Date-range orchestration, previews, public execution/cancellation APIs, and progress are task 36. No task-33-or-later invalidation, reconciliation, override, or reprocessing behavior is implemented here.
+The runtime schedules contribution and Journal Day source inputs, binds exact processor-result dependency edges, and reconciles completed output into stable logical artifacts. Date-range orchestration, previews, public execution/cancellation APIs, and progress are task 36. Manual override and artifact-editing behavior remains task 35.

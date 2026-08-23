@@ -68,6 +68,10 @@ export default defineConfig({
         // is covered by the infrastructure suite.
         'apps/worker/src/{raw-response-store,transcription-pipeline,transcript-cleanup-pipeline}.ts',
         'packages/database/src/{transcription-repository,transcript-cleanup-repository,transcript-evidence-repository}.ts',
+        // Reconciliation depends on PostgreSQL advisory transaction locks and
+        // database uniqueness constraints; its real concurrent behavior is
+        // exercised by the separately gated Testcontainers integration suite.
+        'packages/database/src/processor-reconciliation-repository.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

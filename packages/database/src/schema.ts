@@ -1544,6 +1544,230 @@ export const processorResults = journalSchema.table(
   ],
 );
 
+/** Stable logical artifact identity; immutable generated history lives below. */
+export const processorArtifacts = journalSchema.table(
+  'processor_artifact',
+  {
+    id: uuid('id').primaryKey(),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    targetJournalDayId: uuid('target_journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    targetContributionId: uuid('target_contribution_id').references(
+      () => contributions.id,
+      { onDelete: 'restrict' },
+    ),
+    logicalKey: text('logical_key').notNull(),
+    kind: text('kind').notNull(),
+    authority: contributionAuthority('authority')
+      .notNull()
+      .default('generated'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_artifact_day_logical_key_unique')
+      .on(table.processorId, table.targetJournalDayId, table.logicalKey)
+      .where(sql`${table.targetContributionId} is null`),
+    uniqueIndex('processor_artifact_contribution_logical_key_unique')
+      .on(table.processorId, table.targetContributionId, table.logicalKey)
+      .where(sql`${table.targetContributionId} is not null`),
+    index('processor_artifact_active_target_idx').on(
+      table.targetJournalDayId,
+      table.processorId,
+      table.active,
+    ),
+    check(
+      'processor_artifact_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_artifact_logical_key_valid',
+      sql`length(${table.logicalKey}) > 0 and length(${table.logicalKey}) <= 256`,
+    ),
+    check(
+      'processor_artifact_kind_valid',
+      sql`${table.kind} in ('source_transform', 'observation', 'interpretation', 'other')`,
+    ),
+  ],
+);
+
+/** Immutable payload revisions for one stable logical processor artifact. */
+export const processorArtifactVersions = journalSchema.table(
+  'processor_artifact_version',
+  {
+    id: uuid('id').primaryKey(),
+    artifactId: uuid('artifact_id')
+      .notNull()
+      .references(() => processorArtifacts.id, { onDelete: 'restrict' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    sourceResultId: uuid('source_result_id')
+      .notNull()
+      .references(() => processorResults.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    lifecycle: text('lifecycle').notNull().default('active'),
+    reconciliationOutcome: text('reconciliation_outcome').notNull(),
+    supersedesVersionId: uuid('supersedes_version_id'),
+    supersededByVersionId: uuid('superseded_by_version_id'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('processor_artifact_version_revision_unique').on(
+      table.artifactId,
+      table.revision,
+    ),
+    uniqueIndex('processor_artifact_version_run_artifact_unique').on(
+      table.runId,
+      table.artifactId,
+    ),
+    uniqueIndex('processor_artifact_version_one_active_unique')
+      .on(table.artifactId)
+      .where(sql`${table.lifecycle} = 'active'`),
+    index('processor_artifact_version_source_result_idx').on(
+      table.sourceResultId,
+    ),
+    foreignKey({
+      columns: [table.supersedesVersionId],
+      foreignColumns: [table.id],
+      name: 'processor_artifact_version_supersedes_fk',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.supersededByVersionId],
+      foreignColumns: [table.id],
+      name: 'processor_artifact_version_superseded_by_fk',
+    }).onDelete('restrict'),
+    check(
+      'processor_artifact_version_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_artifact_version_revision_positive',
+      sql`${table.revision} > 0`,
+    ),
+    check(
+      'processor_artifact_version_payload_hash_sha256',
+      sql`${table.payloadHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_artifact_version_lifecycle_valid',
+      sql`${table.lifecycle} in ('active', 'superseded')`,
+    ),
+    check(
+      'processor_artifact_version_outcome_valid',
+      sql`${table.reconciliationOutcome} in ('create', 'update', 'supersede')`,
+    ),
+    check(
+      'processor_artifact_version_supersession_consistent',
+      sql`(${table.lifecycle} = 'active' and ${table.supersededByVersionId} is null and ${table.supersededAt} is null) or (${table.lifecycle} = 'superseded' and ${table.supersededAt} is not null)`,
+    ),
+  ],
+);
+
+/** One durable idempotency boundary per completed processor run. */
+export const processorReconciliations = journalSchema.table(
+  'processor_reconciliation',
+  {
+    runId: uuid('run_id')
+      .primaryKey()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    sourceResultId: uuid('source_result_id')
+      .notNull()
+      .references(() => processorResults.id, { onDelete: 'restrict' }),
+    strategy: text('strategy').notNull(),
+    completeness: processorCompleteness('completeness').notNull(),
+    inputHash: text('input_hash').notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_reconciliation_source_result_unique').on(
+      table.sourceResultId,
+    ),
+    check(
+      'processor_reconciliation_strategy_valid',
+      sql`${table.strategy} in ('replace_scope', 'logical_key', 'append_only')`,
+    ),
+    check(
+      'processor_reconciliation_input_hash_sha256',
+      sql`${table.inputHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const processorReconciliationOutcomes = journalSchema.table(
+  'processor_reconciliation_outcome',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorReconciliations.runId, {
+        onDelete: 'restrict',
+      }),
+    ordinal: integer('ordinal').notNull(),
+    logicalKey: text('logical_key').notNull(),
+    outcome: text('outcome').notNull(),
+    artifactId: uuid('artifact_id').references(() => processorArtifacts.id, {
+      onDelete: 'restrict',
+    }),
+    versionId: uuid('version_id').references(
+      () => processorArtifactVersions.id,
+      { onDelete: 'restrict' },
+    ),
+    priorVersionId: uuid('prior_version_id').references(
+      () => processorArtifactVersions.id,
+      { onDelete: 'restrict' },
+    ),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'processor_reconciliation_outcome_pk',
+      columns: [table.runId, table.ordinal],
+    }),
+    uniqueIndex('processor_reconciliation_outcome_run_key_unique').on(
+      table.runId,
+      table.logicalKey,
+    ),
+    check(
+      'processor_reconciliation_outcome_ordinal_nonnegative',
+      sql`${table.ordinal} >= 0`,
+    ),
+    check(
+      'processor_reconciliation_outcome_key_valid',
+      sql`length(${table.logicalKey}) > 0 and length(${table.logicalKey}) <= 256`,
+    ),
+    check(
+      'processor_reconciliation_outcome_value_valid',
+      sql`${table.outcome} in ('create', 'update', 'supersede', 'remove_supersede', 'unchanged')`,
+    ),
+    check(
+      'processor_reconciliation_outcome_references_consistent',
+      sql`(${table.outcome} = 'create' and ${table.artifactId} is not null and ${table.versionId} is not null and ${table.priorVersionId} is null) or (${table.outcome} in ('update', 'supersede') and ${table.artifactId} is not null and ${table.versionId} is not null and ${table.priorVersionId} is not null) or (${table.outcome} in ('remove_supersede', 'unchanged') and ${table.artifactId} is not null and ${table.versionId} is null and ${table.priorVersionId} is not null)`,
+    ),
+  ],
+);
+
 export const processorRunInputs = journalSchema.table(
   'processor_run_input',
   {
@@ -1824,7 +2048,11 @@ export const databaseSchema = {
   journalApiIdempotency,
   passwordCredentials,
   processorApiIdempotency,
+  processorArtifacts,
+  processorArtifactVersions,
   processorInstallations,
+  processorReconciliationOutcomes,
+  processorReconciliations,
   processorResultEvidence,
   processorResults,
   processorRunInputs,

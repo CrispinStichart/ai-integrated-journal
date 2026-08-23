@@ -9,6 +9,7 @@ export * from './errors.js';
 export * from './identity.js';
 export * from './journal.js';
 export * from './processing-lifecycle.js';
+export * from './reconciliation.js';
 export * from './revision.js';
 export * from './semantic-value.js';
 export * from './temporal.js';

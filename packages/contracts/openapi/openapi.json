@@ -3884,7 +3884,8 @@
                   "logicalKey": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 128
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                   }
                 },
                 "required": [
@@ -4193,7 +4194,8 @@
                   "logicalKey": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 128
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                   }
                 },
                 "required": [
@@ -4627,7 +4629,8 @@
                             "logicalKey": {
                               "type": "string",
                               "minLength": 1,
-                              "maxLength": 128
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                             }
                           },
                           "required": [
@@ -4935,7 +4938,8 @@
                               "logicalKey": {
                                 "type": "string",
                                 "minLength": 1,
-                                "maxLength": 128
+                                "maxLength": 128,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                               }
                             },
                             "required": [
@@ -5359,7 +5363,8 @@
                           "logicalKey": {
                             "type": "string",
                             "minLength": 1,
-                            "maxLength": 128
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                           }
                         },
                         "required": [
@@ -5667,7 +5672,8 @@
                             "logicalKey": {
                               "type": "string",
                               "minLength": 1,
-                              "maxLength": 128
+                              "maxLength": 128,
+                              "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                             }
                           },
                           "required": [
@@ -6104,7 +6110,8 @@
                       "logicalKey": {
                         "type": "string",
                         "minLength": 1,
-                        "maxLength": 128
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                       }
                     },
                     "required": [
@@ -6412,7 +6419,8 @@
                         "logicalKey": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 128
+                          "maxLength": 128,
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                         }
                       },
                       "required": [
@@ -6952,6 +6960,87 @@
               "staleReason": {
                 "type": "string"
               },
+              "reconciliation": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": [
+                      "replace_scope",
+                      "logical_key",
+                      "append_only"
+                    ]
+                  },
+                  "completeness": {
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ]
+                  },
+                  "inputHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "outcomes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "logicalKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": [
+                            "create",
+                            "update",
+                            "supersede",
+                            "remove_supersede",
+                            "unchanged"
+                          ]
+                        },
+                        "artifactId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "description": "Canonical lowercase RFC 9562 UUIDv7."
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "description": "Canonical lowercase RFC 9562 UUIDv7."
+                        },
+                        "priorVersionId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "description": "Canonical lowercase RFC 9562 UUIDv7."
+                        }
+                      },
+                      "required": [
+                        "ordinal",
+                        "logicalKey",
+                        "outcome",
+                        "artifactId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "strategy",
+                  "completeness",
+                  "inputHash",
+                  "outcomes"
+                ],
+                "additionalProperties": false
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time",
@@ -7252,7 +7341,8 @@
                   "logicalKey": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 128
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
                   }
                 },
                 "required": [

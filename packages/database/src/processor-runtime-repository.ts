@@ -29,6 +29,8 @@ import {
   contributions,
   journalDays,
   processorInstallations,
+  processorArtifacts,
+  processorArtifactVersions,
   processorResultEvidence,
   processorResults,
   processorRunInputs,
@@ -41,6 +43,7 @@ import {
   transcripts,
 } from './schema.js';
 import { inTransaction } from './transaction.js';
+import { reconcileProcessorResult } from './processor-reconciliation-repository.js';
 
 export const PROCESSOR_JOB_OPERATION = 'execute_processor';
 
@@ -603,6 +606,43 @@ export async function invalidateProcessorDependents(input: {
         updatedAt: input.now,
       })
       .where(inArray(processorResultEvidence.processorResultId, resultIds));
+    const activeArtifactVersions = await input.transaction
+      .select({
+        artifactId: processorArtifactVersions.artifactId,
+        versionId: processorArtifactVersions.id,
+      })
+      .from(processorArtifactVersions)
+      .innerJoin(
+        processorArtifacts,
+        eq(processorArtifacts.id, processorArtifactVersions.artifactId),
+      )
+      .where(
+        and(
+          inArray(processorArtifactVersions.sourceResultId, resultIds),
+          eq(processorArtifactVersions.lifecycle, 'active'),
+          eq(processorArtifacts.authority, 'generated'),
+        ),
+      );
+    if (activeArtifactVersions.length > 0) {
+      await input.transaction
+        .update(processorArtifactVersions)
+        .set({ lifecycle: 'superseded', supersededAt: input.now })
+        .where(
+          inArray(
+            processorArtifactVersions.id,
+            activeArtifactVersions.map(({ versionId }) => versionId),
+          ),
+        );
+      await input.transaction
+        .update(processorArtifacts)
+        .set({ active: false, updatedAt: input.now })
+        .where(
+          inArray(
+            processorArtifacts.id,
+            activeArtifactVersions.map(({ artifactId }) => artifactId),
+          ),
+        );
+    }
   }
   const canceled = await input.transaction
     .update(processorRuns)
@@ -1053,6 +1093,14 @@ export class ProcessorRuntimeRepository {
           .insert(processorResultEvidence)
           .values(persistedEvidence);
       }
+      await reconcileProcessorResult({
+        transaction,
+        run,
+        result,
+        definition,
+        now,
+        createId,
+      });
       await transaction
         .update(processorRuns)
         .set({

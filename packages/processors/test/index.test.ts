@@ -236,6 +236,36 @@ describe('@journal/processors definition validation', () => {
     expect(
       validateProcessorDefinition(logical).issues.map((entry) => entry.code),
     ).toContain('logical_key_required');
+    const unstable = definition();
+    unstable.reconciliation = {
+      strategy: 'logical_key',
+      logicalKey: 'logicalKey',
+    };
+    expect(
+      validateProcessorDefinition(unstable).issues.map((entry) => entry.code),
+    ).toContain('logical_key_schema_missing');
+    const stable = definition();
+    stable.outputSchema = {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { logicalKey: { type: 'string' } },
+            required: ['logicalKey'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['items'],
+      additionalProperties: false,
+    };
+    stable.reconciliation = {
+      strategy: 'logical_key',
+      logicalKey: 'logicalKey',
+    };
+    expect(validateProcessorDefinition(stable).valid).toBe(true);
     const unused = definition();
     unused.reconciliation = { strategy: 'append_only', logicalKey: 'id' };
     expect(

@@ -20,7 +20,7 @@ import {
   type DatabaseClient,
   type QueueJobPayload,
 } from '@journal/database';
-import { createUuidV7 } from '@journal/domain';
+import { createUuidV7, DomainInvariantError } from '@journal/domain';
 import {
   ProcessorRuntimeValidationError,
   processorGenerationMessages,
@@ -70,12 +70,15 @@ function classify(error: unknown): ProcessorPipelineFailure {
   if (error instanceof ProcessorPipelineFailure) return error;
   if (
     error instanceof ProcessorRuntimeValidationError ||
+    error instanceof DomainInvariantError ||
     error instanceof TypeError
   )
     return new ProcessorPipelineFailure(
       error instanceof ProcessorRuntimeValidationError
         ? error.code
-        : 'invalid_provider_result',
+        : error instanceof DomainInvariantError
+          ? 'invalid_reconciliation_output'
+          : 'invalid_provider_result',
       false,
     );
   if (error instanceof BlobConflictError)
