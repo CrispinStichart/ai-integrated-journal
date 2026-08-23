@@ -28,6 +28,26 @@ describe('frontend application foundations', () => {
       true,
     );
 
+    const loadedRoutes = await Promise.all(
+      routes.map(async (route) => {
+        const load = route.component as () => Promise<{ default: unknown }>;
+        return load();
+      }),
+    );
+    expect(loadedRoutes.every((route) => route.default !== undefined)).toBe(
+      true,
+    );
+
+    const journalDayRoute = routes.find(
+      (route) => route.name === 'journal-day',
+    );
+    if (typeof journalDayRoute?.props !== 'function') {
+      throw new Error('journal-day route must derive props from route params');
+    }
+    expect(
+      journalDayRoute.props({ params: { date: '2026-08-23' } } as never),
+    ).toEqual({ date: '2026-08-23' });
+
     const router = createJournalRouter('/');
     await router.push('/settings');
     await router.isReady();
