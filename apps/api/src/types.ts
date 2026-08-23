@@ -4,6 +4,7 @@ import type { Request } from 'express';
 import type { AuthenticationService } from './auth.js';
 import type { JournalService } from './journal-service.js';
 import type { RecordingService } from './recording-service.js';
+import type { TranscriptService } from './transcript-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -44,6 +45,7 @@ export interface ApiDependencies {
   readonly logger: ContentSafeLogger;
   readonly journalService?: JournalService;
   readonly recordingService?: RecordingService;
+  readonly transcriptService?: TranscriptService;
   readonly now?: () => Date;
   readonly createCorrelationId?: () => string;
   readonly sseHeartbeatMilliseconds?: number;

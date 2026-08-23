@@ -1,6 +1,6 @@
 # Requirement-to-test matrix
 
-- Status: Maintained through Phase 4 Task 29
+- Status: Maintained through Phase 4 Task 30
 - Date: 2026-08-23
 - Normative source: [`AI-Integrated-Journaling-Application-Specification.md`](../AI-Integrated-Journaling-Application-Specification.md)
 - Delivery source: [`implementation-plan.md`](implementation-plan.md)
@@ -69,14 +69,14 @@ Status values are:
 | DATA-013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: durable linked nudge responses. | 16–19, 43 | Complete local release | Planned |
 | DATA-020–021 | `apps/api/test/recording-service.integration.ts`, `apps/api/test/recording-routes.test.ts`, storage adapter contracts, and `apps/web/test/recording-sync.test.ts` cover preallocated recording identity, immutable streamed finalization, Journal Day recording projection, and conflicting/resumable retry behavior. Reload/suspension E2E remains in `AUDIO`. | 21–25 | Audio journal | Partial |
 | DATA-022–023 | `packages/test-support/test/fake-ai.test.ts` and `apps/worker/test/transcription-pipeline.integration.ts` cover immutable exact raw bytes plus persisted normalized provider/model/configuration/context/language/timing metadata and append-only raw revisions. | 26–27 | Transcript journal | Verified |
-| DATA-024–026 | `apps/worker/test/transcription-pipeline.integration.ts` covers distinct logical raw/corrected/cleaned artifacts, generated initialization, append-only manual correction history, exact corrected-revision cleanup inputs, immutable prior revisions, and cleanup retry lineage. Transcript API/UI proof remains in Task 30. | 28–30 | Transcript journal | Partial |
-| DATA-027–028 | `packages/test-support/test/fake-ai.test.ts`, `packages/database/test/transcript-evidence-migration.integration.ts`, and `apps/worker/test/transcription-pipeline.integration.ts` cover persisted timed and explicitly untimed valid provider results plus stable/backfilled segment IDs, exact UTF-16 ranges, optional audio ranges, and unavailable timing; transcript UI behavior remains in Task 30. | 26, 27, 29, 30 | Transcript journal | Partial |
+| DATA-024–026 | `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, `apps/api/test/transcript-routes.test.ts`, and `apps/web/test/transcript-inspector.test.ts` cover distinct logical layers, generated initialization, append-only manual correction history, exact corrected-revision cleanup inputs, immutable prior revisions, and inspectable UI history. | 28–30 | Transcript journal | Verified |
+| DATA-027–028 | `packages/test-support/test/fake-ai.test.ts`, `packages/database/test/transcript-evidence-migration.integration.ts`, `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, and `apps/web/test/transcript-inspector.test.ts` cover persisted timed and explicitly untimed valid results, stable segment IDs, exact UTF-16/audio ranges, audio seeking, and a clear valid-but-unavailable timing state. | 26, 27, 29, 30 | Transcript journal | Verified |
 | DATA-030 | `PROCESSOR`: validate every required processor-definition field and stable identity/current-version behavior. | 31 | AI journal | Planned |
 | DATA-031 | `PROCESSOR`: persist and inspect every common-envelope field, direct input, authority, staleness, and provenance field. | 31–35 | AI journal | Planned |
 | DATA-032–033 | `CONTRACT`, `PROCESSOR`, `DOMAIN-KERNEL`: versioned extensible payloads remain readable and never invent unknown optionals. | 9, 10, 31, 32 | AI journal | Planned |
 | PROV-001–002 | `TRANSCRIPT`, `PROCESSOR`: observations validate evidence exceptions; interpretations identify exact observations/sources. | 29, 32, 33 | AI journal | Planned |
 | PROV-003 | Domain evidence tests and `apps/worker/test/transcription-pipeline.integration.ts` cover canonical NFC/LF evidence text, exact revision-bound UTF-16 spans, quote hashes, explicit unresolved/stale states, and targeted transcript invalidation; processor dependency propagation remains in Task 33. | 29, 33 | AI journal | Partial |
-| PROV-004 | `TRANSCRIPT`, `PROCESSOR`, `RELEASE-E2E`: inspector exposes evidence, versions, provider/model, and corrections. | 30, 33, 35, 51 | AI journal | Planned |
+| PROV-004 | Transcript contracts/API/UI expose exact source revision evidence, transcript run attempts, provider/model/configuration/context, cleanup prompt version, and correction history; processor-result provenance remains in Tasks 33, 35, and 51. | 30, 33, 35, 51 | AI journal | Partial |
 
 ## Capture, transcription, memory, and feedback
 
@@ -175,9 +175,9 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-001 | `apps/api/test/text-journal-milestone.integration.ts` and `playwright/shell.spec.ts` prove one day with independent typed contributions; `AUDIO`/`RELEASE-E2E` must still complete the two-recording-plus-text scenario. | 18, 20, 25, 51 | Audio journal | Partial |
 | AC-002 | `apps/web/test/recording-sync.test.ts` covers accepted-index recovery, stable identity, missing-only upload, and durable-gated cleanup; `AUDIO`/`RELEASE-E2E` still interrupt a real upload, reopen/reconnect, and assert one durable recording. | 24, 25, 51 | Audio journal | Partial |
 | AC-003 | `apps/api/test/text-journal-milestone.integration.ts` proves that worker/provider failure leaves typed sources durable and editable across restart; repeat with an original recording after audio/STT milestones. | 20, 25, 30, 51 | Source-only partial; transcript journal complete | Partial |
-| AC-010 | `TRANSCRIPT`, `RELEASE-E2E`: inspect audio and three explicitly distinct transcript layers. | 30, 51 | Transcript journal | Planned |
-| AC-011 | `apps/worker/test/transcription-pipeline.integration.ts` proves a correction leaves raw text/provider bytes unchanged, marks exact prior cleanup/evidence stale, and produces cleanup from the new corrected revision; UI proof remains in Task 30. | 28–30 | Transcript journal | Partial |
-| AC-012 | Domain evidence tests, `packages/test-support/test/fake-ai.test.ts`, and `apps/worker/test/transcription-pipeline.integration.ts` prove timed/untimed fixtures and persist exact optional audio seek ranges; UI and release navigation remain in Tasks 30 and 51. | 26, 29, 30, 51 | Transcript journal | Partial |
+| AC-010 | `apps/api/test/transcript-service.integration.ts`, `apps/api/test/transcript-routes.test.ts`, and `apps/web/test/transcript-inspector.test.ts` inspect original audio beside explicitly distinct raw STT, corrected, and cleaned artifacts. | 30, 51 | Transcript journal | Verified |
+| AC-011 | `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, and `apps/web/test/transcript-inspector.test.ts` prove a correction leaves raw text/provider bytes unchanged, preserves manual authority/history, marks exact prior cleanup/evidence stale, and visibly queues replacement cleanup. | 28–30 | Transcript journal | Verified |
+| AC-012 | Domain/provider/database/worker evidence tests plus `apps/api/test/transcript-service.integration.ts` and `apps/web/test/transcript-inspector.test.ts` prove exact timed audio navigation and a clear valid-but-timing-unavailable state. | 26, 29, 30, 51 | Transcript journal | Verified |
 | AC-020 | `BUILTINS`: exact burrito/Nicolette fixture yields no user consumption. | 38 | AI journal | Planned |
 | AC-021 | `BUILTINS`: pizza clarification reconciles to one logical event. | 38 | AI journal | Planned |
 | AC-022 | `BUILTINS`: absent mood yields insufficient information and is excluded from averages. | 39, 43 | Complete local release | Planned |

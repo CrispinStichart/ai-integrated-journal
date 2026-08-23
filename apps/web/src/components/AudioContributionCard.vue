@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue';
 import { recordingAudioUrl } from '../recording/api';
 import type { LocalRecordingRecord } from '../storage/indexed-db';
 import { displayCaptureTime } from '../journal/date';
+import TranscriptInspector from './TranscriptInspector.vue';
 
 const props = defineProps<{
   contribution?: ContributionResource | undefined;
@@ -31,6 +32,7 @@ const journalDate = computed(
   () => props.local?.journalDate ?? props.contribution?.journalDate ?? '',
 );
 const assignedDate = ref(journalDate.value);
+const audioPlayer = ref<HTMLAudioElement>();
 const persistenceState = computed(
   () =>
     props.local?.serverPersistenceState ?? recording.value?.persistenceState,
@@ -80,6 +82,14 @@ const byteSize = computed(() => {
 watch(journalDate, (value) => {
   assignedDate.value = value;
 });
+
+async function seekAudio(startMilliseconds: number): Promise<void> {
+  const player = audioPlayer.value;
+  if (player === undefined) return;
+  player.currentTime = startMilliseconds / 1000;
+  player.focus();
+  await player.play().catch(() => undefined);
+}
 </script>
 
 <template>
@@ -183,6 +193,7 @@ watch(journalDate, (value) => {
 
       <audio
         v-if="isDurable && !recording?.audioDeletedAt"
+        ref="audioPlayer"
         class="w-full"
         controls
         preload="metadata"
@@ -203,6 +214,12 @@ watch(journalDate, (value) => {
         Upload recovery requires the device that holds the encrypted local
         checkpoints.
       </p>
+
+      <TranscriptInspector
+        v-if="isDurable && transcriptionState === 'succeeded'"
+        :recording-id="recordingId"
+        @seek="seekAudio"
+      />
 
       <form
         class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end"

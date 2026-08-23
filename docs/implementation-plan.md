@@ -308,7 +308,7 @@ Initialize corrected text from raw STT, add append-only corrected revisions, and
 
 Store stable segment IDs, exact revision references, defined text offsets, optional audio ranges, quote hashes, unresolved-evidence states, and targeted staleness propagation.
 
-### 30. Transcript UI
+### 30. Transcript UI - FINISHED
 
 Build raw/corrected/cleaned inspectors, revision history, editing, retries, processing status, audio seeking from evidence, and a clear unavailable-timing state. Verify AC-010–012.
 

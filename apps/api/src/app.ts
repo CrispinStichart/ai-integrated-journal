@@ -43,6 +43,10 @@ import {
   registerRecordingRoutes,
   sendRecordingError,
 } from './recording-routes.js';
+import {
+  registerTranscriptRoutes,
+  sendTranscriptError,
+} from './transcript-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -451,6 +455,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
 
   registerJournalRoutes(app, dependencies);
   registerRecordingRoutes(app, dependencies);
+  registerTranscriptRoutes(app, dependencies);
 
   app.use((request, response) => {
     sendProblem(request, response, {
@@ -487,6 +492,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       }
       if (sendJournalError(error, request, response)) return;
       if (sendRecordingError(error, request, response)) return;
+      if (sendTranscriptError(error, request, response)) return;
       dependencies.logger.error(
         {
           correlationId: correlationId(response),

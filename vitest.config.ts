@@ -54,6 +54,10 @@ export default defineConfig({
         // Recording persistence coordinates real Drizzle transactions with
         // streamed blob I/O and is covered by the infrastructure suite.
         'apps/api/src/recording-service.ts',
+        // Transcript inspection/editing coordinates exact revision locks,
+        // dependency invalidation, and transactional queue jobs against real
+        // PostgreSQL in the separately gated infrastructure suite.
+        'apps/api/src/transcript-service.ts',
         // Transcription coordinates PostgreSQL row locks, streamed immutable
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.

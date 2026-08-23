@@ -190,6 +190,13 @@ export async function appendCorrectedTranscriptRevision(input: {
   readonly editReason?: string;
   readonly prompt: CleanupPromptSnapshot;
   readonly cleanupConfiguration?: Readonly<Record<string, unknown>>;
+  readonly afterAppend?: (
+    transaction: JournalTransaction,
+    result: Readonly<{
+      revision: TranscriptRevisionRecord;
+      cleanupRun: TranscriptCleanupRunRecord;
+    }>,
+  ) => Promise<void>;
   readonly now?: Date;
   readonly createId?: () => string;
 }): Promise<
@@ -275,7 +282,9 @@ export async function appendCorrectedTranscriptRevision(input: {
       now,
       createId,
     });
-    return Object.freeze({ revision, cleanupRun });
+    const result = Object.freeze({ revision, cleanupRun });
+    await input.afterAppend?.(transaction, result);
+    return result;
   });
 }
 

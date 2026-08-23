@@ -51,6 +51,12 @@ import {
   recordingUploadStatusSchema,
 } from './recording.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
+import {
+  editCorrectedTranscriptRequestSchema,
+  recordingTranscriptInspectorSchema,
+  transcriptMutationResponseSchema,
+  transcriptRevisionHistorySchema,
+} from './transcription.js';
 
 function componentSchema(schema: z.ZodType): Record<string, unknown> {
   const component: Record<string, unknown> = { ...z.toJSONSchema(schema) };
@@ -479,6 +485,59 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/recordings/{id}/transcripts': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Distinct transcript layers, processing state, provenance, and timed evidence',
+              'RecordingTranscriptInspector',
+            ),
+            '404': problemResponse('Recording not found'),
+          },
+        },
+      },
+      '/api/v1/transcripts/{id}': {
+        patch: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('EditCorrectedTranscriptRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Corrected transcript revised and cleanup queued',
+              'TranscriptMutationResponse',
+            ),
+            '409': problemResponse('Cleanup configuration unavailable'),
+            '412': problemResponse('Transcript ETag mismatch'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/transcripts/{id}/revisions': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Immutable transcript revision history',
+              'TranscriptRevisionHistory',
+            ),
+            '404': problemResponse('Transcript not found'),
+          },
+        },
+      },
+      '/api/v1/transcripts/{id}/cleanup/retry': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Failed or canceled cleanup retry queued',
+              'TranscriptMutationResponse',
+            ),
+            '409': problemResponse('Cleanup retry unavailable'),
+            '412': problemResponse('Transcript ETag mismatch'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -593,6 +652,9 @@ export function createOpenApiDocument(): Record<string, unknown> {
         EventPollRequest: componentSchema(eventPollRequestSchema),
         EventPollResponse: componentSchema(eventPollResponseSchema),
         EditContributionRequest: componentSchema(editContributionRequestSchema),
+        EditCorrectedTranscriptRequest: componentSchema(
+          editCorrectedTranscriptRequestSchema,
+        ),
         HealthDependency: componentSchema(healthDependencySchema),
         HealthDetailsResponse: componentSchema(healthDetailsResponseSchema),
         IdempotencyResponseMetadata: componentSchema(
@@ -628,8 +690,17 @@ export function createOpenApiDocument(): Record<string, unknown> {
           recordingMutationResponseSchema,
         ),
         RecordingUploadStatus: componentSchema(recordingUploadStatusSchema),
+        RecordingTranscriptInspector: componentSchema(
+          recordingTranscriptInspectorSchema,
+        ),
         SemanticJsonValue: componentSchema(semanticJsonValueSchema),
         SseEventEnvelope: componentSchema(sseEventEnvelopeSchema),
+        TranscriptMutationResponse: componentSchema(
+          transcriptMutationResponseSchema,
+        ),
+        TranscriptRevisionHistory: componentSchema(
+          transcriptRevisionHistorySchema,
+        ),
       },
     },
   };
