@@ -28,6 +28,7 @@ function sha256(value: string): string {
 }
 
 describe('transcript evidence forward migration', () => {
+  const evidenceMigrationTag = '20260823022412_military_ego';
   type TestContainer = ReturnType<typeof createPostgresTestContainer>;
   let container: Awaited<ReturnType<TestContainer['start']>>;
   let client: DatabaseClient;
@@ -49,7 +50,13 @@ describe('transcript evidence forward migration', () => {
         'utf8',
       ),
     ) as { entries: Array<{ tag: string }> };
-    const legacyEntries = journal.entries.slice(0, -1);
+    const evidenceMigrationIndex = journal.entries.findIndex(
+      ({ tag }) => tag === evidenceMigrationTag,
+    );
+    if (evidenceMigrationIndex < 0) {
+      throw new Error(`Evidence migration ${evidenceMigrationTag} is missing.`);
+    }
+    const legacyEntries = journal.entries.slice(0, evidenceMigrationIndex);
     await writeFile(
       path.join(legacyMigrations, 'meta', '_journal.json'),
       `${JSON.stringify({ ...journal, entries: legacyEntries }, null, 2)}\n`,

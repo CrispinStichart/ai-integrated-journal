@@ -58,6 +58,11 @@ export default defineConfig({
         // dependency invalidation, and transactional queue jobs against real
         // PostgreSQL in the separately gated infrastructure suite.
         'apps/api/src/transcript-service.ts',
+        // Processor publication coordinates immutable version graphs,
+        // optimistic configuration updates, audit records, and idempotency in
+        // real transactions; its rollback and persistence behavior is covered
+        // by the separately gated Testcontainers integration suite.
+        'apps/api/src/processor-service.ts',
         // Transcription coordinates PostgreSQL row locks, streamed immutable
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.

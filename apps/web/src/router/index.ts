@@ -47,11 +47,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/processors',
     name: 'processors',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Configure versioned journal processors.',
-      title: 'Processors',
-    },
+    component: () => import('../views/ProcessorsView.vue'),
     meta: { title: 'Processors' },
   },
   {

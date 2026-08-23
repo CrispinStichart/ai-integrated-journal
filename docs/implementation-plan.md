@@ -314,7 +314,7 @@ Build raw/corrected/cleaned inspectors, revision history, editing, retries, proc
 
 ## 8. Phase 5: Generic processor platform
 
-### 31. Processor definition management
+### 31. Processor definition management - FINISHED
 
 Implement immutable versioned definitions containing instructions, JSON Schema output contracts, input scopes and selectors, dependencies, reconciliation strategy, requirement mode, nudge policy, capability requirements, and enablement. Add validation, dry-run support, APIs, and management UI.
 

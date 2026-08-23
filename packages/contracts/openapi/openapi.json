@@ -1259,6 +1259,328 @@
         }
       }
     },
+    "/api/v1/processors": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Processor definitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProcessorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Processor and initial immutable version published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Processor identity or key conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Definition validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Idempotency key required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/processors/{id}": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "description": "Canonical lowercase RFC 9562 UUIDv7."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Processor and immutable version history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorResource"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Processor not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "description": "Canonical lowercase RFC 9562 UUIDv7."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProcessorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Processor configuration updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Processor configuration conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Conditional idempotent headers required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/processors/{id}/versions": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "description": "Canonical lowercase RFC 9562 UUIDv7."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishProcessorVersionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Immutable processor version published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Processor configuration conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Definition validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Conditional idempotent headers required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/processor-versions/dry-run": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProcessorDryRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Non-authoritative bounded definition validation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessorDryRunResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "responses": {
@@ -3376,6 +3698,3244 @@
             ]
           }
         }
+      },
+      "CreateProcessorRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "versionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "definition": {
+            "type": "object",
+            "properties": {
+              "semanticVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "source_transform",
+                  "observation_extractor",
+                  "interpretation",
+                  "other"
+                ]
+              },
+              "instructions": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "input": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "contribution",
+                      "journal_day",
+                      "date_range",
+                      "observation_set",
+                      "artifact_set"
+                    ]
+                  },
+                  "selectors": {
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "typed_text",
+                        "corrected_transcript",
+                        "cleaned_transcript",
+                        "observations",
+                        "processor_results"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "scope",
+                  "selectors"
+                ],
+                "additionalProperties": false
+              },
+              "dependencies": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "upstreamVersionId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "outputSelector": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                    },
+                    "acceptPartial": {
+                      "default": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "upstreamVersionId",
+                    "outputSelector",
+                    "acceptPartial"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "outputSchemaVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "outputSchema": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "reconciliation": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": [
+                      "replace_scope",
+                      "logical_key",
+                      "append_only"
+                    ]
+                  },
+                  "logicalKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "strategy"
+                ],
+                "additionalProperties": false
+              },
+              "requirementMode": {
+                "type": "string",
+                "enum": [
+                  "optional",
+                  "required"
+                ]
+              },
+              "defaultEnabled": {
+                "type": "boolean"
+              },
+              "nudgePolicy": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "allowNotApplicable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "allowNotApplicable"
+                ],
+                "additionalProperties": false
+              },
+              "capabilityRequirements": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "deterministic",
+                    "structured_generation",
+                    "embeddings"
+                  ]
+                }
+              },
+              "allowPartialInputs": {
+                "type": "boolean"
+              },
+              "resourceLimits": {
+                "type": "object",
+                "properties": {
+                  "maxPromptChars": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 32768
+                  },
+                  "maxInputChars": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 200000
+                  },
+                  "maxRuntimeMs": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 120000
+                  },
+                  "maxResultBytes": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 1048576
+                  }
+                },
+                "required": [
+                  "maxPromptChars",
+                  "maxInputChars",
+                  "maxRuntimeMs",
+                  "maxResultBytes"
+                ],
+                "additionalProperties": false
+              },
+              "outputSafety": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "data_only"
+                  },
+                  "allowCodeExecution": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowToolCalls": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowSql": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowHtml": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "mode",
+                  "allowCodeExecution",
+                  "allowToolCalls",
+                  "allowSql",
+                  "allowHtml"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "semanticVersion",
+              "kind",
+              "instructions",
+              "input",
+              "dependencies",
+              "outputSchemaVersion",
+              "outputSchema",
+              "reconciliation",
+              "requirementMode",
+              "defaultEnabled",
+              "nudgePolicy",
+              "capabilityRequirements",
+              "allowPartialInputs",
+              "resourceLimits",
+              "outputSafety"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "versionId",
+          "key",
+          "name",
+          "purpose",
+          "definition"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProcessorDryRunRequest": {
+        "type": "object",
+        "properties": {
+          "processorId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "versionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "definition": {
+            "type": "object",
+            "properties": {
+              "semanticVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "source_transform",
+                  "observation_extractor",
+                  "interpretation",
+                  "other"
+                ]
+              },
+              "instructions": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "input": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "contribution",
+                      "journal_day",
+                      "date_range",
+                      "observation_set",
+                      "artifact_set"
+                    ]
+                  },
+                  "selectors": {
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "typed_text",
+                        "corrected_transcript",
+                        "cleaned_transcript",
+                        "observations",
+                        "processor_results"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "scope",
+                  "selectors"
+                ],
+                "additionalProperties": false
+              },
+              "dependencies": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "upstreamVersionId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "outputSelector": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                    },
+                    "acceptPartial": {
+                      "default": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "upstreamVersionId",
+                    "outputSelector",
+                    "acceptPartial"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "outputSchemaVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "outputSchema": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "reconciliation": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": [
+                      "replace_scope",
+                      "logical_key",
+                      "append_only"
+                    ]
+                  },
+                  "logicalKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "strategy"
+                ],
+                "additionalProperties": false
+              },
+              "requirementMode": {
+                "type": "string",
+                "enum": [
+                  "optional",
+                  "required"
+                ]
+              },
+              "defaultEnabled": {
+                "type": "boolean"
+              },
+              "nudgePolicy": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "allowNotApplicable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "allowNotApplicable"
+                ],
+                "additionalProperties": false
+              },
+              "capabilityRequirements": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "deterministic",
+                    "structured_generation",
+                    "embeddings"
+                  ]
+                }
+              },
+              "allowPartialInputs": {
+                "type": "boolean"
+              },
+              "resourceLimits": {
+                "type": "object",
+                "properties": {
+                  "maxPromptChars": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 32768
+                  },
+                  "maxInputChars": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 200000
+                  },
+                  "maxRuntimeMs": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 120000
+                  },
+                  "maxResultBytes": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 1048576
+                  }
+                },
+                "required": [
+                  "maxPromptChars",
+                  "maxInputChars",
+                  "maxRuntimeMs",
+                  "maxResultBytes"
+                ],
+                "additionalProperties": false
+              },
+              "outputSafety": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "data_only"
+                  },
+                  "allowCodeExecution": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowToolCalls": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowSql": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowHtml": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "mode",
+                  "allowCodeExecution",
+                  "allowToolCalls",
+                  "allowSql",
+                  "allowHtml"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "semanticVersion",
+              "kind",
+              "instructions",
+              "input",
+              "dependencies",
+              "outputSchemaVersion",
+              "outputSchema",
+              "reconciliation",
+              "requirementMode",
+              "defaultEnabled",
+              "nudgePolicy",
+              "capabilityRequirements",
+              "allowPartialInputs",
+              "resourceLimits",
+              "outputSafety"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "definition"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProcessorDryRunResponse": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "draftHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "code",
+                "message"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "schemaComplexity": {
+            "type": "object",
+            "properties": {
+              "depth": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "nodes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "depth",
+              "nodes"
+            ],
+            "additionalProperties": false
+          },
+          "resolvedDependencyCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "authoritative": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "required": [
+          "valid",
+          "draftHash",
+          "issues",
+          "schemaComplexity",
+          "resolvedDependencyCount",
+          "authoritative"
+        ],
+        "additionalProperties": false
+      },
+      "ProcessorListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "purpose": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "requirementMode": {
+                  "type": "string",
+                  "enum": [
+                    "optional",
+                    "required"
+                  ]
+                },
+                "builtIn": {
+                  "type": "boolean"
+                },
+                "configRevision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "currentVersionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "currentVersion": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "processorId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "definition": {
+                      "type": "object",
+                      "properties": {
+                        "semanticVersion": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "source_transform",
+                            "observation_extractor",
+                            "interpretation",
+                            "other"
+                          ]
+                        },
+                        "instructions": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 16000
+                        },
+                        "input": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "contribution",
+                                "journal_day",
+                                "date_range",
+                                "observation_set",
+                                "artifact_set"
+                              ]
+                            },
+                            "selectors": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "typed_text",
+                                  "corrected_transcript",
+                                  "cleaned_transcript",
+                                  "observations",
+                                  "processor_results"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "selectors"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "dependencies": {
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "upstreamVersionId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "description": "Canonical lowercase RFC 9562 UUIDv7."
+                              },
+                              "outputSelector": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                              },
+                              "acceptPartial": {
+                                "default": false,
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "upstreamVersionId",
+                              "outputSelector",
+                              "acceptPartial"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "outputSchemaVersion": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                        },
+                        "outputSchema": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "reconciliation": {
+                          "type": "object",
+                          "properties": {
+                            "strategy": {
+                              "type": "string",
+                              "enum": [
+                                "replace_scope",
+                                "logical_key",
+                                "append_only"
+                              ]
+                            },
+                            "logicalKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            }
+                          },
+                          "required": [
+                            "strategy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "requirementMode": {
+                          "type": "string",
+                          "enum": [
+                            "optional",
+                            "required"
+                          ]
+                        },
+                        "defaultEnabled": {
+                          "type": "boolean"
+                        },
+                        "nudgePolicy": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "allowNotApplicable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "allowNotApplicable"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "capabilityRequirements": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "deterministic",
+                              "structured_generation",
+                              "embeddings"
+                            ]
+                          }
+                        },
+                        "allowPartialInputs": {
+                          "type": "boolean"
+                        },
+                        "resourceLimits": {
+                          "type": "object",
+                          "properties": {
+                            "maxPromptChars": {
+                              "type": "integer",
+                              "minimum": 256,
+                              "maximum": 32768
+                            },
+                            "maxInputChars": {
+                              "type": "integer",
+                              "minimum": 1024,
+                              "maximum": 200000
+                            },
+                            "maxRuntimeMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 120000
+                            },
+                            "maxResultBytes": {
+                              "type": "integer",
+                              "minimum": 256,
+                              "maximum": 1048576
+                            }
+                          },
+                          "required": [
+                            "maxPromptChars",
+                            "maxInputChars",
+                            "maxRuntimeMs",
+                            "maxResultBytes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "outputSafety": {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "const": "data_only"
+                            },
+                            "allowCodeExecution": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowToolCalls": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowSql": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowHtml": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "allowCodeExecution",
+                            "allowToolCalls",
+                            "allowSql",
+                            "allowHtml"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "semanticVersion",
+                        "kind",
+                        "instructions",
+                        "input",
+                        "dependencies",
+                        "outputSchemaVersion",
+                        "outputSchema",
+                        "reconciliation",
+                        "requirementMode",
+                        "defaultEnabled",
+                        "nudgePolicy",
+                        "capabilityRequirements",
+                        "allowPartialInputs",
+                        "resourceLimits",
+                        "outputSafety"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instructionHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "outputSchemaHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "promptTemplateHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "createdBy": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "UTC RFC 3339 instant with a trailing Z."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "processorId",
+                    "revision",
+                    "definition",
+                    "instructionHash",
+                    "outputSchemaHash",
+                    "promptTemplateHash",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                },
+                "versions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "processorId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "definition": {
+                        "type": "object",
+                        "properties": {
+                          "semanticVersion": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "source_transform",
+                              "observation_extractor",
+                              "interpretation",
+                              "other"
+                            ]
+                          },
+                          "instructions": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 16000
+                          },
+                          "input": {
+                            "type": "object",
+                            "properties": {
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "contribution",
+                                  "journal_day",
+                                  "date_range",
+                                  "observation_set",
+                                  "artifact_set"
+                                ]
+                              },
+                              "selectors": {
+                                "minItems": 1,
+                                "maxItems": 8,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "typed_text",
+                                    "corrected_transcript",
+                                    "cleaned_transcript",
+                                    "observations",
+                                    "processor_results"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "scope",
+                              "selectors"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "dependencies": {
+                            "maxItems": 32,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "upstreamVersionId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                                },
+                                "outputSelector": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256,
+                                  "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                                },
+                                "acceptPartial": {
+                                  "default": false,
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "upstreamVersionId",
+                                "outputSelector",
+                                "acceptPartial"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "outputSchemaVersion": {
+                            "type": "string",
+                            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                          },
+                          "outputSchema": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "reconciliation": {
+                            "type": "object",
+                            "properties": {
+                              "strategy": {
+                                "type": "string",
+                                "enum": [
+                                  "replace_scope",
+                                  "logical_key",
+                                  "append_only"
+                                ]
+                              },
+                              "logicalKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            },
+                            "required": [
+                              "strategy"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "requirementMode": {
+                            "type": "string",
+                            "enum": [
+                              "optional",
+                              "required"
+                            ]
+                          },
+                          "defaultEnabled": {
+                            "type": "boolean"
+                          },
+                          "nudgePolicy": {
+                            "type": "object",
+                            "properties": {
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "prompt": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              },
+                              "allowNotApplicable": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "enabled",
+                              "allowNotApplicable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "capabilityRequirements": {
+                            "maxItems": 3,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "deterministic",
+                                "structured_generation",
+                                "embeddings"
+                              ]
+                            }
+                          },
+                          "allowPartialInputs": {
+                            "type": "boolean"
+                          },
+                          "resourceLimits": {
+                            "type": "object",
+                            "properties": {
+                              "maxPromptChars": {
+                                "type": "integer",
+                                "minimum": 256,
+                                "maximum": 32768
+                              },
+                              "maxInputChars": {
+                                "type": "integer",
+                                "minimum": 1024,
+                                "maximum": 200000
+                              },
+                              "maxRuntimeMs": {
+                                "type": "integer",
+                                "minimum": 100,
+                                "maximum": 120000
+                              },
+                              "maxResultBytes": {
+                                "type": "integer",
+                                "minimum": 256,
+                                "maximum": 1048576
+                              }
+                            },
+                            "required": [
+                              "maxPromptChars",
+                              "maxInputChars",
+                              "maxRuntimeMs",
+                              "maxResultBytes"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "outputSafety": {
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "type": "string",
+                                "const": "data_only"
+                              },
+                              "allowCodeExecution": {
+                                "type": "boolean",
+                                "const": false
+                              },
+                              "allowToolCalls": {
+                                "type": "boolean",
+                                "const": false
+                              },
+                              "allowSql": {
+                                "type": "boolean",
+                                "const": false
+                              },
+                              "allowHtml": {
+                                "type": "boolean",
+                                "const": false
+                              }
+                            },
+                            "required": [
+                              "mode",
+                              "allowCodeExecution",
+                              "allowToolCalls",
+                              "allowSql",
+                              "allowHtml"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "semanticVersion",
+                          "kind",
+                          "instructions",
+                          "input",
+                          "dependencies",
+                          "outputSchemaVersion",
+                          "outputSchema",
+                          "reconciliation",
+                          "requirementMode",
+                          "defaultEnabled",
+                          "nudgePolicy",
+                          "capabilityRequirements",
+                          "allowPartialInputs",
+                          "resourceLimits",
+                          "outputSafety"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "instructionHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "outputSchemaHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "promptTemplateHash": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "createdBy": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "description": "UTC RFC 3339 instant with a trailing Z."
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "processorId",
+                      "revision",
+                      "definition",
+                      "instructionHash",
+                      "outputSchemaHash",
+                      "promptTemplateHash",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                }
+              },
+              "required": [
+                "id",
+                "key",
+                "name",
+                "purpose",
+                "enabled",
+                "requirementMode",
+                "builtIn",
+                "configRevision",
+                "versions",
+                "createdAt",
+                "updatedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProcessorMutationResponse": {
+        "type": "object",
+        "properties": {
+          "processor": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "purpose": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "requirementMode": {
+                "type": "string",
+                "enum": [
+                  "optional",
+                  "required"
+                ]
+              },
+              "builtIn": {
+                "type": "boolean"
+              },
+              "configRevision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "currentVersionId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "currentVersion": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  },
+                  "processorId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "definition": {
+                    "type": "object",
+                    "properties": {
+                      "semanticVersion": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "source_transform",
+                          "observation_extractor",
+                          "interpretation",
+                          "other"
+                        ]
+                      },
+                      "instructions": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 16000
+                      },
+                      "input": {
+                        "type": "object",
+                        "properties": {
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "contribution",
+                              "journal_day",
+                              "date_range",
+                              "observation_set",
+                              "artifact_set"
+                            ]
+                          },
+                          "selectors": {
+                            "minItems": 1,
+                            "maxItems": 8,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "typed_text",
+                                "corrected_transcript",
+                                "cleaned_transcript",
+                                "observations",
+                                "processor_results"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "scope",
+                          "selectors"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "dependencies": {
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "upstreamVersionId": {
+                              "type": "string",
+                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                              "description": "Canonical lowercase RFC 9562 UUIDv7."
+                            },
+                            "outputSelector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256,
+                              "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                            },
+                            "acceptPartial": {
+                              "default": false,
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "upstreamVersionId",
+                            "outputSelector",
+                            "acceptPartial"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "outputSchemaVersion": {
+                        "type": "string",
+                        "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                      },
+                      "outputSchema": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "reconciliation": {
+                        "type": "object",
+                        "properties": {
+                          "strategy": {
+                            "type": "string",
+                            "enum": [
+                              "replace_scope",
+                              "logical_key",
+                              "append_only"
+                            ]
+                          },
+                          "logicalKey": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          }
+                        },
+                        "required": [
+                          "strategy"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "requirementMode": {
+                        "type": "string",
+                        "enum": [
+                          "optional",
+                          "required"
+                        ]
+                      },
+                      "defaultEnabled": {
+                        "type": "boolean"
+                      },
+                      "nudgePolicy": {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "prompt": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "allowNotApplicable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "enabled",
+                          "allowNotApplicable"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "capabilityRequirements": {
+                        "maxItems": 3,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "deterministic",
+                            "structured_generation",
+                            "embeddings"
+                          ]
+                        }
+                      },
+                      "allowPartialInputs": {
+                        "type": "boolean"
+                      },
+                      "resourceLimits": {
+                        "type": "object",
+                        "properties": {
+                          "maxPromptChars": {
+                            "type": "integer",
+                            "minimum": 256,
+                            "maximum": 32768
+                          },
+                          "maxInputChars": {
+                            "type": "integer",
+                            "minimum": 1024,
+                            "maximum": 200000
+                          },
+                          "maxRuntimeMs": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 120000
+                          },
+                          "maxResultBytes": {
+                            "type": "integer",
+                            "minimum": 256,
+                            "maximum": 1048576
+                          }
+                        },
+                        "required": [
+                          "maxPromptChars",
+                          "maxInputChars",
+                          "maxRuntimeMs",
+                          "maxResultBytes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "outputSafety": {
+                        "type": "object",
+                        "properties": {
+                          "mode": {
+                            "type": "string",
+                            "const": "data_only"
+                          },
+                          "allowCodeExecution": {
+                            "type": "boolean",
+                            "const": false
+                          },
+                          "allowToolCalls": {
+                            "type": "boolean",
+                            "const": false
+                          },
+                          "allowSql": {
+                            "type": "boolean",
+                            "const": false
+                          },
+                          "allowHtml": {
+                            "type": "boolean",
+                            "const": false
+                          }
+                        },
+                        "required": [
+                          "mode",
+                          "allowCodeExecution",
+                          "allowToolCalls",
+                          "allowSql",
+                          "allowHtml"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "semanticVersion",
+                      "kind",
+                      "instructions",
+                      "input",
+                      "dependencies",
+                      "outputSchemaVersion",
+                      "outputSchema",
+                      "reconciliation",
+                      "requirementMode",
+                      "defaultEnabled",
+                      "nudgePolicy",
+                      "capabilityRequirements",
+                      "allowPartialInputs",
+                      "resourceLimits",
+                      "outputSafety"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "instructionHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "outputSchemaHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "promptTemplateHash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "createdBy": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "description": "UTC RFC 3339 instant with a trailing Z."
+                  }
+                },
+                "required": [
+                  "id",
+                  "processorId",
+                  "revision",
+                  "definition",
+                  "instructionHash",
+                  "outputSchemaHash",
+                  "promptTemplateHash",
+                  "createdAt"
+                ],
+                "additionalProperties": false
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "processorId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "definition": {
+                      "type": "object",
+                      "properties": {
+                        "semanticVersion": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "source_transform",
+                            "observation_extractor",
+                            "interpretation",
+                            "other"
+                          ]
+                        },
+                        "instructions": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 16000
+                        },
+                        "input": {
+                          "type": "object",
+                          "properties": {
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "contribution",
+                                "journal_day",
+                                "date_range",
+                                "observation_set",
+                                "artifact_set"
+                              ]
+                            },
+                            "selectors": {
+                              "minItems": 1,
+                              "maxItems": 8,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "enum": [
+                                  "typed_text",
+                                  "corrected_transcript",
+                                  "cleaned_transcript",
+                                  "observations",
+                                  "processor_results"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "scope",
+                            "selectors"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "dependencies": {
+                          "maxItems": 32,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "upstreamVersionId": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                "description": "Canonical lowercase RFC 9562 UUIDv7."
+                              },
+                              "outputSelector": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                                "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                              },
+                              "acceptPartial": {
+                                "default": false,
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "upstreamVersionId",
+                              "outputSelector",
+                              "acceptPartial"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "outputSchemaVersion": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                        },
+                        "outputSchema": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        "reconciliation": {
+                          "type": "object",
+                          "properties": {
+                            "strategy": {
+                              "type": "string",
+                              "enum": [
+                                "replace_scope",
+                                "logical_key",
+                                "append_only"
+                              ]
+                            },
+                            "logicalKey": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            }
+                          },
+                          "required": [
+                            "strategy"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "requirementMode": {
+                          "type": "string",
+                          "enum": [
+                            "optional",
+                            "required"
+                          ]
+                        },
+                        "defaultEnabled": {
+                          "type": "boolean"
+                        },
+                        "nudgePolicy": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "prompt": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "allowNotApplicable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "allowNotApplicable"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "capabilityRequirements": {
+                          "maxItems": 3,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "deterministic",
+                              "structured_generation",
+                              "embeddings"
+                            ]
+                          }
+                        },
+                        "allowPartialInputs": {
+                          "type": "boolean"
+                        },
+                        "resourceLimits": {
+                          "type": "object",
+                          "properties": {
+                            "maxPromptChars": {
+                              "type": "integer",
+                              "minimum": 256,
+                              "maximum": 32768
+                            },
+                            "maxInputChars": {
+                              "type": "integer",
+                              "minimum": 1024,
+                              "maximum": 200000
+                            },
+                            "maxRuntimeMs": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 120000
+                            },
+                            "maxResultBytes": {
+                              "type": "integer",
+                              "minimum": 256,
+                              "maximum": 1048576
+                            }
+                          },
+                          "required": [
+                            "maxPromptChars",
+                            "maxInputChars",
+                            "maxRuntimeMs",
+                            "maxResultBytes"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "outputSafety": {
+                          "type": "object",
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "const": "data_only"
+                            },
+                            "allowCodeExecution": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowToolCalls": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowSql": {
+                              "type": "boolean",
+                              "const": false
+                            },
+                            "allowHtml": {
+                              "type": "boolean",
+                              "const": false
+                            }
+                          },
+                          "required": [
+                            "mode",
+                            "allowCodeExecution",
+                            "allowToolCalls",
+                            "allowSql",
+                            "allowHtml"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "semanticVersion",
+                        "kind",
+                        "instructions",
+                        "input",
+                        "dependencies",
+                        "outputSchemaVersion",
+                        "outputSchema",
+                        "reconciliation",
+                        "requirementMode",
+                        "defaultEnabled",
+                        "nudgePolicy",
+                        "capabilityRequirements",
+                        "allowPartialInputs",
+                        "resourceLimits",
+                        "outputSafety"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "instructionHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "outputSchemaHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "promptTemplateHash": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    },
+                    "createdBy": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "UTC RFC 3339 instant with a trailing Z."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "processorId",
+                    "revision",
+                    "definition",
+                    "instructionHash",
+                    "outputSchemaHash",
+                    "promptTemplateHash",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "name",
+              "purpose",
+              "enabled",
+              "requirementMode",
+              "builtIn",
+              "configRevision",
+              "versions",
+              "createdAt",
+              "updatedAt"
+            ],
+            "additionalProperties": false
+          },
+          "idempotency": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "replayed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "processor",
+          "idempotency"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ProcessorResource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "requirementMode": {
+            "type": "string",
+            "enum": [
+              "optional",
+              "required"
+            ]
+          },
+          "builtIn": {
+            "type": "boolean"
+          },
+          "configRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "currentVersionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "currentVersion": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "processorId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "revision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "definition": {
+                "type": "object",
+                "properties": {
+                  "semanticVersion": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "source_transform",
+                      "observation_extractor",
+                      "interpretation",
+                      "other"
+                    ]
+                  },
+                  "instructions": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16000
+                  },
+                  "input": {
+                    "type": "object",
+                    "properties": {
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "contribution",
+                          "journal_day",
+                          "date_range",
+                          "observation_set",
+                          "artifact_set"
+                        ]
+                      },
+                      "selectors": {
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "typed_text",
+                            "corrected_transcript",
+                            "cleaned_transcript",
+                            "observations",
+                            "processor_results"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "scope",
+                      "selectors"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "dependencies": {
+                    "maxItems": 32,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "upstreamVersionId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "description": "Canonical lowercase RFC 9562 UUIDv7."
+                        },
+                        "outputSelector": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256,
+                          "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                        },
+                        "acceptPartial": {
+                          "default": false,
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "upstreamVersionId",
+                        "outputSelector",
+                        "acceptPartial"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "outputSchemaVersion": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                  },
+                  "outputSchema": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema0"
+                    }
+                  },
+                  "reconciliation": {
+                    "type": "object",
+                    "properties": {
+                      "strategy": {
+                        "type": "string",
+                        "enum": [
+                          "replace_scope",
+                          "logical_key",
+                          "append_only"
+                        ]
+                      },
+                      "logicalKey": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    },
+                    "required": [
+                      "strategy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "requirementMode": {
+                    "type": "string",
+                    "enum": [
+                      "optional",
+                      "required"
+                    ]
+                  },
+                  "defaultEnabled": {
+                    "type": "boolean"
+                  },
+                  "nudgePolicy": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "prompt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "allowNotApplicable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "allowNotApplicable"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "capabilityRequirements": {
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "deterministic",
+                        "structured_generation",
+                        "embeddings"
+                      ]
+                    }
+                  },
+                  "allowPartialInputs": {
+                    "type": "boolean"
+                  },
+                  "resourceLimits": {
+                    "type": "object",
+                    "properties": {
+                      "maxPromptChars": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 32768
+                      },
+                      "maxInputChars": {
+                        "type": "integer",
+                        "minimum": 1024,
+                        "maximum": 200000
+                      },
+                      "maxRuntimeMs": {
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 120000
+                      },
+                      "maxResultBytes": {
+                        "type": "integer",
+                        "minimum": 256,
+                        "maximum": 1048576
+                      }
+                    },
+                    "required": [
+                      "maxPromptChars",
+                      "maxInputChars",
+                      "maxRuntimeMs",
+                      "maxResultBytes"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "outputSafety": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "type": "string",
+                        "const": "data_only"
+                      },
+                      "allowCodeExecution": {
+                        "type": "boolean",
+                        "const": false
+                      },
+                      "allowToolCalls": {
+                        "type": "boolean",
+                        "const": false
+                      },
+                      "allowSql": {
+                        "type": "boolean",
+                        "const": false
+                      },
+                      "allowHtml": {
+                        "type": "boolean",
+                        "const": false
+                      }
+                    },
+                    "required": [
+                      "mode",
+                      "allowCodeExecution",
+                      "allowToolCalls",
+                      "allowSql",
+                      "allowHtml"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "semanticVersion",
+                  "kind",
+                  "instructions",
+                  "input",
+                  "dependencies",
+                  "outputSchemaVersion",
+                  "outputSchema",
+                  "reconciliation",
+                  "requirementMode",
+                  "defaultEnabled",
+                  "nudgePolicy",
+                  "capabilityRequirements",
+                  "allowPartialInputs",
+                  "resourceLimits",
+                  "outputSafety"
+                ],
+                "additionalProperties": false
+              },
+              "instructionHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "outputSchemaHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "promptTemplateHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "createdBy": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              }
+            },
+            "required": [
+              "id",
+              "processorId",
+              "revision",
+              "definition",
+              "instructionHash",
+              "outputSchemaHash",
+              "promptTemplateHash",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "processorId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "revision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "definition": {
+                  "type": "object",
+                  "properties": {
+                    "semanticVersion": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "source_transform",
+                        "observation_extractor",
+                        "interpretation",
+                        "other"
+                      ]
+                    },
+                    "instructions": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 16000
+                    },
+                    "input": {
+                      "type": "object",
+                      "properties": {
+                        "scope": {
+                          "type": "string",
+                          "enum": [
+                            "contribution",
+                            "journal_day",
+                            "date_range",
+                            "observation_set",
+                            "artifact_set"
+                          ]
+                        },
+                        "selectors": {
+                          "minItems": 1,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "typed_text",
+                              "corrected_transcript",
+                              "cleaned_transcript",
+                              "observations",
+                              "processor_results"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "scope",
+                        "selectors"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "dependencies": {
+                      "maxItems": 32,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "upstreamVersionId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                            "description": "Canonical lowercase RFC 9562 UUIDv7."
+                          },
+                          "outputSelector": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256,
+                            "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                          },
+                          "acceptPartial": {
+                            "default": false,
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "upstreamVersionId",
+                          "outputSelector",
+                          "acceptPartial"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "outputSchemaVersion": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+                    },
+                    "outputSchema": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "reconciliation": {
+                      "type": "object",
+                      "properties": {
+                        "strategy": {
+                          "type": "string",
+                          "enum": [
+                            "replace_scope",
+                            "logical_key",
+                            "append_only"
+                          ]
+                        },
+                        "logicalKey": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      },
+                      "required": [
+                        "strategy"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "requirementMode": {
+                      "type": "string",
+                      "enum": [
+                        "optional",
+                        "required"
+                      ]
+                    },
+                    "defaultEnabled": {
+                      "type": "boolean"
+                    },
+                    "nudgePolicy": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "prompt": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "allowNotApplicable": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled",
+                        "allowNotApplicable"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "capabilityRequirements": {
+                      "maxItems": 3,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "deterministic",
+                          "structured_generation",
+                          "embeddings"
+                        ]
+                      }
+                    },
+                    "allowPartialInputs": {
+                      "type": "boolean"
+                    },
+                    "resourceLimits": {
+                      "type": "object",
+                      "properties": {
+                        "maxPromptChars": {
+                          "type": "integer",
+                          "minimum": 256,
+                          "maximum": 32768
+                        },
+                        "maxInputChars": {
+                          "type": "integer",
+                          "minimum": 1024,
+                          "maximum": 200000
+                        },
+                        "maxRuntimeMs": {
+                          "type": "integer",
+                          "minimum": 100,
+                          "maximum": 120000
+                        },
+                        "maxResultBytes": {
+                          "type": "integer",
+                          "minimum": 256,
+                          "maximum": 1048576
+                        }
+                      },
+                      "required": [
+                        "maxPromptChars",
+                        "maxInputChars",
+                        "maxRuntimeMs",
+                        "maxResultBytes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "outputSafety": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "const": "data_only"
+                        },
+                        "allowCodeExecution": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "allowToolCalls": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "allowSql": {
+                          "type": "boolean",
+                          "const": false
+                        },
+                        "allowHtml": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "mode",
+                        "allowCodeExecution",
+                        "allowToolCalls",
+                        "allowSql",
+                        "allowHtml"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "semanticVersion",
+                    "kind",
+                    "instructions",
+                    "input",
+                    "dependencies",
+                    "outputSchemaVersion",
+                    "outputSchema",
+                    "reconciliation",
+                    "requirementMode",
+                    "defaultEnabled",
+                    "nudgePolicy",
+                    "capabilityRequirements",
+                    "allowPartialInputs",
+                    "resourceLimits",
+                    "outputSafety"
+                  ],
+                  "additionalProperties": false
+                },
+                "instructionHash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "outputSchemaHash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "promptTemplateHash": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "createdBy": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                }
+              },
+              "required": [
+                "id",
+                "processorId",
+                "revision",
+                "definition",
+                "instructionHash",
+                "outputSchemaHash",
+                "promptTemplateHash",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "description": "UTC RFC 3339 instant with a trailing Z."
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "name",
+          "purpose",
+          "enabled",
+          "requirementMode",
+          "builtIn",
+          "configRevision",
+          "versions",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "PublishProcessorVersionRequest": {
+        "type": "object",
+        "properties": {
+          "versionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "definition": {
+            "type": "object",
+            "properties": {
+              "semanticVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "source_transform",
+                  "observation_extractor",
+                  "interpretation",
+                  "other"
+                ]
+              },
+              "instructions": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000
+              },
+              "input": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "type": "string",
+                    "enum": [
+                      "contribution",
+                      "journal_day",
+                      "date_range",
+                      "observation_set",
+                      "artifact_set"
+                    ]
+                  },
+                  "selectors": {
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "typed_text",
+                        "corrected_transcript",
+                        "cleaned_transcript",
+                        "observations",
+                        "processor_results"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "scope",
+                  "selectors"
+                ],
+                "additionalProperties": false
+              },
+              "dependencies": {
+                "maxItems": 32,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "upstreamVersionId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                      "description": "Canonical lowercase RFC 9562 UUIDv7."
+                    },
+                    "outputSelector": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256,
+                      "pattern": "^\\/(?:[^~/]|~[01])+(?:\\/(?:[^~/]|~[01])*)*$"
+                    },
+                    "acceptPartial": {
+                      "default": false,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "upstreamVersionId",
+                    "outputSelector",
+                    "acceptPartial"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "outputSchemaVersion": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+              },
+              "outputSchema": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              "reconciliation": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": [
+                      "replace_scope",
+                      "logical_key",
+                      "append_only"
+                    ]
+                  },
+                  "logicalKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "strategy"
+                ],
+                "additionalProperties": false
+              },
+              "requirementMode": {
+                "type": "string",
+                "enum": [
+                  "optional",
+                  "required"
+                ]
+              },
+              "defaultEnabled": {
+                "type": "boolean"
+              },
+              "nudgePolicy": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  "allowNotApplicable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "allowNotApplicable"
+                ],
+                "additionalProperties": false
+              },
+              "capabilityRequirements": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "deterministic",
+                    "structured_generation",
+                    "embeddings"
+                  ]
+                }
+              },
+              "allowPartialInputs": {
+                "type": "boolean"
+              },
+              "resourceLimits": {
+                "type": "object",
+                "properties": {
+                  "maxPromptChars": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 32768
+                  },
+                  "maxInputChars": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 200000
+                  },
+                  "maxRuntimeMs": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 120000
+                  },
+                  "maxResultBytes": {
+                    "type": "integer",
+                    "minimum": 256,
+                    "maximum": 1048576
+                  }
+                },
+                "required": [
+                  "maxPromptChars",
+                  "maxInputChars",
+                  "maxRuntimeMs",
+                  "maxResultBytes"
+                ],
+                "additionalProperties": false
+              },
+              "outputSafety": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "data_only"
+                  },
+                  "allowCodeExecution": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowToolCalls": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowSql": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "allowHtml": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "mode",
+                  "allowCodeExecution",
+                  "allowToolCalls",
+                  "allowSql",
+                  "allowHtml"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "semanticVersion",
+              "kind",
+              "instructions",
+              "input",
+              "dependencies",
+              "outputSchemaVersion",
+              "outputSchema",
+              "reconciliation",
+              "requirementMode",
+              "defaultEnabled",
+              "nudgePolicy",
+              "capabilityRequirements",
+              "allowPartialInputs",
+              "resourceLimits",
+              "outputSafety"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "versionId",
+          "definition"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              },
+              {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "UpdateProcessorRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "requirementMode": {
+            "type": "string",
+            "enum": [
+              "optional",
+              "required"
+            ]
+          },
+          "currentVersionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          }
+        },
+        "additionalProperties": false
       },
       "ReadinessResponse": {
         "type": "object",

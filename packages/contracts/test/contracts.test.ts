@@ -23,6 +23,8 @@ import {
   lastEventIdSchema,
   persistedExtensibleValueSchema,
   problemDetailsSchema,
+  processorDefinitionDraftSchema,
+  processorDryRunResponseSchema,
   semanticJsonValueSchema,
   serializeOpenApiDocument,
   sseEventEnvelopeSchema,
@@ -223,6 +225,72 @@ describe('CONTRACT ADR-0002 shared API contracts', () => {
         ...details,
         dependencies: { storage: { status: 'maybe' } },
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe('CONTRACT DATA-030 PROC-001 PROC-006 processor definitions', () => {
+  const definition = {
+    semanticVersion: '1.0.0',
+    kind: 'observation_extractor',
+    instructions: 'Grounded data only.',
+    input: { scope: 'journal_day', selectors: ['typed_text'] },
+    dependencies: [],
+    outputSchemaVersion: '1.0.0',
+    outputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+    reconciliation: { strategy: 'replace_scope' },
+    requirementMode: 'optional',
+    defaultEnabled: false,
+    nudgePolicy: { enabled: false, allowNotApplicable: true },
+    capabilityRequirements: ['structured_generation'],
+    allowPartialInputs: false,
+    resourceLimits: {
+      maxPromptChars: 12000,
+      maxInputChars: 64000,
+      maxRuntimeMs: 30000,
+      maxResultBytes: 65536,
+    },
+    outputSafety: {
+      mode: 'data_only',
+      allowCodeExecution: false,
+      allowToolCalls: false,
+      allowSql: false,
+      allowHtml: false,
+    },
+  };
+
+  it('[DATA-030][PROC-003][PROC-004][PROC-006] preserves every behavior-affecting definition field', () => {
+    expect(processorDefinitionDraftSchema.parse(definition)).toEqual(
+      definition,
+    );
+    expect(
+      processorDefinitionDraftSchema.safeParse({
+        ...definition,
+        outputSafety: { ...definition.outputSafety, allowHtml: true },
+      }).success,
+    ).toBe(false);
+    expect(
+      processorDefinitionDraftSchema.safeParse({
+        ...definition,
+        resourceLimits: { ...definition.resourceLimits, maxRuntimeMs: 120001 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('[PROC-006] labels dry-run results non-authoritative', () => {
+    expect(
+      processorDryRunResponseSchema.parse({
+        valid: true,
+        draftHash: 'a'.repeat(64),
+        issues: [],
+        schemaComplexity: { depth: 1, nodes: 1 },
+        resolvedDependencyCount: 0,
+        authoritative: false,
+      }).authoritative,
     ).toBe(false);
   });
 });

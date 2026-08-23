@@ -10,6 +10,7 @@ import {
   jsonb,
   pgEnum,
   pgSchema,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -1190,11 +1191,14 @@ export const processorInstallations = journalSchema.table(
     id: uuid('id').primaryKey(),
     key: text('key').notNull(),
     displayName: text('display_name').notNull(),
+    purpose: text('purpose').notNull().default('Journal processor'),
     enabled: boolean('enabled').notNull().default(false),
     requirementMode: processorRequirementMode('requirement_mode')
       .notNull()
       .default('optional'),
     builtIn: boolean('built_in').notNull().default(true),
+    configRevision: integer('config_revision').notNull().default(1),
+    currentVersionId: uuid('current_version_id'),
     installedAt: timestamp('installed_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1215,6 +1219,148 @@ export const processorInstallations = journalSchema.table(
     check(
       'processor_installation_display_name_not_blank',
       sql`length(${table.displayName}) > 0`,
+    ),
+    check(
+      'processor_installation_purpose_not_blank',
+      sql`length(${table.purpose}) > 0`,
+    ),
+    check(
+      'processor_installation_config_revision_positive',
+      sql`${table.configRevision} > 0`,
+    ),
+  ],
+);
+
+export const processorVersions = journalSchema.table(
+  'processor_version',
+  {
+    id: uuid('id').primaryKey(),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    semanticVersion: text('semantic_version').notNull(),
+    definition: jsonb('definition')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    instructionHash: text('instruction_hash').notNull(),
+    outputSchemaHash: text('output_schema_hash').notNull(),
+    promptTemplateHash: text('prompt_template_hash').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, {
+      onDelete: 'restrict',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_version_revision_unique').on(
+      table.processorId,
+      table.revision,
+    ),
+    uniqueIndex('processor_version_semantic_unique').on(
+      table.processorId,
+      table.semanticVersion,
+    ),
+    index('processor_version_processor_created_idx').on(
+      table.processorId,
+      table.createdAt,
+      table.id,
+    ),
+    check(
+      'processor_version_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('processor_version_revision_positive', sql`${table.revision} > 0`),
+    check(
+      'processor_version_semantic_valid',
+      sql`${table.semanticVersion} ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'`,
+    ),
+    check(
+      'processor_version_instruction_hash_sha256',
+      sql`${table.instructionHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_version_output_schema_hash_sha256',
+      sql`${table.outputSchemaHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_version_prompt_template_hash_sha256',
+      sql`${table.promptTemplateHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const processorVersionDependencies = journalSchema.table(
+  'processor_version_dependency',
+  {
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    upstreamVersionId: uuid('upstream_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    outputSelector: text('output_selector').notNull(),
+    acceptPartial: boolean('accept_partial').notNull().default(false),
+  },
+  (table) => [
+    primaryKey({
+      name: 'processor_version_dependency_pk',
+      columns: [
+        table.processorVersionId,
+        table.upstreamVersionId,
+        table.outputSelector,
+      ],
+    }),
+    index('processor_version_dependency_upstream_idx').on(
+      table.upstreamVersionId,
+    ),
+    check(
+      'processor_version_dependency_not_self',
+      sql`${table.processorVersionId} <> ${table.upstreamVersionId}`,
+    ),
+    check(
+      'processor_version_dependency_selector_not_blank',
+      sql`length(${table.outputSelector}) > 0`,
+    ),
+  ],
+);
+
+export const processorApiIdempotency = journalSchema.table(
+  'processor_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    response: jsonb('response')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'processor_api_idempotency_pk',
+      columns: [table.ownerId, table.operation, table.idempotencyKey],
+    }),
+    check(
+      'processor_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'processor_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'processor_api_idempotency_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 );
@@ -1310,7 +1456,10 @@ export const databaseSchema = {
   journalDays,
   journalApiIdempotency,
   passwordCredentials,
+  processorApiIdempotency,
   processorInstallations,
+  processorVersionDependencies,
+  processorVersions,
   queueConfigurations,
   recoveryCodes,
   recordingApiIdempotency,

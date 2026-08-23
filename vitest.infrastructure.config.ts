@@ -14,6 +14,7 @@ export default defineConfig({
         'database',
         'domain',
         'observability',
+        'processors',
         'storage',
         'test-support',
       ].map((packageName) => [

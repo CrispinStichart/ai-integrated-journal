@@ -44,6 +44,10 @@ import {
   sendRecordingError,
 } from './recording-routes.js';
 import {
+  registerProcessorRoutes,
+  sendProcessorError,
+} from './processor-routes.js';
+import {
   registerTranscriptRoutes,
   sendTranscriptError,
 } from './transcript-routes.js';
@@ -455,6 +459,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
 
   registerJournalRoutes(app, dependencies);
   registerRecordingRoutes(app, dependencies);
+  registerProcessorRoutes(app, dependencies);
   registerTranscriptRoutes(app, dependencies);
 
   app.use((request, response) => {
@@ -492,6 +497,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       }
       if (sendJournalError(error, request, response)) return;
       if (sendRecordingError(error, request, response)) return;
+      if (sendProcessorError(error, request, response)) return;
       if (sendTranscriptError(error, request, response)) return;
       dependencies.logger.error(
         {

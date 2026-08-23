@@ -1,6 +1,6 @@
 # Requirement-to-test matrix
 
-- Status: Maintained through Phase 4 Task 30
+- Status: Maintained through Phase 5 Task 31
 - Date: 2026-08-23
 - Normative source: [`AI-Integrated-Journaling-Application-Specification.md`](../AI-Integrated-Journaling-Application-Specification.md)
 - Delivery source: [`implementation-plan.md`](implementation-plan.md)
@@ -71,9 +71,9 @@ Status values are:
 | DATA-022–023 | `packages/test-support/test/fake-ai.test.ts` and `apps/worker/test/transcription-pipeline.integration.ts` cover immutable exact raw bytes plus persisted normalized provider/model/configuration/context/language/timing metadata and append-only raw revisions. | 26–27 | Transcript journal | Verified |
 | DATA-024–026 | `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, `apps/api/test/transcript-routes.test.ts`, and `apps/web/test/transcript-inspector.test.ts` cover distinct logical layers, generated initialization, append-only manual correction history, exact corrected-revision cleanup inputs, immutable prior revisions, and inspectable UI history. | 28–30 | Transcript journal | Verified |
 | DATA-027–028 | `packages/test-support/test/fake-ai.test.ts`, `packages/database/test/transcript-evidence-migration.integration.ts`, `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, and `apps/web/test/transcript-inspector.test.ts` cover persisted timed and explicitly untimed valid results, stable segment IDs, exact UTF-16/audio ranges, audio seeking, and a clear valid-but-unavailable timing state. | 26, 27, 29, 30 | Transcript journal | Verified |
-| DATA-030 | `PROCESSOR`: validate every required processor-definition field and stable identity/current-version behavior. | 31 | AI journal | Planned |
+| DATA-030 | `packages/processors/test/index.test.ts`, `apps/api/test/processor-service.integration.ts`, `apps/api/test/processor-routes.test.ts`, and `apps/web/test/processors-view.test.ts` validate every required definition field, stable identity, immutable version history, enablement, and current-version behavior. | 31 | AI journal | Verified |
 | DATA-031 | `PROCESSOR`: persist and inspect every common-envelope field, direct input, authority, staleness, and provenance field. | 31–35 | AI journal | Planned |
-| DATA-032–033 | `CONTRACT`, `PROCESSOR`, `DOMAIN-KERNEL`: versioned extensible payloads remain readable and never invent unknown optionals. | 9, 10, 31, 32 | AI journal | Planned |
+| DATA-032–033 | Task 31 contracts and persistence preserve immutable extensible JSON Schema versions; Task 32 still must validate and retain processor-specific result payloads without inventing unknown optionals. | 9, 10, 31, 32 | AI journal | Partial |
 | PROV-001–002 | `TRANSCRIPT`, `PROCESSOR`: observations validate evidence exceptions; interpretations identify exact observations/sources. | 29, 32, 33 | AI journal | Planned |
 | PROV-003 | Domain evidence tests and `apps/worker/test/transcription-pipeline.integration.ts` cover canonical NFC/LF evidence text, exact revision-bound UTF-16 spans, quote hashes, explicit unresolved/stale states, and targeted transcript invalidation; processor dependency propagation remains in Task 33. | 29, 33 | AI journal | Partial |
 | PROV-004 | Transcript contracts/API/UI expose exact source revision evidence, transcript run attempts, provider/model/configuration/context, cleanup prompt version, and correction history; processor-result provenance remains in Tasks 33, 35, and 51. | 30, 33, 35, 51 | AI journal | Partial |
@@ -101,11 +101,11 @@ Status values are:
 
 | Requirement(s) | Planned proof | Owning task(s) | First complete milestone | Status |
 | --- | --- | --- | --- | --- |
-| PROC-001–004 | `PROCESSOR`: first-class definitions support enable/configure/create, declared kind, and declared scope. | 31 | AI journal | Planned |
+| PROC-001–004 | Processor contract, API/service integration, route, client, and accessible component tests cover first-class create/configure/enable flows plus declared kind and input scope/selectors. | 31 | AI journal | Verified |
 | PROC-005 | `PROCESSOR`, `BUILTINS`: whole-day reconciliation covers create/update/supersede/remove/unchanged without duplicates. | 34, 38–42 | AI journal | Planned |
-| PROC-006–008 | `PROCESSOR`, `CONTRACT`: immutable version/schema provenance and backward-readable extensible payload fixtures. | 31–33 | AI journal | Planned |
+| PROC-006–008 | Task 31 processor unit/property/integration tests cover immutable definitions, exact dependency DAGs, schemas, hashes, history, and extensible version contracts; run/result provenance and historical payload readers remain in Tasks 32–33. | 31–33 | AI journal | Partial |
 | PROC-009–010 | `PROCESSOR`, `BUILTINS`: absence is not a negative fact; supported uncertainty replaces fabricated precision. | 32, 38–42 | AI journal | Planned |
-| NUDGE-001–003 | `NUDGE`: required/optional configuration and exact initial evaluation states; optional defaults do not nudge. | 31, 43 | Complete local release | Planned |
+| NUDGE-001–003 | Task 31 definition/API/UI tests cover required/optional configuration and reject enabled default nudges for optional definitions; exact evaluation states and nudge generation remain in Task 43. | 31, 43 | Complete local release | Partial |
 | NUDGE-004 | `NUDGE`, `WORKER`: only successful-enough evaluation can create insufficiency/nudge work. | 43 | Complete local release | Planned |
 | NUDGE-005–006 | `NUDGE`: digest consolidation, limits, answer/defer/dismiss/not-applicable, and durable response linkage. | 43 | Complete local release | Planned |
 | NUDGE-007 | `NUDGE`, `RELEASE-E2E`: failure is visually and semantically distinct from omitted information. | 43, 51 | Complete local release | Planned |

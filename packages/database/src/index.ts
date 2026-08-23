@@ -24,6 +24,7 @@ export {
   journalDays,
   journalApiIdempotency,
   passwordCredentials,
+  processorApiIdempotency,
   recoveryCodes,
   recordingApiIdempotency,
   recordingChunks,
@@ -37,6 +38,9 @@ export {
   transcriptSegments,
   transcripts,
   users,
+  processorInstallations,
+  processorVersionDependencies,
+  processorVersions,
 } from './schema.js';
 export {
   DeletedContributionError,

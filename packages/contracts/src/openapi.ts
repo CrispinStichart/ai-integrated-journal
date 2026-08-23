@@ -42,6 +42,16 @@ import {
 import { persistedExtensibleValueSchema } from './persisted-values.js';
 import { problemDetailsSchema } from './problem-details.js';
 import {
+  createProcessorRequestSchema,
+  processorDryRunRequestSchema,
+  processorDryRunResponseSchema,
+  processorListResponseSchema,
+  processorMutationResponseSchema,
+  processorResourceSchema,
+  publishProcessorVersionRequestSchema,
+  updateProcessorRequestSchema,
+} from './processor.js';
+import {
   audioDeletionResponseSchema,
   createRecordingRequestSchema,
   finalizeRecordingRequestSchema,
@@ -51,6 +61,7 @@ import {
   recordingUploadStatusSchema,
 } from './recording.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
+import { uuidV7Schema } from './primitives.js';
 import {
   editCorrectedTranscriptRequestSchema,
   recordingTranscriptInspectorSchema,
@@ -95,6 +106,15 @@ function jsonRequest(schemaName: string): Record<string, unknown> {
         schema: { $ref: `#/components/schemas/${schemaName}` },
       },
     },
+  };
+}
+
+function processorIdParameter(): Record<string, unknown> {
+  return {
+    in: 'path',
+    name: 'id',
+    required: true,
+    schema: componentSchema(uuidV7Schema),
   };
 }
 
@@ -538,6 +558,87 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/processors': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Processor definitions',
+              'ProcessorListResponse',
+            ),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('CreateProcessorRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Processor and initial immutable version published',
+              'ProcessorMutationResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+            '409': problemResponse('Processor identity or key conflict'),
+            '422': problemResponse('Definition validation failed'),
+            '428': problemResponse('Idempotency key required'),
+          },
+        },
+      },
+      '/api/v1/processors/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Processor and immutable version history',
+              'ProcessorResource',
+            ),
+            '404': problemResponse('Processor not found'),
+          },
+        },
+        patch: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('UpdateProcessorRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Processor configuration updated',
+              'ProcessorMutationResponse',
+            ),
+            '409': problemResponse('Processor configuration conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/processors/{id}/versions': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('PublishProcessorVersionRequest'),
+          responses: {
+            '201': schemaResponse(
+              'Immutable processor version published',
+              'ProcessorMutationResponse',
+            ),
+            '409': problemResponse('Processor configuration conflict'),
+            '422': problemResponse('Definition validation failed'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/processor-versions/dry-run': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('ProcessorDryRunRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Non-authoritative bounded definition validation',
+              'ProcessorDryRunResponse',
+            ),
+            '400': problemResponse('Request validation failed'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -681,6 +782,18 @@ export function createOpenApiDocument(): Record<string, unknown> {
           persistedExtensibleValueSchema,
         ),
         ProblemDetails: componentSchema(problemDetailsSchema),
+        CreateProcessorRequest: componentSchema(createProcessorRequestSchema),
+        ProcessorDryRunRequest: componentSchema(processorDryRunRequestSchema),
+        ProcessorDryRunResponse: componentSchema(processorDryRunResponseSchema),
+        ProcessorListResponse: componentSchema(processorListResponseSchema),
+        ProcessorMutationResponse: componentSchema(
+          processorMutationResponseSchema,
+        ),
+        ProcessorResource: componentSchema(processorResourceSchema),
+        PublishProcessorVersionRequest: componentSchema(
+          publishProcessorVersionRequestSchema,
+        ),
+        UpdateProcessorRequest: componentSchema(updateProcessorRequestSchema),
         ReadinessResponse: componentSchema(readinessResponseSchema),
         Recording: componentSchema(recordingSchema),
         RecordingChunkUploadResponse: componentSchema(

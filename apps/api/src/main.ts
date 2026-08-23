@@ -18,6 +18,7 @@ import { createGracefulShutdown } from './shutdown.js';
 import type { HealthProbe } from './types.js';
 import { PostgresJournalService } from './journal-service.js';
 import { PostgresRecordingService } from './recording-service.js';
+import { PostgresProcessorService } from './processor-service.js';
 import { PostgresTranscriptService } from './transcript-service.js';
 
 const config = loadConfig();
@@ -100,6 +101,7 @@ const app = createApiApp({
     new LocalBlobStore(config.blobDataDirectory),
     boss,
   ),
+  processorService: new PostgresProcessorService(database.database),
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {
