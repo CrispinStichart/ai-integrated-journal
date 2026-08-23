@@ -134,4 +134,24 @@ describe('transcript API client', () => {
       code: 'retry_unavailable',
     });
   });
+
+  it('[STATE-003][SEC-003] fails safely when an upstream error is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response('<h1>proxy failure containing transcript text</h1>', {
+          status: 503,
+          headers: { 'content-type': 'text/html' },
+        }),
+      ),
+    );
+
+    await expect(getRecordingTranscripts(RECORDING_ID)).rejects.toMatchObject<
+      Partial<TranscriptApiError>
+    >({
+      status: 503,
+      code: 'unknown',
+      message: 'The transcript request failed. Please try again.',
+    });
+  });
 });

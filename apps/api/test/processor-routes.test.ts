@@ -183,6 +183,20 @@ function app(processorService: ProcessorService) {
 }
 
 describe('Processor definition management API', () => {
+  it('[PROV-004][SEC-002] rejects malformed run identifiers before provenance access', async () => {
+    const processorService = service();
+    const response = await request(app(processorService))
+      .get('/api/v1/processing-runs/not-a-uuid/provenance')
+      .set('authorization', 'Bearer valid')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'validation_failed',
+      invalidParameters: [{ name: 'id', location: 'path' }],
+    });
+    expect(processorService.getRunProvenance).not.toHaveBeenCalled();
+  });
+
   it('[PROV-004][PROC-007][MODEL-002] exposes authenticated content-free exact run provenance', async () => {
     const processorService = service();
     await request(app(processorService))

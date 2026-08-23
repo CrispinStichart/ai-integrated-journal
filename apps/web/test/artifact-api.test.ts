@@ -127,4 +127,24 @@ describe('artifact API client', () => {
       message: 'Artifact changed',
     });
   });
+
+  it('[STATE-003][SEC-003] fails safely when an upstream error is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<h1>proxy failure containing private data</h1>', {
+          status: 502,
+          headers: { 'content-type': 'text/html' },
+        }),
+      ),
+    );
+
+    await expect(listArtifacts(DAY_ID)).rejects.toMatchObject<
+      Partial<ArtifactApiError>
+    >({
+      status: 502,
+      code: 'unknown',
+      message: 'The artifact request failed.',
+    });
+  });
 });

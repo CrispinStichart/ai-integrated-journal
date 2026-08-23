@@ -144,6 +144,41 @@ describe('offline text outbox and cached reads (SEC-001–SEC-003, AC-003)', () 
     ).rejects.toThrow('Unlock offline storage');
   });
 
+  it('[CAP-002][SEC-001][SEC-002] decrypts audio only for its authenticated owner and checkpoint identity', async () => {
+    const storage = createStore();
+    const journal = new OfflineJournal(storage, 1);
+    await journal.initialize(OWNER_ID);
+    await journal.setup('local-only secret');
+    const plaintext = new TextEncoder().encode('private spoken journal');
+    const protectedChunk = await journal.protectRecordingChunk(
+      CONTRIBUTION_ID,
+      0,
+      new Blob([plaintext], { type: 'audio/webm' }),
+    );
+    const record = {
+      recordingId: CONTRIBUTION_ID,
+      index: 0,
+      ownerId: OWNER_ID,
+      schemaVersion: 1 as const,
+      byteSize: protectedChunk.byteSize,
+      sha256: protectedChunk.sha256,
+      mimeType: 'audio/webm',
+      capturedAt,
+      nonce: protectedChunk.nonce,
+      ciphertext: protectedChunk.ciphertext,
+    };
+
+    await expect(journal.unprotectRecordingChunk(record)).resolves.toEqual(
+      plaintext.buffer,
+    );
+    await expect(
+      journal.unprotectRecordingChunk({ ...record, ownerId: 'other-owner' }),
+    ).rejects.toThrow('different owner');
+    await expect(
+      journal.unprotectRecordingChunk({ ...record, index: 1 }),
+    ).rejects.toThrow();
+  });
+
   it('preserves strict enqueue order across a browser-process restart', async () => {
     const storage = createStore();
     vi.spyOn(Date, 'now').mockReturnValue(1_000);

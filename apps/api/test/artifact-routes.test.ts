@@ -74,6 +74,20 @@ function app(artifactService: ArtifactService) {
 }
 
 describe('manual artifact editing API', () => {
+  it('[SEC-002] rejects malformed artifact scope identifiers before service access', async () => {
+    const artifactService = service();
+    const response = await request(app(artifactService))
+      .get('/api/v1/journal-days/not-a-uuid/artifacts')
+      .set('authorization', 'Bearer valid')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'validation_failed',
+      invalidParameters: [{ name: 'id', location: 'path' }],
+    });
+    expect(artifactService.list).not.toHaveBeenCalled();
+  });
+
   it('[PROV-004][SEC-002] requires ownership authentication before listing effective artifacts and history', async () => {
     const artifactService = service();
     await request(app(artifactService))

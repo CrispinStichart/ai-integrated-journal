@@ -132,6 +132,20 @@ function app(transcriptService: TranscriptService) {
 }
 
 describe('Transcript inspector API', () => {
+  it('[SEC-001] rejects malformed recording identifiers before transcript access', async () => {
+    const transcriptService = service();
+    const response = await request(app(transcriptService))
+      .get('/api/v1/recordings/not-a-uuid/transcripts')
+      .set('authorization', 'Bearer valid')
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: 'validation_failed',
+      invalidParameters: [{ name: 'id', location: 'path' }],
+    });
+    expect(transcriptService.inspect).not.toHaveBeenCalled();
+  });
+
   it('[AC-010][DATA-022][DATA-024][DATA-025] returns distinct immutable raw, corrected, and cleaned artifacts', async () => {
     const transcriptService = service();
     const response = await request(app(transcriptService))

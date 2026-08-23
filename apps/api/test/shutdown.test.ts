@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import type { Server } from 'node:http';
 
 import { silentLogger } from '@journal/observability';
 import { describe, expect, it, vi } from 'vitest';
@@ -25,5 +26,31 @@ describe('API-OPS graceful shutdown', () => {
     expect(first).toBe(second);
     expect(close).toHaveBeenCalledOnce();
     expect(server.listening).toBe(false);
+  });
+
+  it('forces lingering connections closed only after the grace deadline', async () => {
+    vi.useFakeTimers();
+    const server = {
+      close: vi.fn(),
+      closeAllConnections: vi.fn(),
+      closeIdleConnections: vi.fn(),
+    } as unknown as Server;
+    const close = vi.fn(async () => undefined);
+    const shutdown = createGracefulShutdown({
+      graceMilliseconds: 25,
+      logger: silentLogger,
+      resources: [{ close }],
+      server,
+    });
+
+    const completion = shutdown();
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(25);
+    await completion;
+
+    expect(server.closeIdleConnections).toHaveBeenCalledOnce();
+    expect(server.closeAllConnections).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 });

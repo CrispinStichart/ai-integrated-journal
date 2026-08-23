@@ -170,4 +170,24 @@ describe('processor API client', () => {
       message: 'Invalid definition',
     });
   });
+
+  it('[STATE-003][SEC-003] fails safely when an upstream error is not JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('<h1>proxy failure containing processor input</h1>', {
+          status: 502,
+          headers: { 'content-type': 'text/html' },
+        }),
+      ),
+    );
+
+    await expect(listProcessors()).rejects.toMatchObject<
+      Partial<ProcessorApiError>
+    >({
+      status: 502,
+      code: 'unknown',
+      message: 'The processor request failed.',
+    });
+  });
 });

@@ -40,4 +40,16 @@ describe('API-OPS in-memory event feed', () => {
       }),
     ).toThrow();
   });
+
+  it('[API-OPS] replays only later events for the requested owner', async () => {
+    const feed = createInMemoryEventFeed();
+    const first = event('019c5b90-0000-7000-8000-000000000020');
+    const otherOwner = event('019c5b90-0000-7000-8000-000000000021');
+    const second = event('019c5b90-0000-7000-8000-000000000022');
+    feed.publish('owner', first);
+    feed.publish('other-owner', otherOwner);
+    feed.publish('owner', second);
+
+    await expect(feed.poll('owner', first.eventId)).resolves.toEqual([second]);
+  });
 });
