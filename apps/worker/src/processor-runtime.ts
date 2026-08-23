@@ -127,8 +127,9 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
     private readonly now: () => Date = () => new Date(),
     private readonly createId: () => string = () =>
       createUuidV7<'processor-runtime'>(),
+    boss?: PgBoss,
   ) {
-    this.#repository = new ProcessorRuntimeRepository(database.database);
+    this.#repository = new ProcessorRuntimeRepository(database.database, boss);
     this.#rawResponses = new BlobRawResponseStore(database.database, blobs);
   }
 
@@ -369,6 +370,9 @@ export async function registerProcessorConsumer(input: {
       input.blobs,
       input.resolveProvider,
       input.resolveDeterministic,
+      undefined,
+      undefined,
+      input.boss,
     ),
   });
 }

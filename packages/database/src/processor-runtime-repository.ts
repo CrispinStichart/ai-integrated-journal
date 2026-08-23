@@ -33,6 +33,7 @@ import {
   processorResults,
   processorRunInputs,
   processorRuns,
+  processorVersionDependencies,
   processorVersions,
   recordings,
   transcriptRevisions,
@@ -80,6 +81,27 @@ function canonicalJson(value: unknown): string {
       .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
       .join(',')}}`;
   return JSON.stringify(value);
+}
+
+function jsonPointer(value: unknown, pointer: string): unknown {
+  let current = value;
+  for (const token of pointer
+    .slice(1)
+    .split('/')
+    .map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'))) {
+    if (
+      current === null ||
+      typeof current !== 'object' ||
+      Array.isArray(current) ||
+      !(token in current)
+    ) {
+      throw new ProcessorRuntimeStateError(
+        'A recorded processor dependency selector is unavailable.',
+      );
+    }
+    current = (current as Readonly<Record<string, unknown>>)[token];
+  }
+  return current;
 }
 
 function runFingerprint(input: {
@@ -256,13 +278,65 @@ async function loadSourceInputs(
       );
     }
   }
-  if (
+  const requestsArtifactInputs =
     definition.input.selectors.includes('observations') ||
-    definition.input.selectors.includes('processor_results') ||
-    definition.dependencies.length > 0
-  ) {
+    definition.input.selectors.includes('processor_results');
+  if (requestsArtifactInputs && definition.dependencies.length === 0) {
     throw new ProcessorRuntimeStateError(
-      'Artifact-set inputs require the provenance graph delivered by task 33.',
+      'Artifact-set inputs require at least one exact processor-version dependency.',
+    );
+  }
+  for (const dependency of definition.dependencies) {
+    const [result] = await context
+      .select()
+      .from(processorResults)
+      .where(
+        and(
+          eq(processorResults.processorVersionId, dependency.upstreamVersionId),
+          eq(processorResults.targetJournalDayId, target.journalDayId),
+          target.contributionId === undefined
+            ? undefined
+            : sql`(${processorResults.targetContributionId} is null or ${processorResults.targetContributionId} = ${target.contributionId})`,
+          eq(processorResults.lifecycle, 'active'),
+          isNull(processorResults.staleAt),
+          dependency.acceptPartial
+            ? undefined
+            : eq(processorResults.completeness, 'complete'),
+        ),
+      )
+      .orderBy(desc(processorResults.createdAt), desc(processorResults.id))
+      .limit(1);
+    if (result === undefined) {
+      throw new ProcessorRuntimeStateError(
+        'An exact processor dependency has no current successful result.',
+      );
+    }
+    const [upstreamInput] = await context
+      .select({ temporalContext: processorRunInputs.temporalContext })
+      .from(processorRunInputs)
+      .where(eq(processorRunInputs.runId, result.runId))
+      .orderBy(asc(processorRunInputs.ordinal))
+      .limit(1);
+    if (upstreamInput === undefined) {
+      throw new ProcessorRuntimeStateError(
+        'An artifact input has no reconstructable temporal context.',
+      );
+    }
+    const identity = {
+      sourceType: 'processor_result' as const,
+      processorResultId: result.id,
+      outputSelector: dependency.outputSelector,
+    };
+    sources.push(
+      Object.freeze({
+        ...identity,
+        label: processorInputLabel(identity),
+        content: canonicalJson(
+          jsonPointer(result.payload, dependency.outputSelector),
+        ),
+        temporal:
+          upstreamInput.temporalContext as unknown as ProcessorTemporalContext,
+      }),
     );
   }
   return Object.freeze(sources);
@@ -339,6 +413,7 @@ export async function enqueueProcessorRun(input: {
     );
   if (
     latest !== undefined &&
+    latest.inputFingerprint === inputFingerprint &&
     latest.status !== 'failed' &&
     latest.status !== 'canceled'
   )
@@ -393,6 +468,9 @@ export async function enqueueProcessorRun(input: {
             : source.sourceType === 'processor_result'
               ? { processorResultId: source.processorResultId }
               : { transcriptRevisionId: source.sourceRevisionId }),
+          ...(source.outputSelector === undefined
+            ? {}
+            : { outputSelector: source.outputSelector }),
           includedStartUtf16: 0,
           includedEndUtf16: entry?.includedEndUtf16 ?? 0,
           fullLengthUtf16: normalizedContent.length,
@@ -421,8 +499,186 @@ export async function enqueueProcessorRun(input: {
   return run;
 }
 
+export type ProcessorChangedInput =
+  | Readonly<{ kind: 'contribution_revision'; id: string }>
+  | Readonly<{ kind: 'transcript_revision'; id: string }>
+  | Readonly<{ kind: 'processor_result'; id: string }>;
+
+export interface ProcessorInvalidationResult {
+  readonly staleResultIds: readonly string[];
+  readonly canceledRunIds: readonly string[];
+  readonly replacementRunIds: readonly string[];
+}
+
+function changedInputPredicate(input: ProcessorChangedInput) {
+  switch (input.kind) {
+    case 'contribution_revision':
+      return eq(processorRunInputs.contributionRevisionId, input.id);
+    case 'transcript_revision':
+      return eq(processorRunInputs.transcriptRevisionId, input.id);
+    case 'processor_result':
+      return eq(processorRunInputs.processorResultId, input.id);
+  }
+}
+
+/**
+ * Traverses immutable run-input edges and stales only actual downstream
+ * results. Replacement jobs bind fresh canonical inputs and contain IDs only.
+ */
+export async function invalidateProcessorDependents(input: {
+  readonly boss?: PgBoss;
+  readonly transaction: JournalTransaction;
+  readonly changedInput: ProcessorChangedInput;
+  readonly now: Date;
+  readonly enqueueReplacements?: boolean;
+}): Promise<ProcessorInvalidationResult> {
+  const direct = await input.transaction
+    .select({ runId: processorRunInputs.runId })
+    .from(processorRunInputs)
+    .where(changedInputPredicate(input.changedInput));
+  const directRunIds = [...new Set(direct.map(({ runId }) => runId))];
+  if (directRunIds.length === 0)
+    return Object.freeze({
+      staleResultIds: Object.freeze([]),
+      canceledRunIds: Object.freeze([]),
+      replacementRunIds: Object.freeze([]),
+    });
+
+  const traversed = await input.transaction.execute<{
+    run_id: string;
+    result_id: string | null;
+  }>(sql`
+    with recursive impacted_run(run_id) as (
+      select source.id
+      from (values ${sql.join(
+        directRunIds.map((id) => sql`(${id}::uuid)`),
+        sql`, `,
+      )}) as source(id)
+      union
+      select child_input.run_id
+      from ${processorRunInputs} child_input
+      inner join ${processorResults} parent_result
+        on parent_result.id = child_input.processor_result_id
+      inner join impacted_run parent_run
+        on parent_run.run_id = parent_result.run_id
+    )
+    select impacted_run.run_id, result.id as result_id
+    from impacted_run
+    left join ${processorResults} result on result.run_id = impacted_run.run_id
+    order by impacted_run.run_id
+  `);
+  const impactedRunIds = [
+    ...new Set(traversed.rows.map(({ run_id }) => run_id)),
+  ];
+  const resultIds = [
+    ...new Set(
+      traversed.rows.flatMap(({ result_id }) =>
+        result_id === null ? [] : [result_id],
+      ),
+    ),
+  ];
+  const staleResults =
+    resultIds.length === 0
+      ? []
+      : await input.transaction
+          .update(processorResults)
+          .set({
+            staleAt: input.now,
+            staleReason: 'input_revision_superseded',
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              inArray(processorResults.id, resultIds),
+              isNull(processorResults.staleAt),
+            ),
+          )
+          .returning({ id: processorResults.id });
+  if (resultIds.length > 0) {
+    await input.transaction
+      .update(processorResultEvidence)
+      .set({
+        resolutionStatus: 'stale',
+        unresolvedReason: 'input_revision_superseded',
+        updatedAt: input.now,
+      })
+      .where(inArray(processorResultEvidence.processorResultId, resultIds));
+  }
+  const canceled = await input.transaction
+    .update(processorRuns)
+    .set({
+      status: 'canceled',
+      completedAt: input.now,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        inArray(processorRuns.id, impactedRunIds),
+        inArray(processorRuns.status, ['queued', 'running']),
+      ),
+    )
+    .returning({ id: processorRuns.id });
+
+  const replacementRunIds: string[] = [];
+  if (input.enqueueReplacements !== false) {
+    const candidates = await input.transaction
+      .select({
+        run: processorRuns,
+        currentVersionId: processorInstallations.currentVersionId,
+        enabled: processorInstallations.enabled,
+      })
+      .from(processorRuns)
+      .innerJoin(
+        processorInstallations,
+        eq(processorInstallations.id, processorRuns.processorId),
+      )
+      .where(inArray(processorRuns.id, directRunIds));
+    const scheduled = new Set<string>();
+    for (const candidate of candidates) {
+      if (!candidate.enabled || candidate.currentVersionId === null) continue;
+      if (input.boss === undefined)
+        throw new ProcessorRuntimeStateError(
+          'Processor queue is required to enqueue invalidation replacements.',
+        );
+      const target: ProcessorRunTarget =
+        candidate.run.targetScope === 'contribution' &&
+        candidate.run.targetContributionId !== null
+          ? {
+              scope: 'contribution',
+              journalDayId: candidate.run.targetJournalDayId as string,
+              contributionId: candidate.run.targetContributionId,
+            }
+          : {
+              scope: 'journal_day',
+              journalDayId: candidate.run.targetJournalDayId as string,
+            };
+      const key = `${candidate.currentVersionId}:${target.scope}:${target.journalDayId}:${target.contributionId ?? ''}`;
+      if (scheduled.has(key)) continue;
+      scheduled.add(key);
+      const replacement = await enqueueProcessorRun({
+        boss: input.boss,
+        transaction: input.transaction,
+        processorVersionId: candidate.currentVersionId,
+        target,
+        requestedConfiguration: candidate.run.requestedConfiguration,
+        now: input.now,
+      });
+      if (replacement.id !== candidate.run.id)
+        replacementRunIds.push(replacement.id);
+    }
+  }
+  return Object.freeze({
+    staleResultIds: Object.freeze(staleResults.map(({ id }) => id)),
+    canceledRunIds: Object.freeze(canceled.map(({ id }) => id)),
+    replacementRunIds: Object.freeze(replacementRunIds),
+  });
+}
+
 export class ProcessorRuntimeRepository {
-  public constructor(private readonly database: JournalDatabase) {}
+  public constructor(
+    private readonly database: JournalDatabase,
+    private readonly boss?: PgBoss,
+  ) {}
 
   public async load(runId: string): Promise<CanonicalProcessorRunInput> {
     const [row] = await this.database
@@ -461,11 +717,51 @@ export class ProcessorRuntimeRepository {
     for (const binding of bindings) {
       const temporalContext =
         binding.temporalContext as unknown as ProcessorTemporalContext;
-      if (binding.inputKind === 'processor_result')
-        throw new QueueJobError(
-          'permanent',
-          'Processor-result bindings require task 33 provenance support.',
+      if (binding.inputKind === 'processor_result') {
+        if (
+          binding.processorResultId === null ||
+          binding.outputSelector === null
+        )
+          throw new QueueJobError(
+            'permanent',
+            'Processor-result input binding is invalid.',
+          );
+        const [source] = await this.database
+          .select({
+            payload: processorResults.payload,
+            staleAt: processorResults.staleAt,
+            lifecycle: processorResults.lifecycle,
+          })
+          .from(processorResults)
+          .where(eq(processorResults.id, binding.processorResultId))
+          .limit(1);
+        if (
+          source === undefined ||
+          source.staleAt !== null ||
+          source.lifecycle !== 'active'
+        )
+          throw new QueueJobError(
+            'canceled',
+            'Bound processor result is no longer current.',
+          );
+        const content = canonicalJson(
+          jsonPointer(source.payload, binding.outputSelector),
         );
+        if (sha256(content) !== binding.contentHash)
+          throw new QueueJobError(
+            'permanent',
+            'Bound processor-result content no longer matches its immutable hash.',
+          );
+        sources.push({
+          sourceType: 'processor_result',
+          processorResultId: binding.processorResultId,
+          outputSelector: binding.outputSelector,
+          label: binding.label,
+          content,
+          temporal: temporalContext,
+        });
+        continue;
+      }
       if (binding.inputKind === 'typed_text') {
         if (binding.contributionRevisionId === null)
           throw new QueueJobError(
@@ -791,6 +1087,69 @@ export class ProcessorRuntimeRepository {
           updatedAt: now,
         })
         .where(eq(processorRuns.id, run.id));
+      if (this.boss !== undefined) {
+        const downstream = await transaction
+          .select({
+            installation: processorInstallations,
+            version: processorVersions,
+          })
+          .from(processorVersionDependencies)
+          .innerJoin(
+            processorVersions,
+            eq(
+              processorVersions.id,
+              processorVersionDependencies.processorVersionId,
+            ),
+          )
+          .innerJoin(
+            processorInstallations,
+            and(
+              eq(processorInstallations.id, processorVersions.processorId),
+              eq(processorInstallations.currentVersionId, processorVersions.id),
+            ),
+          )
+          .where(
+            and(
+              eq(
+                processorVersionDependencies.upstreamVersionId,
+                run.processorVersionId,
+              ),
+              eq(processorInstallations.enabled, true),
+            ),
+          );
+        for (const candidate of downstream) {
+          const downstreamDefinition = processorDefinitionDraftSchema.parse(
+            candidate.version.definition,
+          );
+          if (
+            downstreamDefinition.input.scope !== 'journal_day' &&
+            downstreamDefinition.input.scope !== 'contribution'
+          )
+            continue;
+          if (
+            downstreamDefinition.input.scope === 'contribution' &&
+            run.targetContributionId === null
+          )
+            continue;
+          await enqueueProcessorRun({
+            boss: this.boss,
+            transaction,
+            processorVersionId: candidate.version.id,
+            target:
+              downstreamDefinition.input.scope === 'contribution'
+                ? {
+                    scope: 'contribution',
+                    journalDayId: run.targetJournalDayId,
+                    contributionId: run.targetContributionId as string,
+                  }
+                : {
+                    scope: 'journal_day',
+                    journalDayId: run.targetJournalDayId,
+                  },
+            now,
+          });
+        }
+      }
       return result;
     });
   }

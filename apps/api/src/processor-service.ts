@@ -4,16 +4,22 @@ import {
   processorDefinitionDraftSchema,
   processorDryRunResponseSchema,
   processorResourceSchema,
+  processorRunProvenanceSchema,
   type ProcessorDefinitionDraft,
   type ProcessorDryRunResponse,
   type ProcessorResource,
+  type ProcessorRunProvenance,
   type ProcessorVersionResource,
 } from '@journal/contracts';
 import {
   auditEvents,
   inTransaction,
+  journalDays,
   processorApiIdempotency,
   processorInstallations,
+  processorResults,
+  processorRunInputs,
+  processorRuns,
   processorVersionDependencies,
   processorVersions,
   type JournalDatabase,
@@ -55,6 +61,10 @@ type ProcessorVersionRow = typeof processorVersions.$inferSelect;
 export interface ProcessorService {
   list(ownerId: string): Promise<readonly ProcessorResource[]>;
   get(ownerId: string, processorId: string): Promise<ProcessorResource>;
+  getRunProvenance(
+    ownerId: string,
+    runId: string,
+  ): Promise<ProcessorRunProvenance>;
   dryRun(
     ownerId: string,
     input: Readonly<{
@@ -327,6 +337,120 @@ export class PostgresProcessorService implements ProcessorService {
   ): Promise<ProcessorResource> {
     void ownerId;
     return resource(this.database, processorId);
+  }
+
+  public async getRunProvenance(
+    ownerId: string,
+    runId: string,
+  ): Promise<ProcessorRunProvenance> {
+    const [row] = await this.database
+      .select({ run: processorRuns, version: processorVersions })
+      .from(processorRuns)
+      .innerJoin(
+        processorVersions,
+        eq(processorVersions.id, processorRuns.processorVersionId),
+      )
+      .innerJoin(
+        journalDays,
+        eq(journalDays.id, processorRuns.targetJournalDayId),
+      )
+      .where(and(eq(processorRuns.id, runId), eq(journalDays.userId, ownerId)))
+      .limit(1);
+    if (row === undefined) throw new ProcessorNotFoundError();
+    const inputs = await this.database
+      .select()
+      .from(processorRunInputs)
+      .where(eq(processorRunInputs.runId, runId))
+      .orderBy(asc(processorRunInputs.ordinal));
+    const [result] =
+      row.run.outputResultId === null
+        ? []
+        : await this.database
+            .select()
+            .from(processorResults)
+            .where(eq(processorResults.id, row.run.outputResultId))
+            .limit(1);
+    return processorRunProvenanceSchema.parse({
+      runId: row.run.id,
+      processorId: row.run.processorId,
+      processorVersionId: row.run.processorVersionId,
+      processorSemanticVersion: row.version.semanticVersion,
+      target: {
+        scope: row.run.targetScope,
+        journalDayId: row.run.targetJournalDayId,
+        ...(row.run.targetContributionId === null
+          ? {}
+          : { contributionId: row.run.targetContributionId }),
+      },
+      status: row.run.status,
+      attempt: row.run.attempt,
+      ...(row.run.predecessorRunId === null
+        ? {}
+        : { predecessorRunId: row.run.predecessorRunId }),
+      inputFingerprint: row.run.inputFingerprint,
+      inputCompleteness: row.run.inputCompleteness,
+      inputs: inputs.map((item) => ({
+        ordinal: item.ordinal,
+        label: item.label,
+        kind: item.inputKind,
+        ...(item.contributionRevisionId === null
+          ? {}
+          : { contributionRevisionId: item.contributionRevisionId }),
+        ...(item.transcriptRevisionId === null
+          ? {}
+          : { transcriptRevisionId: item.transcriptRevisionId }),
+        ...(item.processorResultId === null
+          ? {}
+          : { processorResultId: item.processorResultId }),
+        ...(item.outputSelector === null
+          ? {}
+          : { outputSelector: item.outputSelector }),
+        includedStartUtf16: item.includedStartUtf16,
+        includedEndUtf16: item.includedEndUtf16,
+        fullLengthUtf16: item.fullLengthUtf16,
+        contentHash: item.contentHash,
+        temporalContext: item.temporalContext,
+      })),
+      prompt: {
+        assemblyVersion: row.run.promptAssemblyVersion,
+        templateHash: row.run.promptTemplateHash,
+        instructionHash: row.version.instructionHash,
+        ...(row.run.effectiveMessagesHash === null
+          ? {}
+          : { effectiveMessagesHash: row.run.effectiveMessagesHash }),
+      },
+      requestedConfiguration: row.run.requestedConfiguration,
+      ...(row.run.provider === null ? {} : { provider: row.run.provider }),
+      ...(row.run.model === null ? {} : { model: row.run.model }),
+      ...(row.run.effectiveConfiguration === null
+        ? {}
+        : { effectiveConfiguration: row.run.effectiveConfiguration }),
+      ...(result === undefined
+        ? {}
+        : {
+            result: {
+              id: result.id,
+              kind: result.kind,
+              completeness: result.completeness,
+              authority: result.authority,
+              lifecycle: result.lifecycle,
+              ...(result.staleAt === null
+                ? {}
+                : { staleAt: result.staleAt.toISOString() }),
+              ...(result.staleReason === null
+                ? {}
+                : { staleReason: result.staleReason }),
+              createdAt: result.createdAt.toISOString(),
+            },
+          }),
+      queuedAt: row.run.queuedAt.toISOString(),
+      ...(row.run.startedAt === null
+        ? {}
+        : { startedAt: row.run.startedAt.toISOString() }),
+      ...(row.run.completedAt === null
+        ? {}
+        : { completedAt: row.run.completedAt.toISOString() }),
+    });
   }
 
   public async dryRun(

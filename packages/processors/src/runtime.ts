@@ -31,6 +31,7 @@ export interface ProcessorInputSource {
   readonly sourceType: ProcessorSourceType;
   readonly sourceRevisionId?: string;
   readonly processorResultId?: string;
+  readonly outputSelector?: string;
   readonly content: string;
   readonly temporal: ProcessorTemporalContext;
   readonly audioRanges?: readonly Readonly<{
@@ -46,6 +47,7 @@ export interface ProcessorInputEntry {
   readonly sourceType: ProcessorSourceType;
   readonly sourceRevisionId?: string;
   readonly processorResultId?: string;
+  readonly outputSelector?: string;
   readonly content: string;
   readonly includedStartUtf16: 0;
   readonly includedEndUtf16: number;
@@ -116,6 +118,7 @@ export function processorInputLabel(input: {
   readonly sourceType: ProcessorSourceType;
   readonly sourceRevisionId?: string;
   readonly processorResultId?: string;
+  readonly outputSelector?: string;
 }): string {
   const id = input.sourceRevisionId ?? input.processorResultId;
   if (id === undefined) {
@@ -124,7 +127,7 @@ export function processorInputLabel(input: {
       'Processor input requires an immutable source identity.',
     );
   }
-  return `${input.sourceType}:${id}`;
+  return `${input.sourceType}:${id}${input.outputSelector === undefined ? '' : `#${input.outputSelector}`}`;
 }
 
 function safePrefix(value: string, length: number): string {
@@ -153,6 +156,9 @@ function entryFor(
     ...(source.processorResultId === undefined
       ? {}
       : { processorResultId: source.processorResultId }),
+    ...(source.outputSelector === undefined
+      ? {}
+      : { outputSelector: source.outputSelector }),
     content,
     includedStartUtf16: 0,
     includedEndUtf16: content.length,

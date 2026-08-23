@@ -13,9 +13,12 @@ import {
   JournalReadRepository,
   JournalRecordNotFoundError,
   JournalWriteRepository,
+  contributions,
+  invalidateProcessorDependents,
   inTransaction,
   journalApiIdempotency,
   type JournalDatabase,
+  type JournalTransaction,
   type PersistedContribution,
 } from '@journal/database';
 import {
@@ -29,6 +32,7 @@ import {
   type UserId,
 } from '@journal/domain';
 import { and, eq } from 'drizzle-orm';
+import type { PgBoss } from 'pg-boss';
 
 export interface MutationResult {
   readonly contribution: ContributionResource;
@@ -203,6 +207,7 @@ export class PostgresJournalService implements JournalService {
   public constructor(
     private readonly database: JournalDatabase,
     private readonly now: () => Date = () => new Date(),
+    private readonly boss?: PgBoss,
   ) {}
 
   public async listDays(
@@ -374,7 +379,12 @@ export class PostgresJournalService implements JournalService {
       { input, expectedRevision },
       key,
       correlationId,
-      async (repository, owner, audit) => {
+      async (repository, owner, audit, transaction) => {
+        const [prior] = await transaction
+          .select({ revisionId: contributions.currentRevisionId })
+          .from(contributions)
+          .where(eq(contributions.id, contributionId))
+          .limit(1);
         await repository.appendTextRevision({
           ownerId: owner,
           contributionId: parseUuidV7<'contribution'>(contributionId),
@@ -386,6 +396,17 @@ export class PostgresJournalService implements JournalService {
             : { editReason: input.editReason }),
           audit,
         });
+        if (prior?.revisionId !== null && prior?.revisionId !== undefined) {
+          await invalidateProcessorDependents({
+            ...(this.boss === undefined ? {} : { boss: this.boss }),
+            transaction,
+            changedInput: {
+              kind: 'contribution_revision',
+              id: prior.revisionId,
+            },
+            now: this.now(),
+          });
+        }
       },
     );
   }
@@ -487,6 +508,7 @@ export class PostgresJournalService implements JournalService {
         correlationId: string;
         occurredAt: ReturnType<typeof parseUtcInstant>;
       },
+      transaction: JournalTransaction,
     ) => Promise<void>,
     includeDeleted = false,
   ): Promise<MutationResult> {
@@ -524,11 +546,16 @@ export class PostgresJournalService implements JournalService {
           throw new IdempotencyConflictError();
       } else {
         const occurredAt = parseUtcInstant(this.now().toISOString());
-        await work(new JournalWriteRepository(transaction), owner, {
-          auditId: createUuidV7<'audit-event'>(),
-          correlationId: parseUuidV7<'correlation'>(correlationId),
-          occurredAt,
-        });
+        await work(
+          new JournalWriteRepository(transaction),
+          owner,
+          {
+            auditId: createUuidV7<'audit-event'>(),
+            correlationId: parseUuidV7<'correlation'>(correlationId),
+            occurredAt,
+          },
+          transaction,
+        );
       }
       const record = await new JournalReadRepository(
         transaction,

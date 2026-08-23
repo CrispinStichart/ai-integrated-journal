@@ -95,7 +95,11 @@ const app = createApiApp({
   eventFeed: createInMemoryEventFeed(),
   healthProbes,
   logger,
-  journalService: new PostgresJournalService(database.database),
+  journalService: new PostgresJournalService(
+    database.database,
+    undefined,
+    boss,
+  ),
   recordingService: new PostgresRecordingService(
     database.database,
     new LocalBlobStore(config.blobDataDirectory),

@@ -7,6 +7,7 @@ import {
   processorListResponseSchema,
   processorMutationResponseSchema,
   processorResourceSchema,
+  processorRunProvenanceSchema,
   publishProcessorVersionRequestSchema,
   updateProcessorRequestSchema,
   uuidV7Schema,
@@ -150,6 +151,26 @@ export function registerProcessorRoutes(
 ): void {
   const service = dependencies.processorService;
   if (service === undefined) return;
+
+  app.get(
+    '/api/v1/processing-runs/:id/provenance',
+    wrap(async (request, response) => {
+      const owner = await principal(request, response, dependencies);
+      const params = parse(
+        request,
+        response,
+        paramsSchema,
+        request.params,
+        'path',
+      );
+      if (owner === undefined || params === undefined) return;
+      sendValidated(
+        response,
+        processorRunProvenanceSchema,
+        await service.getRunProvenance(owner.ownerId, params.id),
+      );
+    }),
+  );
 
   app.get(
     '/api/v1/processors',

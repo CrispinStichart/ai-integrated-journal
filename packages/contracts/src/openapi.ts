@@ -48,6 +48,7 @@ import {
   processorListResponseSchema,
   processorMutationResponseSchema,
   processorResourceSchema,
+  processorRunProvenanceSchema,
   publishProcessorVersionRequestSchema,
   updateProcessorRequestSchema,
 } from './processor.js';
@@ -639,6 +640,19 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/processing-runs/{id}/provenance': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Exact immutable processor run and result provenance',
+              'ProcessorRunProvenance',
+            ),
+            '404': problemResponse('Processing run not found'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -790,6 +804,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
           processorMutationResponseSchema,
         ),
         ProcessorResource: componentSchema(processorResourceSchema),
+        ProcessorRunProvenance: componentSchema(processorRunProvenanceSchema),
         PublishProcessorVersionRequest: componentSchema(
           publishProcessorVersionRequestSchema,
         ),

@@ -17,6 +17,7 @@ import {
   transcripts,
 } from './schema.js';
 import { inTransaction } from './transaction.js';
+import { invalidateProcessorDependents } from './processor-runtime-repository.js';
 import {
   canonicalTranscriptEvidenceText,
   invalidateTranscriptRevisionDependents,
@@ -230,11 +231,13 @@ export async function appendCorrectedTranscriptRevision(input: {
         current.revision.id,
       );
     }
-    await invalidateTranscriptRevisionDependents({
-      transaction,
-      sourceRevisionId: current.revision.id,
-      now,
-    });
+    const transcriptInvalidation = await invalidateTranscriptRevisionDependents(
+      {
+        transaction,
+        sourceRevisionId: current.revision.id,
+        now,
+      },
+    );
     const revisionId = createId();
     const evidenceText = canonicalTranscriptEvidenceText(input.text);
     const [revision] = await transaction
@@ -271,6 +274,21 @@ export async function appendCorrectedTranscriptRevision(input: {
         updatedAt: now,
       })
       .where(eq(transcripts.id, current.transcript.id));
+    await invalidateProcessorDependents({
+      boss: input.boss,
+      transaction,
+      changedInput: { kind: 'transcript_revision', id: current.revision.id },
+      now,
+    });
+    for (const staleRevisionId of transcriptInvalidation.staleRevisionIds) {
+      await invalidateProcessorDependents({
+        boss: input.boss,
+        transaction,
+        changedInput: { kind: 'transcript_revision', id: staleRevisionId },
+        now,
+        enqueueReplacements: false,
+      });
+    }
     const cleanupRun = await enqueueTranscriptCleanup({
       boss: input.boss,
       transaction,

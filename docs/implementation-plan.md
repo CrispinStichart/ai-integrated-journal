@@ -324,7 +324,7 @@ Processor dependency graphs must be acyclic. Bound schema complexity, prompt/inp
 
 Assemble bounded inputs with stable labels and exact temporal context, invoke deterministic or provider processing, validate structured output, verify evidence ranges, and store complete or explicitly partial results.
 
-### 33. Provenance graph and invalidation
+### 33. Provenance graph and invalidation - FINISHED
 
 Record exact artifact inputs, source revisions, processor versions, prompts, providers, models, and configurations. Traverse dependencies after a revision change, mark only downstream results stale, and enqueue replacement work.
 

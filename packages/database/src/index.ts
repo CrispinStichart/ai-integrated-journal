@@ -66,10 +66,13 @@ export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
 export {
   enqueueProcessorRun,
+  invalidateProcessorDependents,
   PROCESSOR_JOB_OPERATION,
   ProcessorRuntimeRepository,
   ProcessorRuntimeStateError,
   type CanonicalProcessorRunInput,
+  type ProcessorChangedInput,
+  type ProcessorInvalidationResult,
   type ProcessorResultRecord,
   type ProcessorRunRecord,
   type ProcessorRunTarget,

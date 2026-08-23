@@ -4,6 +4,7 @@ import type {
 } from '@journal/contracts';
 
 export * from './runtime.js';
+export * from './provenance.js';
 
 /** Identifies the owning workspace package without exposing implementation paths. */
 export const processorsPackageName = '@journal/processors' as const;

@@ -1565,6 +1565,7 @@ export const processorRunInputs = journalSchema.table(
       () => processorResults.id,
       { onDelete: 'restrict' },
     ),
+    outputSelector: text('output_selector'),
     includedStartUtf16: integer('included_start_utf16').notNull().default(0),
     includedEndUtf16: integer('included_end_utf16').notNull(),
     fullLengthUtf16: integer('full_length_utf16').notNull(),
@@ -1585,6 +1586,15 @@ export const processorRunInputs = journalSchema.table(
       table.runId,
       table.label,
     ),
+    index('processor_run_input_contribution_revision_idx').on(
+      table.contributionRevisionId,
+    ),
+    index('processor_run_input_transcript_revision_idx').on(
+      table.transcriptRevisionId,
+    ),
+    index('processor_run_input_processor_result_idx').on(
+      table.processorResultId,
+    ),
     check(
       'processor_run_input_ordinal_nonnegative',
       sql`${table.ordinal} >= 0`,
@@ -1592,6 +1602,10 @@ export const processorRunInputs = journalSchema.table(
     check(
       'processor_run_input_exactly_one_source',
       sql`num_nonnulls(${table.contributionRevisionId}, ${table.transcriptRevisionId}, ${table.processorResultId}) = 1`,
+    ),
+    check(
+      'processor_run_input_selector_consistent',
+      sql`(${table.processorResultId} is not null and ${table.outputSelector} is not null and length(${table.outputSelector}) > 0) or (${table.processorResultId} is null and ${table.outputSelector} is null)`,
     ),
     check(
       'processor_run_input_range_valid',
@@ -1631,7 +1645,11 @@ export const processorResultEvidence = journalSchema.table(
     resolutionStatus: evidenceResolutionStatus('resolution_status')
       .notNull()
       .default('resolved'),
+    unresolvedReason: text('unresolved_reason'),
     createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
@@ -1663,6 +1681,14 @@ export const processorResultEvidence = journalSchema.table(
     check(
       'processor_result_evidence_quote_hash_sha256',
       sql`${table.quoteHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_result_evidence_resolution_consistent',
+      sql`(${table.resolutionStatus} = 'resolved' and ${table.unresolvedReason} is null) or (${table.resolutionStatus} <> 'resolved' and ${table.unresolvedReason} is not null)`,
+    ),
+    check(
+      'processor_result_evidence_reason_code_valid',
+      sql`${table.unresolvedReason} is null or ${table.unresolvedReason} ~ '^[a-z][a-z0-9_]{0,63}$'`,
     ),
   ],
 );

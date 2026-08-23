@@ -191,6 +191,85 @@ export const processorMutationResponseSchema = z.strictObject({
   }),
 });
 
+const processorTemporalContextSchema = z.strictObject({
+  capturedAt: utcInstantSchema,
+  capturedTimezone: z.string().min(1),
+  journalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  journalTimezone: z.string().min(1),
+  journalDateAssignment: z.enum(['default', 'user_override', 'migration']),
+});
+
+export const processorProvenanceInputSchema = z.strictObject({
+  ordinal: z.number().int().nonnegative(),
+  label: z.string().min(1),
+  kind: z.enum([
+    'typed_text',
+    'corrected_transcript',
+    'cleaned_transcript',
+    'processor_result',
+  ]),
+  contributionRevisionId: uuidV7Schema.optional(),
+  transcriptRevisionId: uuidV7Schema.optional(),
+  processorResultId: uuidV7Schema.optional(),
+  outputSelector: z.string().min(1).optional(),
+  includedStartUtf16: z.number().int().nonnegative(),
+  includedEndUtf16: z.number().int().nonnegative(),
+  fullLengthUtf16: z.number().int().nonnegative(),
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  temporalContext: processorTemporalContextSchema,
+});
+
+export const processorRunProvenanceSchema = z.strictObject({
+  runId: uuidV7Schema,
+  processorId: uuidV7Schema,
+  processorVersionId: uuidV7Schema,
+  processorSemanticVersion: z.string(),
+  target: z.strictObject({
+    scope: z.enum(['contribution', 'journal_day']),
+    journalDayId: uuidV7Schema,
+    contributionId: uuidV7Schema.optional(),
+  }),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']),
+  attempt: z.number().int().positive(),
+  predecessorRunId: uuidV7Schema.optional(),
+  inputFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  inputCompleteness: z.enum(['complete', 'partial']),
+  inputs: z.array(processorProvenanceInputSchema),
+  prompt: z.strictObject({
+    assemblyVersion: z.string().min(1),
+    templateHash: z.string().regex(/^[0-9a-f]{64}$/),
+    instructionHash: z.string().regex(/^[0-9a-f]{64}$/),
+    effectiveMessagesHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+  }),
+  requestedConfiguration: z.record(z.string(), z.json()),
+  provider: z.record(z.string(), z.json()).optional(),
+  model: z.record(z.string(), z.json()).optional(),
+  effectiveConfiguration: z.record(z.string(), z.json()).optional(),
+  result: z
+    .strictObject({
+      id: uuidV7Schema,
+      kind: z.enum([
+        'source_transform',
+        'observation',
+        'interpretation',
+        'other',
+      ]),
+      completeness: z.enum(['complete', 'partial']),
+      authority: z.enum(['manual', 'generated']),
+      lifecycle: z.enum(['active', 'superseded']),
+      staleAt: utcInstantSchema.optional(),
+      staleReason: z.string().optional(),
+      createdAt: utcInstantSchema,
+    })
+    .optional(),
+  queuedAt: utcInstantSchema,
+  startedAt: utcInstantSchema.optional(),
+  completedAt: utcInstantSchema.optional(),
+});
+
 export type ProcessorDefinitionDraft = z.infer<
   typeof processorDefinitionDraftSchema
 >;
@@ -203,4 +282,7 @@ export type ProcessorValidationIssue = z.infer<
 export type ProcessorResource = z.infer<typeof processorResourceSchema>;
 export type ProcessorVersionResource = z.infer<
   typeof processorVersionResourceSchema
+>;
+export type ProcessorRunProvenance = z.infer<
+  typeof processorRunProvenanceSchema
 >;

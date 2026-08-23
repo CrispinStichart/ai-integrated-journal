@@ -10,6 +10,7 @@ import {
   contributions,
   createDatabaseClient,
   enqueueProcessorRun,
+  invalidateProcessorDependents,
   inTransaction,
   journalDays,
   migrateDatabase,
@@ -18,6 +19,7 @@ import {
   processorResults,
   processorRunInputs,
   processorRuns,
+  processorVersionDependencies,
   processorVersions,
   users,
   type DatabaseClient,
@@ -317,6 +319,235 @@ describe('WORKER generic processor runtime', () => {
     );
     expect(replay.id).toBe(run.id);
     expect((await handler.load(queued)).state).toBe('already-complete');
+  });
+
+  it('[ARCH-003][DATA-031][PROV-002][PROV-004][PROC-007][EDIT-001][EDIT-002][STATE-004][SEC-007] binds exact artifact inputs and transitively stales only recorded downstream results before queuing identifier-only replacement work', async () => {
+    const [upstream] = await client.database
+      .select()
+      .from(processorResults)
+      .where(eq(processorResults.processorVersionId, versionId));
+    if (upstream === undefined) throw new Error('Expected upstream result.');
+    const downstreamProcessorId = createUuidV7<'processor'>({
+      timestamp: 306_000,
+    });
+    const downstreamVersionId = createUuidV7<'processor-version'>({
+      timestamp: 307_000,
+    });
+    const downstreamDefinition: ProcessorDefinitionDraft = {
+      ...definition,
+      semanticVersion: '2.0.0',
+      kind: 'interpretation',
+      instructions: 'Interpret only the exact selected upstream artifact.',
+      input: { scope: 'journal_day', selectors: ['processor_results'] },
+      dependencies: [
+        {
+          upstreamVersionId: versionId,
+          outputSelector: '/items',
+          acceptPartial: false,
+        },
+      ],
+      capabilityRequirements: ['deterministic'],
+    };
+    await client.database.insert(processorInstallations).values({
+      id: downstreamProcessorId,
+      key: 'synthetic-interpretation',
+      displayName: 'Synthetic interpretation',
+      purpose: 'Provenance fixture',
+      enabled: true,
+      builtIn: false,
+      currentVersionId: downstreamVersionId,
+    });
+    await client.database.insert(processorVersions).values({
+      id: downstreamVersionId,
+      processorId: downstreamProcessorId,
+      revision: 1,
+      semanticVersion: downstreamDefinition.semanticVersion,
+      definition: downstreamDefinition,
+      instructionHash: hash(downstreamDefinition.instructions),
+      outputSchemaHash: hash(downstreamDefinition.outputSchema),
+      promptTemplateHash: hash({ prompt: 'downstream' }),
+      createdBy: ownerId,
+    });
+    await client.database.insert(processorVersionDependencies).values({
+      processorVersionId: downstreamVersionId,
+      upstreamVersionId: versionId,
+      outputSelector: '/items',
+      acceptPartial: false,
+    });
+    const downstreamRun = await inTransaction(client.database, (transaction) =>
+      enqueueProcessorRun({
+        boss,
+        transaction,
+        processorVersionId: downstreamVersionId,
+        target: { scope: 'journal_day', journalDayId: dayId },
+        now,
+      }),
+    );
+    const downstreamHandler = new ProcessorJobHandler(
+      client,
+      blobs,
+      async () => ({
+        status: 'unavailable',
+        providerId: 'unused',
+        capability: 'structured_generation',
+        reason: 'provider_disabled',
+      }),
+      (candidateVersionId) =>
+        candidateVersionId === downstreamVersionId
+          ? () => ({
+              completeness: 'complete',
+              payload: { items: ['synthetic interpretation'] },
+              evidence: [],
+            })
+          : undefined,
+      () => now,
+    );
+    if (queued === undefined) throw new Error('Expected downstream work.');
+    const canonical = await downstreamHandler.load(queued);
+    if (canonical.input === undefined)
+      throw new Error('Expected runnable downstream work.');
+    expect(canonical.input.sources[0]).toMatchObject({
+      processorResultId: upstream.id,
+      outputSelector: '/items',
+    });
+    await downstreamHandler.execute(
+      canonical.input,
+      new AbortController().signal,
+    );
+    const [downstreamResult] = await client.database
+      .select()
+      .from(processorResults)
+      .where(eq(processorResults.runId, downstreamRun.id));
+    if (downstreamResult === undefined)
+      throw new Error('Expected downstream result.');
+    const [artifactBinding] = await client.database
+      .select()
+      .from(processorRunInputs)
+      .where(eq(processorRunInputs.runId, downstreamRun.id));
+    expect(artifactBinding).toMatchObject({
+      processorResultId: upstream.id,
+      outputSelector: '/items',
+    });
+
+    const replacementRevisionId = createUuidV7<'revision'>({
+      timestamp: 308_000,
+    });
+    const invalidation = await inTransaction(
+      client.database,
+      async (transaction) => {
+        const replacementText = 'Synthetic revised breakfast note.';
+        await transaction.insert(contributionRevisions).values({
+          id: replacementRevisionId,
+          contributionId,
+          revision: 2,
+          text: replacementText,
+          authority: 'manual',
+          authorId: ownerId,
+          contentHash: hash(replacementText),
+          createdAt: now,
+        });
+        await transaction
+          .update(contributions)
+          .set({ currentRevisionId: replacementRevisionId, currentRevision: 2 })
+          .where(eq(contributions.id, contributionId));
+        return invalidateProcessorDependents({
+          boss,
+          transaction,
+          changedInput: { kind: 'contribution_revision', id: revisionId },
+          now,
+        });
+      },
+    );
+    expect(invalidation.staleResultIds).toEqual(
+      expect.arrayContaining([upstream.id, downstreamResult.id]),
+    );
+    expect(invalidation.replacementRunIds).toHaveLength(1);
+    const stale = await client.database
+      .select()
+      .from(processorResults)
+      .where(eq(processorResults.staleReason, 'input_revision_superseded'));
+    expect(stale.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([upstream.id, downstreamResult.id]),
+    );
+    const [replacementInput] = await client.database
+      .select()
+      .from(processorRunInputs)
+      .where(
+        eq(
+          processorRunInputs.runId,
+          invalidation.replacementRunIds[0] as string,
+        ),
+      );
+    expect(replacementInput?.contributionRevisionId).toBe(
+      replacementRevisionId,
+    );
+    expect(JSON.stringify(queued)).not.toContain('Synthetic revised');
+
+    if (queued === undefined) throw new Error('Expected upstream replacement.');
+    const replacementRegistry = new AiProviderFactoryRegistry([
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-replacement',
+        structuredOutput: {
+          completeness: 'complete',
+          payload: { items: ['replacement observation'] },
+          evidence: [],
+        },
+      }),
+    ]);
+    const replacementHandler = new ProcessorJobHandler(
+      client,
+      blobs,
+      () =>
+        replacementRegistry.resolve(
+          { providerId: 'fixture-replacement', enabled: true, settings: {} },
+          'structured_generation',
+        ),
+      () => undefined,
+      () => now,
+      () => createUuidV7<'processor-runtime'>(),
+      boss,
+    );
+    const replacement = await replacementHandler.load(queued);
+    if (replacement.input === undefined)
+      throw new Error('Expected runnable upstream replacement.');
+    await replacementHandler.execute(
+      replacement.input,
+      new AbortController().signal,
+    );
+    const [replacementResult] = await client.database
+      .select()
+      .from(processorResults)
+      .where(
+        eq(processorResults.runId, invalidation.replacementRunIds[0] as string),
+      );
+    if (replacementResult === undefined)
+      throw new Error('Expected replacement result.');
+    const [queuedDownstream] = await client.database
+      .select()
+      .from(processorRuns)
+      .where(eq(processorRuns.processorVersionId, downstreamVersionId))
+      .orderBy(processorRuns.attempt);
+    const downstreamReplacement = (
+      await client.database
+        .select()
+        .from(processorRuns)
+        .where(eq(processorRuns.processorVersionId, downstreamVersionId))
+        .orderBy(processorRuns.attempt)
+    ).at(-1);
+    expect(queuedDownstream?.attempt).toBe(1);
+    expect(downstreamReplacement).toMatchObject({
+      attempt: 2,
+      status: 'queued',
+    });
+    const [downstreamReplacementInput] = await client.database
+      .select()
+      .from(processorRunInputs)
+      .where(eq(processorRunInputs.runId, downstreamReplacement?.id as string));
+    expect(downstreamReplacementInput).toMatchObject({
+      processorResultId: replacementResult.id,
+      outputSelector: '/items',
+    });
+    expect(JSON.stringify(queued)).not.toContain('replacement observation');
   });
 
   it('[PROC-001][PROC-007][STATE-001] invokes a registered deterministic processor without an external provider or raw response', async () => {

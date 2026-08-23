@@ -95,6 +95,57 @@ function service(): ProcessorService {
   return {
     list: vi.fn(async () => [processor]),
     get: vi.fn(async () => processor),
+    getRunProvenance: vi.fn(async () => ({
+      runId: PROCESSOR_ID,
+      processorId: PROCESSOR_ID,
+      processorVersionId: VERSION_ID,
+      processorSemanticVersion: '1.0.0',
+      target: { scope: 'journal_day' as const, journalDayId: OWNER_ID },
+      status: 'succeeded' as const,
+      attempt: 1,
+      inputFingerprint: 'd'.repeat(64),
+      inputCompleteness: 'complete' as const,
+      inputs: [
+        {
+          ordinal: 0,
+          label: `typed_text:${OWNER_ID}`,
+          kind: 'typed_text' as const,
+          contributionRevisionId: OWNER_ID,
+          includedStartUtf16: 0,
+          includedEndUtf16: 9,
+          fullLengthUtf16: 9,
+          contentHash: 'e'.repeat(64),
+          temporalContext: {
+            capturedAt: NOW,
+            capturedTimezone: 'UTC',
+            journalDate: '2026-08-23',
+            journalTimezone: 'UTC',
+            journalDateAssignment: 'default' as const,
+          },
+        },
+      ],
+      prompt: {
+        assemblyVersion: 'processor-runtime-v1',
+        templateHash: 'c'.repeat(64),
+        instructionHash: 'a'.repeat(64),
+        effectiveMessagesHash: 'f'.repeat(64),
+      },
+      requestedConfiguration: { temperature: 0 },
+      provider: { id: 'fixture' },
+      model: { id: 'fixture-model' },
+      effectiveConfiguration: { temperature: 0 },
+      result: {
+        id: VERSION_ID,
+        kind: 'observation' as const,
+        completeness: 'complete' as const,
+        authority: 'generated' as const,
+        lifecycle: 'active' as const,
+        createdAt: NOW,
+      },
+      queuedAt: NOW,
+      startedAt: NOW,
+      completedAt: NOW,
+    })),
     dryRun: vi.fn(async () => ({
       valid: true,
       draftHash: 'd'.repeat(64),
@@ -132,6 +183,26 @@ function app(processorService: ProcessorService) {
 }
 
 describe('Processor definition management API', () => {
+  it('[PROV-004][PROC-007][MODEL-002] exposes authenticated content-free exact run provenance', async () => {
+    const processorService = service();
+    await request(app(processorService))
+      .get(`/api/v1/processing-runs/${PROCESSOR_ID}/provenance`)
+      .expect(401);
+    const response = await request(app(processorService))
+      .get(`/api/v1/processing-runs/${PROCESSOR_ID}/provenance`)
+      .set('authorization', 'Bearer valid')
+      .expect(200);
+    expect(response.body).toMatchObject({
+      runId: PROCESSOR_ID,
+      processorVersionId: VERSION_ID,
+      inputs: [{ contributionRevisionId: OWNER_ID }],
+      prompt: { assemblyVersion: 'processor-runtime-v1' },
+      provider: { id: 'fixture' },
+      model: { id: 'fixture-model' },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('journal text');
+  });
+
   it('[PROC-001][PROC-002][DATA-030] lists authenticated processor configuration and immutable history', async () => {
     const processorService = service();
     await request(app(processorService)).get('/api/v1/processors').expect(401);

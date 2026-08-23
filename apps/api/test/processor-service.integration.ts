@@ -1,7 +1,15 @@
+import { createHash } from 'node:crypto';
+
 import type { ProcessorDefinitionDraft } from '@journal/contracts';
 import {
+  contributionRevisions,
+  contributions,
   createDatabaseClient,
+  journalDays,
   migrateDatabase,
+  processorResults,
+  processorRunInputs,
+  processorRuns,
   processorVersions,
   users,
   type DatabaseClient,
@@ -55,6 +63,12 @@ function definition(version = '1.0.0'): ProcessorDefinitionDraft {
       allowHtml: false,
     },
   };
+}
+
+function hash(value: unknown): string {
+  return createHash('sha256')
+    .update(typeof value === 'string' ? value : JSON.stringify(value))
+    .digest('hex');
 }
 
 describe('processor definition persistence', () => {
@@ -230,5 +244,133 @@ describe('processor definition persistence', () => {
       requirementMode: 'required',
     });
     expect(updated.processor.versions).toHaveLength(2);
+  });
+
+  it('[DATA-031][PROV-004][PROC-007][MODEL-002] returns exact source, prompt, provider, model, configuration, attempt, and stale-result provenance only to the owner', async () => {
+    const dayId = createUuidV7<'journal-day'>({ timestamp: 410_000 });
+    const contributionId = createUuidV7<'contribution'>({ timestamp: 411_000 });
+    const revisionId = createUuidV7<'contribution-revision'>({
+      timestamp: 412_000,
+    });
+    const runId = createUuidV7<'processor-run'>({ timestamp: 413_000 });
+    const resultId = createUuidV7<'processor-result'>({ timestamp: 414_000 });
+    const sourceText = 'Synthetic provenance source.';
+    await client.database.insert(journalDays).values({
+      id: dayId,
+      userId: ownerId,
+      journalDate: '2026-08-23',
+    });
+    await client.database.insert(contributions).values({
+      id: contributionId,
+      journalDayId: dayId,
+      authorId: ownerId,
+      sourceType: 'typed_text',
+      capturedAt: now,
+      capturedTimezone: 'UTC',
+      journalTimezone: 'UTC',
+      journalDateAssignment: 'default',
+    });
+    await client.database.insert(contributionRevisions).values({
+      id: revisionId,
+      contributionId,
+      revision: 1,
+      text: sourceText,
+      authority: 'manual',
+      authorId: ownerId,
+      contentHash: hash(sourceText),
+      createdAt: now,
+    });
+    await client.database
+      .update(contributions)
+      .set({ currentRevisionId: revisionId, currentRevision: 1 })
+      .where(eq(contributions.id, contributionId));
+    await client.database.insert(processorRuns).values({
+      id: runId,
+      processorId,
+      processorVersionId: versionTwoId,
+      targetScope: 'journal_day',
+      targetJournalDayId: dayId,
+      attempt: 1,
+      status: 'running',
+      inputCompleteness: 'complete',
+      inputFingerprint: '1'.repeat(64),
+      promptAssemblyVersion: 'processor-runtime-v1',
+      promptTemplateHash: '2'.repeat(64),
+      requestedConfiguration: { temperature: 0 },
+      provider: { id: 'fixture-provider' },
+      model: { id: 'fixture-model' },
+      effectiveConfiguration: { temperature: 0 },
+      effectiveMessagesHash: '3'.repeat(64),
+      queuedAt: now,
+      startedAt: now,
+      updatedAt: now,
+    });
+    await client.database.insert(processorRunInputs).values({
+      runId,
+      ordinal: 0,
+      label: `typed_text:${revisionId}`,
+      inputKind: 'typed_text',
+      contributionRevisionId: revisionId,
+      includedStartUtf16: 0,
+      includedEndUtf16: sourceText.length,
+      fullLengthUtf16: sourceText.length,
+      contentHash: hash(sourceText),
+      temporalContext: {
+        capturedAt: now.toISOString(),
+        capturedTimezone: 'UTC',
+        journalDate: '2026-08-23',
+        journalTimezone: 'UTC',
+        journalDateAssignment: 'default',
+      },
+      createdAt: now,
+    });
+    await client.database.insert(processorResults).values({
+      id: resultId,
+      runId,
+      processorId,
+      processorVersionId: versionTwoId,
+      targetJournalDayId: dayId,
+      kind: 'observation',
+      completeness: 'complete',
+      payload: { items: ['synthetic'] },
+      staleAt: now,
+      staleReason: 'input_revision_superseded',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await client.database
+      .update(processorRuns)
+      .set({
+        status: 'succeeded',
+        outputResultId: resultId,
+        completedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(processorRuns.id, runId));
+
+    await expect(
+      service.getRunProvenance(
+        createUuidV7<'other-owner'>({ timestamp: 415_000 }),
+        runId,
+      ),
+    ).rejects.toBeInstanceOf(Error);
+    const provenance = await service.getRunProvenance(ownerId, runId);
+    expect(provenance).toMatchObject({
+      runId,
+      processorVersionId: versionTwoId,
+      inputs: [{ contributionRevisionId: revisionId }],
+      prompt: {
+        assemblyVersion: 'processor-runtime-v1',
+        effectiveMessagesHash: '3'.repeat(64),
+      },
+      provider: { id: 'fixture-provider' },
+      model: { id: 'fixture-model' },
+      result: {
+        id: resultId,
+        authority: 'generated',
+        staleReason: 'input_revision_superseded',
+      },
+    });
+    expect(JSON.stringify(provenance)).not.toContain(sourceText);
   });
 });
