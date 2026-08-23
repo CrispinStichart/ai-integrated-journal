@@ -68,9 +68,9 @@ Status values are:
 | DATA-010–012 | Database/API/UI tests plus `apps/api/test/text-journal-milestone.integration.ts`: contribution metadata, independent lifecycle, and targeted edits. | 16–20 | Source-only journal | Verified |
 | DATA-013 | `DB-JOURNAL`, `API-OPS`, `UI-PWA`: durable linked nudge responses. | 16–19, 43 | Complete local release | Planned |
 | DATA-020–021 | `apps/api/test/recording-service.integration.ts`, `apps/api/test/recording-routes.test.ts`, storage adapter contracts, and `apps/web/test/recording-sync.test.ts` cover preallocated recording identity, immutable streamed finalization, Journal Day recording projection, and conflicting/resumable retry behavior. Reload/suspension E2E remains in `AUDIO`. | 21–25 | Audio journal | Partial |
-| DATA-022–023 | `TRANSCRIPT`: immutable exact raw response and complete run provenance/capability metadata. | 26–27 | Transcript journal | Planned |
+| DATA-022–023 | `packages/test-support/test/fake-ai.test.ts` covers immutable exact raw bytes plus normalized provider/model/configuration/context/timing metadata; pipeline persistence remains in `TRANSCRIPT`. | 26–27 | Transcript journal | Partial |
 | DATA-024–026 | `TRANSCRIPT`: distinct raw/corrected/cleaned layers and append-only editable history. | 28–30 | Transcript journal | Planned |
-| DATA-027–028 | `TRANSCRIPT`: retained timing enables seek; capability absence remains valid and explicitly unknown. | 26, 29, 30 | Transcript journal | Planned |
+| DATA-027–028 | `packages/test-support/test/fake-ai.test.ts` covers timed and explicitly untimed valid provider results; retained seek behavior remains in `TRANSCRIPT`. | 26, 29, 30 | Transcript journal | Partial |
 | DATA-030 | `PROCESSOR`: validate every required processor-definition field and stable identity/current-version behavior. | 31 | AI journal | Planned |
 | DATA-031 | `PROCESSOR`: persist and inspect every common-envelope field, direct input, authority, staleness, and provenance field. | 31–35 | AI journal | Planned |
 | DATA-032–033 | `CONTRACT`, `PROCESSOR`, `DOMAIN-KERNEL`: versioned extensible payloads remain readable and never invent unknown optionals. | 9, 10, 31, 32 | AI journal | Planned |
@@ -153,18 +153,18 @@ Status values are:
 | RET-004–005 | `RETENTION`, `RELEASE-E2E`: warnings and impact previews cover audio-only, contribution, and day deletion. | 47, 51 | Complete local release | Planned |
 | RET-006–007 | `RETENTION`, `PORTABILITY`: grace/recovery/hard-delete propagates across blobs, indexes, caches, exports, and backups. | 47–49, 52 | Complete local release | Planned |
 | SEC-001–003 | `SECURITY`: authentication/session/access, secret separation, cache isolation, and no client/log/export credential exposure. | 15, 19, 53 | Source-only journal; repeated later | Planned |
-| SEC-004–006 | `SECURITY`, `TRANSCRIPT`, `MANUAL-OPS`: provider content disclosure/disablement/minimization/retention information. | 26, 50, 53, 55 | Complete local release | Planned |
+| SEC-004–006 | `packages/ai/test/index.test.ts` covers pre-creation provider capability/data-use disclosure and disabled-provider resolution; settings UI and operational review remain in `SECURITY`, `TRANSCRIPT`, and `MANUAL-OPS`. | 26, 50, 53, 55 | Complete local release | Partial |
 | SEC-007 | `API-OPS`, `SECURITY`: deny-by-default serializers and synthetic canary tests keep content out of diagnostics. | 12, 53 | Foundation | Planned |
 | SEC-008 | `DB-JOURNAL`, `SECURITY`: administrative/destructive operations append content-safe audit events. | 11, 15, 47, 53 | Complete local release | Planned |
 | SEC-009 | `PROCESSOR`, `SECURITY`: third-party memories follow identical authorization, logging, export, and deletion controls. | 37, 47, 48, 53 | Complete local release | Planned |
 | PORT-001–002 | `PORTABILITY`, `MANUAL-OPS`: complete checksummed backup, retention policy, empty-target restore, and repeatable drill. | 49, 55 | Complete local release | Planned |
 | PORT-003–006 | `PORTABILITY`: documented readable streamed exports include selected corpus/relationships and human/machine forms. | 48 | Complete local release | Planned |
 | PORT-007 | `PORTABILITY`, `DOMAIN-KERNEL`: export/restore round trip preserves semantic and authority states. | 9, 48, 49 | Complete local release | Planned |
-| PORT-008 | `PORTABILITY`, `TRANSCRIPT`: provider/storage adapters and exported corpus remain usable without original vendor/host. | 21, 26, 48, 49 | Complete local release | Planned |
-| MODEL-001 | `TRANSCRIPT`: capability ports and adapter contracts contain no provider-specific domain dependency. | 26 | Transcript journal | Planned |
-| MODEL-002 | `TRANSCRIPT`, `PROCESSOR`: every AI run records provider/model/configuration/prompt or processor version. | 26, 27, 32, 33 | AI journal | Planned |
-| MODEL-003–005 | `TRANSCRIPT`, `PROCESSOR`: provider-switch fixtures preserve sources/history and represent unsupported capabilities explicitly. | 26, 27, 32 | AI journal | Planned |
-| MODEL-006 | `TRANSCRIPT`, `PORTABILITY`, `RETENTION`: raw-response retention/export policy is explicit and lifecycle tested. | 26, 27, 47, 48, 50 | Complete local release | Planned |
+| PORT-008 | Storage adapter contracts plus `packages/ai/test/index.test.ts` prove replaceable storage/provider boundaries; export and restore remain in `PORTABILITY`. | 21, 26, 48, 49 | Complete local release | Partial |
+| MODEL-001 | `packages/ai/test/index.test.ts` verifies capability-based ports and factory resolution without provider SDK dependencies. | 26 | Transcript journal | Verified |
+| MODEL-002 | AI port result contracts and `packages/test-support/test/fake-ai.test.ts` cover provider/model/configuration and prompt snapshots; persisted run lineage remains in `TRANSCRIPT` and `PROCESSOR`. | 26, 27, 32, 33 | AI journal | Partial |
+| MODEL-003–005 | `packages/ai/test/index.test.ts` and `packages/test-support/test/fake-ai.test.ts` cover side-by-side provider factories, explicit capability absence, and deterministic timed/untimed fixtures; persisted provider switching remains in `TRANSCRIPT` and `PROCESSOR`. | 26, 27, 32 | AI journal | Partial |
+| MODEL-006 | The `RawResponseStore` port and `packages/test-support/test/fake-ai.test.ts` cover exact immutable bytes, integrity, conflict, retention, and explicit non-retention; lifecycle/export remains in `TRANSCRIPT`, `PORTABILITY`, and `RETENTION`. | 26, 27, 47, 48, 50 | Complete local release | Partial |
 
 ## Acceptance criteria
 
@@ -177,7 +177,7 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-003 | `apps/api/test/text-journal-milestone.integration.ts` proves that worker/provider failure leaves typed sources durable and editable across restart; repeat with an original recording after audio/STT milestones. | 20, 25, 30, 51 | Source-only partial; transcript journal complete | Partial |
 | AC-010 | `TRANSCRIPT`, `RELEASE-E2E`: inspect audio and three explicitly distinct transcript layers. | 30, 51 | Transcript journal | Planned |
 | AC-011 | `TRANSCRIPT`: correction leaves raw bytes/text unchanged and stales exact dependents. | 28–30 | Transcript journal | Planned |
-| AC-012 | `TRANSCRIPT`, `RELEASE-E2E`: timed evidence seeks audio; untimed provider fixture shows unavailable timing. | 26, 29, 30, 51 | Transcript journal | Planned |
+| AC-012 | `packages/test-support/test/fake-ai.test.ts` proves timed and untimed provider fixtures; `TRANSCRIPT` and `RELEASE-E2E` still cover audio seeking. | 26, 29, 30, 51 | Transcript journal | Partial |
 | AC-020 | `BUILTINS`: exact burrito/Nicolette fixture yields no user consumption. | 38 | AI journal | Planned |
 | AC-021 | `BUILTINS`: pizza clarification reconciles to one logical event. | 38 | AI journal | Planned |
 | AC-022 | `BUILTINS`: absent mood yields insufficient information and is excluded from averages. | 39, 43 | Complete local release | Planned |
@@ -192,7 +192,7 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-043 | `NUDGE`, `RELEASE-E2E`: technical failure renders failed state and never insufficient-information copy/nudge. | 43, 51 | Complete local release | Planned |
 | AC-050 | `PORTABILITY`: restore/standalone inspection resolves audio, layers, evidence, results, versions, and memories by stable IDs. | 48, 51 | Complete local release | Planned |
 | AC-051 | `PROCESSOR`, `PORTABILITY`, `RELEASE-E2E`: inspector exposes sources/evidence/definition/instruction/provider/model/time. | 33, 48, 51 | Complete local release | Planned |
-| AC-052 | `TRANSCRIPT`, `PORTABILITY`: switch fake configured provider and retain all earlier sources/results in UI/export. | 26, 48, 51 | Complete local release | Planned |
+| AC-052 | `packages/ai/test/index.test.ts` covers side-by-side fake provider selection; `TRANSCRIPT` and `PORTABILITY` still cover retained prior results in UI/export. | 26, 48, 51 | Complete local release | Partial |
 
 ## Maintenance rules
 

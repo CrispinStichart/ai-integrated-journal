@@ -1,5 +1,7 @@
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
 
+export * from './fake-ai.js';
+
 export const testSupportPackageName = '@journal/test-support' as const;
 
 export const PGVECTOR_IMAGE = 'pgvector/pgvector:0.8.1-pg17-bookworm' as const;
