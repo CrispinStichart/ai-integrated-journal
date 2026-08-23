@@ -27,6 +27,34 @@ describe('MEM/FB narrow-safe feedback classification', () => {
     ).toThrow('exact processor scope');
   });
 
+  it('[MEM-005][MEM-006][FB-004] accepts only the exact declared scope for facts and application preferences', () => {
+    expect(
+      classifyFeedbackScope({
+        memoryType: 'known_fact',
+        requestedScope: { kind: 'global_known_fact' },
+      }),
+    ).toEqual({ kind: 'global_known_fact' });
+    expect(() =>
+      classifyFeedbackScope({
+        memoryType: 'known_fact',
+        requestedScope: { kind: 'global_application_preference' },
+      }),
+    ).toThrow('known-fact scope');
+
+    expect(
+      classifyFeedbackScope({
+        memoryType: 'application_preference',
+        requestedScope: { kind: 'global_application_preference' },
+      }),
+    ).toEqual({ kind: 'global_application_preference' });
+    expect(() =>
+      classifyFeedbackScope({
+        memoryType: 'application_preference',
+        requestedScope: { kind: 'global_known_fact' },
+      }),
+    ).toThrow('application-preference scope');
+  });
+
   it('[STT-003][MEM-005] identifies only supported transcription context types', () => {
     expect(isTranscriptionMemory('known_entity')).toBe(true);
     expect(isTranscriptionMemory('processor_rule')).toBe(false);
