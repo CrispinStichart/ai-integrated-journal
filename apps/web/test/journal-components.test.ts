@@ -178,6 +178,33 @@ describe('Journal Day contribution UI (DATA-003, DATA-010–DATA-012, DATA-026, 
     expect(failed.text()).toContain('Retry safely');
     await failed.get('button').trigger('click');
     expect(failed.emitted('retry')).toHaveLength(1);
+
+    const durableRecording = audioContribution.recording;
+    if (durableRecording === undefined)
+      throw new Error('Expected recording fixture.');
+    const transcriptionFailed = mount(AudioContributionCard, {
+      props: {
+        contribution: {
+          ...audioContribution,
+          recording: {
+            ...durableRecording,
+            transcription: {
+              state: 'failed',
+              runId: '018f0000-0000-7000-8000-000000000016',
+            },
+          },
+        },
+      },
+      attachTo: document.body,
+    });
+    expect(transcriptionFailed.text()).toContain('Transcription failed');
+    expect(transcriptionFailed.text()).toContain(
+      'original audio remains safely stored',
+    );
+    await transcriptionFailed.get('button').trigger('click');
+    expect(transcriptionFailed.emitted('retryTranscription')).toHaveLength(1);
+    expect((await axe.run(transcriptionFailed.element)).violations).toEqual([]);
+    transcriptionFailed.unmount();
   });
 
   it('[CAP-007][AC-040] offers reassignment while retaining capture provenance', async () => {

@@ -9,6 +9,7 @@ import {
   recordingAudioUrl,
   RecordingApiError,
   retryRecordingFinalization,
+  retryRecordingTranscription,
   uploadRecordingChunk,
 } from '../src/recording/api';
 
@@ -71,6 +72,7 @@ describe('recording browser API', () => {
         }),
       )
       .mockResolvedValueOnce(json(mutation(durable)))
+      .mockResolvedValueOnce(json(mutation(durable)))
       .mockResolvedValueOnce(json(mutation(durable)));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -123,6 +125,13 @@ describe('recording browser API', () => {
     await expect(
       retryRecordingFinalization(IDS.recording, 'csrf-token'),
     ).resolves.toEqual(durable);
+    await expect(
+      retryRecordingTranscription(
+        IDS.recording,
+        'csrf-token',
+        'transcription-retry-1',
+      ),
+    ).resolves.toEqual(durable);
 
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
     expect(fetchMock.mock.calls[1]?.[0]).not.toContain('after=');
@@ -136,6 +145,15 @@ describe('recording browser API', () => {
       }),
     });
     expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({ method: 'POST' });
+    expect(fetchMock.mock.calls[6]).toEqual([
+      `/api/v1/recordings/${IDS.recording}/transcription/retry`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'idempotency-key': 'transcription-retry-1',
+        }),
+      }),
+    ]);
     expect(recordingAudioUrl(IDS.recording)).toBe(
       `/api/v1/recordings/${IDS.recording}/audio`,
     );

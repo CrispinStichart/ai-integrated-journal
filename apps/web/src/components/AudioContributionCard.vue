@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   move: [journalDate: string];
   retry: [];
+  retryTranscription: [];
 }>();
 
 const recording = computed(() => props.contribution?.recording);
@@ -35,6 +36,12 @@ const persistenceState = computed(
     props.local?.serverPersistenceState ?? recording.value?.persistenceState,
 );
 const isDurable = computed(() => persistenceState.value === 'durable');
+const transcriptionState = computed(
+  () => recording.value?.transcription?.state ?? 'queued',
+);
+const isTranscriptionFailed = computed(
+  () => isDurable.value && transcriptionState.value === 'failed',
+);
 const isFailed = computed(
   () =>
     props.local?.state === 'failed' ||
@@ -108,7 +115,20 @@ watch(journalDate, (value) => {
           <span v-else-if="isFailed" class="badge badge-error">Failed</span>
           <template v-else-if="isDurable">
             <span class="badge badge-success">Durably saved</span>
-            <span class="badge badge-ghost">Transcription pending</span>
+            <span
+              v-if="transcriptionState === 'succeeded'"
+              class="badge badge-success badge-soft"
+              >Transcribed</span
+            >
+            <span
+              v-else-if="transcriptionState === 'running'"
+              class="badge badge-info badge-soft"
+              >Transcribing</span
+            >
+            <span v-else-if="isTranscriptionFailed" class="badge badge-error"
+              >Transcription failed</span
+            >
+            <span v-else class="badge badge-ghost">Transcription pending</span>
           </template>
           <span v-else class="badge badge-info">Saved on server</span>
         </div>
@@ -139,6 +159,25 @@ watch(journalDate, (value) => {
           @click="emit('retry')"
         >
           Retry safely
+        </button>
+      </div>
+
+      <div
+        v-if="isTranscriptionFailed"
+        role="alert"
+        class="alert alert-error alert-soft sm:alert-horizontal"
+      >
+        <span>
+          The transcription failed, but the original audio remains safely stored
+          and playable.
+        </span>
+        <button
+          class="btn btn-sm"
+          type="button"
+          :disabled="busy"
+          @click="emit('retryTranscription')"
+        >
+          Retry transcription
         </button>
       </div>
 

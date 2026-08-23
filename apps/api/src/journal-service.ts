@@ -163,6 +163,12 @@ function mapContribution(record: PersistedContribution): ContributionResource {
               ? {}
               : { codec: record.recording.codec }),
             persistenceState: record.recording.persistenceState,
+            transcription: {
+              state: record.recording.transcriptionState,
+              ...(record.recording.latestTranscriptionRunId === null
+                ? {}
+                : { runId: record.recording.latestTranscriptionRunId }),
+            },
             ...(record.recording.durationMilliseconds === null
               ? {}
               : {

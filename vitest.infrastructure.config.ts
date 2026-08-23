@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: Object.fromEntries(
       [
+        'ai',
         'contracts',
         'database',
         'domain',
@@ -30,6 +31,7 @@ export default defineConfig({
       'packages/database/test/**/*.integration.ts',
       'packages/test-support/test/**/*.integration.ts',
       'apps/api/test/**/*.integration.ts',
+      'apps/worker/test/**/*.integration.ts',
     ],
   },
 });

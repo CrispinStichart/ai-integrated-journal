@@ -40,6 +40,25 @@ export const recordingPersistenceState = pgEnum('recording_persistence_state', [
   'durable',
 ]);
 
+export const transcriptionRunStatus = pgEnum('transcription_run_status', [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'canceled',
+]);
+
+export const recordingTranscriptionState = pgEnum(
+  'recording_transcription_state',
+  ['not_started', 'queued', 'running', 'succeeded', 'failed'],
+);
+
+export const transcriptLayer = pgEnum('transcript_layer', [
+  'raw_stt',
+  'corrected',
+  'cleaned',
+]);
+
 export const journalDateAssignment = pgEnum('journal_date_assignment', [
   'default',
   'user_override',
@@ -396,6 +415,10 @@ export const recordings = journalSchema.table(
     persistenceState: recordingPersistenceState('persistence_state')
       .notNull()
       .default('uploading'),
+    transcriptionState: recordingTranscriptionState('transcription_state')
+      .notNull()
+      .default('not_started'),
+    latestTranscriptionRunId: uuid('latest_transcription_run_id'),
     audioDeletedAt: timestamp('audio_deleted_at', { withTimezone: true }),
     audioDeletedBy: uuid('audio_deleted_by').references(() => users.id, {
       onDelete: 'restrict',
@@ -435,8 +458,217 @@ export const recordings = journalSchema.table(
       sql`(${table.persistenceState} = 'uploading' and ${table.finalByteSize} is null and ${table.finalSha256} is null and ${table.finalBlobKey} is null) or (${table.persistenceState} in ('prepared', 'durable') and ${table.finalByteSize} is not null and ${table.finalSha256} is not null and ${table.finalBlobKey} is not null)`,
     ),
     check(
+      'recording_transcription_state_consistent',
+      sql`(${table.transcriptionState} = 'not_started' and ${table.latestTranscriptionRunId} is null) or (${table.transcriptionState} <> 'not_started' and ${table.latestTranscriptionRunId} is not null)`,
+    ),
+    check(
       'recording_audio_deletion_consistent',
       sql`(${table.audioDeletedAt} is null and ${table.audioDeletedBy} is null) or (${table.audioDeletedAt} is not null and ${table.audioDeletedBy} is not null)`,
+    ),
+  ],
+);
+
+export const transcriptionRuns = journalSchema.table(
+  'transcription_run',
+  {
+    id: uuid('id').primaryKey(),
+    recordingId: uuid('recording_id')
+      .notNull()
+      .references(() => recordings.id, { onDelete: 'restrict' }),
+    predecessorRunId: uuid('predecessor_run_id'),
+    attempt: integer('attempt').notNull(),
+    executionCount: integer('execution_count').notNull().default(0),
+    status: transcriptionRunStatus('status').notNull().default('queued'),
+    inputAudioSha256: text('input_audio_sha256').notNull(),
+    inputFingerprint: text('input_fingerprint').notNull(),
+    requestedContext: jsonb('requested_context')
+      .$type<
+        readonly Readonly<{
+          text: string;
+          purpose: string;
+          version?: string;
+        }>[]
+      >()
+      .notNull()
+      .default([]),
+    effectiveContext: jsonb('effective_context').$type<
+      readonly Readonly<{
+        text: string;
+        purpose: string;
+        version?: string;
+      }>[]
+    >(),
+    requestedConfiguration: jsonb('requested_configuration')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull()
+      .default({}),
+    provider: jsonb('provider').$type<Readonly<Record<string, unknown>>>(),
+    model: jsonb('model').$type<Readonly<Record<string, unknown>>>(),
+    effectiveConfiguration: jsonb('effective_configuration').$type<
+      Readonly<Record<string, unknown>>
+    >(),
+    processingTimeMilliseconds: bigint('processing_time_milliseconds', {
+      mode: 'bigint',
+    }),
+    language: jsonb('language').$type<Readonly<Record<string, unknown>>>(),
+    timingAvailability: jsonb('timing_availability').$type<
+      Readonly<Record<string, unknown>>
+    >(),
+    rawResponseId: uuid('raw_response_id'),
+    rawResponseBlobKey: text('raw_response_blob_key'),
+    rawResponseMediaType: text('raw_response_media_type'),
+    rawResponseByteSize: bigint('raw_response_byte_size', { mode: 'bigint' }),
+    rawResponseSha256: text('raw_response_sha256'),
+    rawResponseProviderRequestId: text('raw_response_provider_request_id'),
+    rawResponseRetention: text('raw_response_retention'),
+    rawResponseExpiresAt: timestamp('raw_response_expires_at', {
+      withTimezone: true,
+    }),
+    errorCode: text('error_code'),
+    errorRetryable: boolean('error_retryable'),
+    queuedAt: timestamp('queued_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('transcription_run_recording_attempt_unique').on(
+      table.recordingId,
+      table.attempt,
+    ),
+    index('transcription_run_recording_status_idx').on(
+      table.recordingId,
+      table.status,
+    ),
+    uniqueIndex('transcription_run_raw_response_id_unique')
+      .on(table.rawResponseId)
+      .where(sql`${table.rawResponseId} is not null`),
+    uniqueIndex('transcription_run_raw_response_blob_key_unique')
+      .on(table.rawResponseBlobKey)
+      .where(sql`${table.rawResponseBlobKey} is not null`),
+    foreignKey({
+      columns: [table.predecessorRunId],
+      foreignColumns: [table.id],
+      name: 'transcription_run_predecessor_run_id_fk',
+    }).onDelete('restrict'),
+    check(
+      'transcription_run_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('transcription_run_attempt_positive', sql`${table.attempt} > 0`),
+    check(
+      'transcription_run_execution_count_nonnegative',
+      sql`${table.executionCount} >= 0`,
+    ),
+    check(
+      'transcription_run_input_audio_sha256_valid',
+      sql`${table.inputAudioSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcription_run_input_fingerprint_valid',
+      sql`${table.inputFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcription_run_raw_response_sha256_valid',
+      sql`${table.rawResponseSha256} is null or ${table.rawResponseSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcription_run_error_consistent',
+      sql`(${table.status} = 'failed' and ${table.errorCode} is not null and ${table.errorRetryable} is not null) or (${table.status} <> 'failed' and ${table.errorCode} is null and ${table.errorRetryable} is null)`,
+    ),
+    check(
+      'transcription_run_completion_consistent',
+      sql`(${table.status} in ('succeeded', 'failed', 'canceled') and ${table.completedAt} is not null) or (${table.status} in ('queued', 'running') and ${table.completedAt} is null)`,
+    ),
+    check(
+      'transcription_run_raw_response_consistent',
+      sql`(${table.rawResponseId} is null and ${table.rawResponseBlobKey} is null and ${table.rawResponseMediaType} is null and ${table.rawResponseByteSize} is null and ${table.rawResponseSha256} is null and ${table.rawResponseRetention} is null and ${table.rawResponseExpiresAt} is null) or (${table.rawResponseId} is not null and ${table.rawResponseBlobKey} is not null and ${table.rawResponseMediaType} is not null and ${table.rawResponseByteSize} is not null and ${table.rawResponseSha256} is not null and ${table.rawResponseRetention} is not null and ${table.rawResponseExpiresAt} is not null)`,
+    ),
+  ],
+);
+
+export const transcripts = journalSchema.table(
+  'transcript',
+  {
+    id: uuid('id').primaryKey(),
+    recordingId: uuid('recording_id')
+      .notNull()
+      .references(() => recordings.id, { onDelete: 'restrict' }),
+    layer: transcriptLayer('layer').notNull(),
+    currentRevisionId: uuid('current_revision_id'),
+    currentRevision: integer('current_revision').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('transcript_recording_layer_unique').on(
+      table.recordingId,
+      table.layer,
+    ),
+    check(
+      'transcript_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'transcript_current_revision_consistent',
+      sql`(${table.currentRevision} = 0 and ${table.currentRevisionId} is null) or (${table.currentRevision} > 0 and ${table.currentRevisionId} is not null)`,
+    ),
+  ],
+);
+
+export const transcriptRevisions = journalSchema.table(
+  'transcript_revision',
+  {
+    id: uuid('id').primaryKey(),
+    transcriptId: uuid('transcript_id')
+      .notNull()
+      .references(() => transcripts.id, { onDelete: 'restrict' }),
+    sourceRunId: uuid('source_run_id')
+      .notNull()
+      .references(() => transcriptionRuns.id, { onDelete: 'restrict' }),
+    revision: integer('revision').notNull(),
+    text: text('text').notNull(),
+    segments: jsonb('segments')
+      .$type<readonly Readonly<Record<string, unknown>>[]>()
+      .notNull(),
+    language: jsonb('language')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    timingAvailability: jsonb('timing_availability')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    authority: contributionAuthority('authority').notNull(),
+    contentHash: text('content_hash').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('transcript_revision_number_unique').on(
+      table.transcriptId,
+      table.revision,
+    ),
+    uniqueIndex('transcript_revision_source_run_unique').on(table.sourceRunId),
+    index('transcript_revision_history_idx').on(
+      table.transcriptId,
+      table.revision,
+    ),
+    check(
+      'transcript_revision_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('transcript_revision_number_positive', sql`${table.revision} > 0`),
+    check(
+      'transcript_revision_content_hash_sha256',
+      sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 );
@@ -784,5 +1016,8 @@ export const databaseSchema = {
   recordingUploads,
   schedules,
   sessions,
+  transcriptionRuns,
+  transcriptRevisions,
+  transcripts,
   users,
 };

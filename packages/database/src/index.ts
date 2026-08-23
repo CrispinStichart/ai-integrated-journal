@@ -30,6 +30,9 @@ export {
   recordings,
   recordingUploads,
   sessions,
+  transcriptionRuns,
+  transcriptRevisions,
+  transcripts,
   users,
 } from './schema.js';
 export {
@@ -50,6 +53,17 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  enqueueTranscriptionRun,
+  TRANSCRIPTION_JOB_OPERATION,
+  TranscriptionRepository,
+  TranscriptionStateError,
+  type CanonicalTranscriptionInput,
+  type PersistedSpeechContextItem,
+  type PersistedTranscriptionSuccess,
+  type TranscriptionRecordingRecord,
+  type TranscriptionRunRecord,
+} from './transcription-repository.js';
 export {
   allQueueDefinitions,
   createJobFingerprint,

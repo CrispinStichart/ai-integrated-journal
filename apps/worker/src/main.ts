@@ -1,7 +1,10 @@
 import { loadConfig } from '@journal/config';
 import { createDatabaseClient, createQueueClient } from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
+import { AiProviderFactoryRegistry } from '@journal/ai';
+import { LocalBlobStore } from '@journal/storage';
 
+import { registerTranscriptionConsumer } from './transcription-pipeline.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -11,11 +14,28 @@ const logger = createContentSafeLogger({
 });
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const boss = createQueueClient(config.databaseUrl);
+const providers = new AiProviderFactoryRegistry();
 boss.on('error', (error: Error) => {
   logger.error({ errorType: error.name }, 'Queue runtime error');
 });
 
-const worker = new WorkerRuntime({ boss, database, logger });
+const worker = new WorkerRuntime({
+  boss,
+  database,
+  logger,
+  registerConsumers: async (queue) => {
+    await registerTranscriptionConsumer({
+      boss: queue,
+      database,
+      blobs: new LocalBlobStore(config.blobDataDirectory),
+      resolveProvider: () =>
+        providers.resolve(
+          { providerId: 'unconfigured', enabled: false, settings: {} },
+          'speech_to_text',
+        ),
+    });
+  },
+});
 await worker.start();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

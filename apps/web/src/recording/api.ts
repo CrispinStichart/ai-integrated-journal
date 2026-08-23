@@ -135,6 +135,22 @@ export async function retryRecordingFinalization(
   return result.recording;
 }
 
+export async function retryRecordingTranscription(
+  recordingId: string,
+  csrfToken: string,
+  idempotencyKey: string,
+): Promise<RecordingResource> {
+  const result = recordingMutationResponseSchema.parse(
+    await (
+      await request(`/api/v1/recordings/${recordingId}/transcription/retry`, {
+        method: 'POST',
+        headers: mutationHeaders(csrfToken, idempotencyKey),
+      })
+    ).json(),
+  );
+  return result.recording;
+}
+
 export function recordingAudioUrl(recordingId: string): string {
   return `/api/v1/recordings/${recordingId}/audio`;
 }

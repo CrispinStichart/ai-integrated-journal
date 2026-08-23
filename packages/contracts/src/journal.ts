@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { createCursorPageSchema } from './pagination.js';
 import { utcInstantSchema, uuidV7Schema } from './primitives.js';
+import { recordingTranscriptionSchema } from './transcription.js';
 
 export const journalDateSchema = z.iso
   .date()
@@ -46,6 +47,7 @@ export const contributionRecordingSchema = z.strictObject({
   mimeType: z.string().min(1).max(255),
   codec: z.string().min(1).optional(),
   persistenceState: z.enum(['uploading', 'prepared', 'durable']),
+  transcription: recordingTranscriptionSchema.optional(),
   durationMilliseconds: z
     .string()
     .regex(/^(?:0|[1-9][0-9]*)$/)

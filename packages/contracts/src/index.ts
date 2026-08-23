@@ -12,4 +12,5 @@ export * from './persisted-values.js';
 export * from './primitives.js';
 export * from './problem-details.js';
 export * from './recording.js';
+export * from './transcription.js';
 export * from './semantic-value.js';

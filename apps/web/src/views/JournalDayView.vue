@@ -24,7 +24,10 @@ import {
 } from '../journal/date';
 import { useUiStore } from '../stores/ui';
 import { useBrowserCaptureController } from '../recording/capture-controller';
-import { retryRecordingFinalization } from '../recording/api';
+import {
+  retryRecordingFinalization,
+  retryRecordingTranscription,
+} from '../recording/api';
 import { useRecordingSyncController } from '../recording/sync-controller';
 import type { LocalRecordingRecord } from '../storage/indexed-db';
 
@@ -360,6 +363,29 @@ async function retryAudio(item: Extract<TimelineItem, { kind: 'audio' }>) {
         csrfToken(),
       );
     ui.announce('Audio synchronization retried safely');
+    await refresh();
+  } catch (error) {
+    showError(error);
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function retryTranscription(
+  item: Extract<TimelineItem, { kind: 'audio' }>,
+) {
+  const recordingId =
+    item.contribution?.recording?.id ?? item.local?.recordingId;
+  if (recordingId === undefined) return;
+  submitting.value = true;
+  errorMessage.value = '';
+  try {
+    await retryRecordingTranscription(
+      recordingId,
+      csrfToken(),
+      `retry-transcription-${createUuidV7()}`,
+    );
+    ui.announce('Transcription retry queued');
     await refresh();
   } catch (error) {
     showError(error);
@@ -840,6 +866,7 @@ await loadPending();
             :busy="submitting"
             @move="moveAudio(item, $event)"
             @retry="retryAudio(item)"
+            @retry-transcription="retryTranscription(item)"
           />
           <ContributionCard
             v-else

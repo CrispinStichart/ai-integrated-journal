@@ -10,10 +10,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@journal/ai": "workspace:*",
     "@journal/config": "workspace:*",
     "@journal/database": "workspace:*",
+    "@journal/domain": "workspace:*",
     "@journal/observability": "workspace:*",
     "@journal/processors": "workspace:*",
+    "@journal/storage": "workspace:*",
+    "drizzle-orm": "0.45.2",
     "pg-boss": "12.26.3"
+  },
+  "devDependencies": {
+    "@journal/test-support": "workspace:*"
   }
 }

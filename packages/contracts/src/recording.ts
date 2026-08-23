@@ -7,6 +7,7 @@ import {
   journalDateSchema,
 } from './journal.js';
 import { utcInstantSchema, uuidV7Schema } from './primitives.js';
+import { recordingTranscriptionSchema } from './transcription.js';
 
 export const RECORDING_PROTOCOL_VERSION = 1 as const;
 export const MAX_AUDIO_CHUNK_BYTES = 8 * 1024 * 1024;
@@ -53,6 +54,7 @@ export const recordingSchema = z.strictObject({
   mimeType: audioMimeTypeSchema,
   codec: z.string().min(1).optional(),
   persistenceState: recordingPersistenceStateSchema,
+  transcription: recordingTranscriptionSchema.optional(),
   durationMilliseconds: decimalCountSchema.optional(),
   byteSize: decimalCountSchema.optional(),
   sha256: sha256Schema.optional(),

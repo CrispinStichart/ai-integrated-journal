@@ -944,6 +944,38 @@
         }
       }
     },
+    "/api/v1/recordings/{id}/transcription/retry": {
+      "post": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Failed or canceled transcription retry queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingMutationResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Latest transcription has not failed or been canceled",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/recordings/{id}/audio": {
       "get": {
         "security": [
@@ -1370,6 +1402,30 @@
                   "durable"
                 ]
               },
+              "transcription": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "not_started",
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "additionalProperties": false
+              },
               "durationMilliseconds": {
                 "type": "string",
                 "pattern": "^(?:0|[1-9][0-9]*)$"
@@ -1573,6 +1629,30 @@
                   "durable"
                 ]
               },
+              "transcription": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "not_started",
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "additionalProperties": false
+              },
               "durationMilliseconds": {
                 "type": "string",
                 "pattern": "^(?:0|[1-9][0-9]*)$"
@@ -1765,6 +1845,30 @@
                       "prepared",
                       "durable"
                     ]
+                  },
+                  "transcription": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "not_started",
+                          "queued",
+                          "running",
+                          "succeeded",
+                          "failed"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                        "description": "Canonical lowercase RFC 9562 UUIDv7."
+                      }
+                    },
+                    "required": [
+                      "state"
+                    ],
+                    "additionalProperties": false
                   },
                   "durationMilliseconds": {
                     "type": "string",
@@ -2622,6 +2726,30 @@
                         "durable"
                       ]
                     },
+                    "transcription": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "not_started",
+                            "queued",
+                            "running",
+                            "succeeded",
+                            "failed"
+                          ]
+                        },
+                        "runId": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                          "description": "Canonical lowercase RFC 9562 UUIDv7."
+                        }
+                      },
+                      "required": [
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    },
                     "durationMilliseconds": {
                       "type": "string",
                       "pattern": "^(?:0|[1-9][0-9]*)$"
@@ -3108,6 +3236,30 @@
               "durable"
             ]
           },
+          "transcription": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "not_started",
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed"
+                ]
+              },
+              "runId": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "description": "Canonical lowercase RFC 9562 UUIDv7."
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          },
           "durationMilliseconds": {
             "type": "string",
             "pattern": "^(?:0|[1-9][0-9]*)$"
@@ -3226,6 +3378,30 @@
                   "durable"
                 ]
               },
+              "transcription": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "not_started",
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "additionalProperties": false
+              },
               "durationMilliseconds": {
                 "type": "string",
                 "pattern": "^(?:0|[1-9][0-9]*)$"
@@ -3333,6 +3509,30 @@
                   "prepared",
                   "durable"
                 ]
+              },
+              "transcription": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "not_started",
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                    "description": "Canonical lowercase RFC 9562 UUIDv7."
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "additionalProperties": false
               },
               "durationMilliseconds": {
                 "type": "string",

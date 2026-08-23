@@ -97,6 +97,7 @@ const app = createApiApp({
   recordingService: new PostgresRecordingService(
     database.database,
     new LocalBlobStore(config.blobDataDirectory),
+    boss,
   ),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

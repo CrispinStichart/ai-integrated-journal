@@ -22,6 +22,7 @@
     "express": "5.2.1",
     "express-rate-limit": "8.6.2",
     "helmet": "8.1.0",
+    "pg-boss": "12.26.3",
     "zod": "4.4.3"
   },
   "devDependencies": {

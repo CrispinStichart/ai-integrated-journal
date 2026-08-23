@@ -95,6 +95,9 @@ importers:
       helmet:
         specifier: 8.1.0
         version: 8.1.0
+      pg-boss:
+        specifier: 12.26.3
+        version: 12.26.3
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -184,21 +187,37 @@ importers:
 
   apps/worker:
     dependencies:
+      '@journal/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@journal/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@journal/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@journal/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@journal/observability':
         specifier: workspace:*
         version: link:../../packages/observability
       '@journal/processors':
         specifier: workspace:*
         version: link:../../packages/processors
+      '@journal/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.23.0)
       pg-boss:
         specifier: 12.26.3
         version: 12.26.3
+    devDependencies:
+      '@journal/test-support':
+        specifier: workspace:*
+        version: link:../../packages/test-support
 
   packages/ai: {}
 

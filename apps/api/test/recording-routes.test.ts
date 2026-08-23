@@ -53,6 +53,13 @@ function service(): RecordingService {
       replayed: false,
     })),
     retry: vi.fn(async () => ({ recording: durableRecording, replayed: true })),
+    retryTranscription: vi.fn(async () => ({
+      recording: {
+        ...durableRecording,
+        transcription: { state: 'queued' as const, runId: RECORDING_ID },
+      },
+      replayed: false,
+    })),
     openAudio: vi.fn(async () => ({
       recording: durableRecording,
       stream: new ReadableStream({
@@ -205,6 +212,11 @@ describe('Recording upload API', () => {
       .set('authorization', 'Bearer valid')
       .set('idempotency-key', 'recording-retry-1')
       .expect(200);
+    await request(app(recordingService))
+      .post(`/api/v1/recordings/${RECORDING_ID}/transcription/retry`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'transcription-retry-1')
+      .expect(200);
     expect(recordingService.finalize).toHaveBeenCalledWith(
       OWNER_ID,
       RECORDING_ID,
@@ -212,6 +224,11 @@ describe('Recording upload API', () => {
       'recording-finalize-1',
     );
     expect(recordingService.retry).toHaveBeenCalledOnce();
+    expect(recordingService.retryTranscription).toHaveBeenCalledWith(
+      OWNER_ID,
+      RECORDING_ID,
+      'transcription-retry-1',
+    );
   });
 
   it('[CAP-005][RET-002] serves only bounded byte ranges with playback metadata', async () => {

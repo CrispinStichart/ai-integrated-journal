@@ -413,6 +413,20 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/recordings/{id}/transcription/retry': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Failed or canceled transcription retry queued',
+              'RecordingMutationResponse',
+            ),
+            '409': problemResponse(
+              'Latest transcription has not failed or been canceled',
+            ),
+          },
+        },
+      },
       '/api/v1/recordings/{id}/audio': {
         get: {
           security: [{ sessionCookie: [] }],

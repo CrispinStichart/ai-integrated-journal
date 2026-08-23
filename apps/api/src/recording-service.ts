@@ -10,11 +10,13 @@ import {
   auditEvents,
   contributions,
   inTransaction,
+  enqueueTranscriptionRun,
   journalDays,
   recordingApiIdempotency,
   recordingChunks,
   recordings,
   recordingUploads,
+  TranscriptionStateError,
   type JournalDatabase,
   type RepositoryContext,
 } from '@journal/database';
@@ -27,6 +29,7 @@ import {
   type StagedChunk,
 } from '@journal/storage';
 import { and, asc, eq, gt } from 'drizzle-orm';
+import type { PgBoss } from 'pg-boss';
 
 const MANIFEST_PAGE_SIZE = 512;
 export const AUDIO_DELETION_WARNING =
@@ -108,6 +111,11 @@ export interface RecordingService {
     recordingId: string,
     idempotencyKey: string,
   ): Promise<RecordingMutationResult>;
+  retryTranscription(
+    ownerId: string,
+    recordingId: string,
+    idempotencyKey: string,
+  ): Promise<RecordingMutationResult>;
   openAudio(
     ownerId: string,
     recordingId: string,
@@ -148,6 +156,12 @@ function mapRecording(row: RecordingRow, uploadId: string): RecordingResource {
     mimeType: row.mimeType,
     ...(row.codec === null ? {} : { codec: row.codec }),
     persistenceState: row.persistenceState,
+    transcription: {
+      state: row.transcriptionState,
+      ...(row.latestTranscriptionRunId === null
+        ? {}
+        : { runId: row.latestTranscriptionRunId }),
+    },
     ...(row.durationMilliseconds === null
       ? {}
       : { durationMilliseconds: row.durationMilliseconds.toString() }),
@@ -232,6 +246,7 @@ export class PostgresRecordingService implements RecordingService {
   public constructor(
     private readonly database: JournalDatabase,
     private readonly blobStore: BlobStore,
+    private readonly boss: PgBoss,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -546,8 +561,31 @@ export class PostgresRecordingService implements RecordingService {
     input: FinalizeRecordingRequest,
   ): Promise<RecordingResource> {
     const prepared = await ownedRecording(this.database, ownerId, recordingId);
-    if (prepared.recording.persistenceState === 'durable')
-      return mapRecording(prepared.recording, prepared.upload.id);
+    if (prepared.recording.persistenceState === 'durable') {
+      return inTransaction(this.database, async (transaction) => {
+        const current = await ownedRecording(
+          transaction,
+          ownerId,
+          recordingId,
+          true,
+        );
+        if (current.recording.latestTranscriptionRunId === null) {
+          await enqueueTranscriptionRun({
+            boss: this.boss,
+            transaction,
+            recordingId,
+            now: this.now(),
+          });
+        }
+        const [scheduled] = await transaction
+          .select()
+          .from(recordings)
+          .where(eq(recordings.id, recordingId))
+          .limit(1);
+        if (scheduled === undefined) throw new RecordingNotFoundError();
+        return mapRecording(scheduled, current.upload.id);
+      });
+    }
     if (
       prepared.recording.persistenceState !== 'prepared' ||
       prepared.recording.finalBlobKey === null ||
@@ -597,7 +635,19 @@ export class PostgresRecordingService implements RecordingService {
         .where(eq(recordings.id, recordingId))
         .returning();
       if (updated === undefined) throw new RecordingNotFoundError();
-      return mapRecording(updated, current.upload.id);
+      await enqueueTranscriptionRun({
+        boss: this.boss,
+        transaction,
+        recordingId,
+        now: this.now(),
+      });
+      const [scheduled] = await transaction
+        .select()
+        .from(recordings)
+        .where(eq(recordings.id, recordingId))
+        .limit(1);
+      if (scheduled === undefined) throw new RecordingNotFoundError();
+      return mapRecording(scheduled, current.upload.id);
     });
   }
 
@@ -705,6 +755,54 @@ export class PostgresRecordingService implements RecordingService {
       recording: await this.publish(ownerId, recordingId, input),
       replayed,
     };
+  }
+
+  public async retryTranscription(
+    ownerId: string,
+    recordingId: string,
+    idempotencyKey: string,
+  ): Promise<RecordingMutationResult> {
+    return inTransaction(this.database, async (transaction) => {
+      const current = await ownedRecording(
+        transaction,
+        ownerId,
+        recordingId,
+        true,
+      );
+      const replayed = await recordIdempotency(transaction, {
+        ownerId,
+        operation: 'recording.transcription.retry',
+        key: idempotencyKey,
+        requestHash: hashJson({ recordingId }),
+        recordingId,
+      });
+      if (!replayed) {
+        try {
+          await enqueueTranscriptionRun({
+            boss: this.boss,
+            transaction,
+            recordingId,
+            retryTerminal: true,
+            now: this.now(),
+          });
+        } catch (error) {
+          if (error instanceof TranscriptionStateError) {
+            throw new RecordingConflictError(error.message);
+          }
+          throw error;
+        }
+      }
+      const [updated] = await transaction
+        .select()
+        .from(recordings)
+        .where(eq(recordings.id, recordingId))
+        .limit(1);
+      if (updated === undefined) throw new RecordingNotFoundError();
+      return {
+        recording: mapRecording(updated, current.upload.id),
+        replayed,
+      };
+    });
   }
 
   public async openAudio(

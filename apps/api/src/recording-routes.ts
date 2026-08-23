@@ -360,6 +360,32 @@ export function registerRecordingRoutes(
     }),
   );
 
+  app.post(
+    '/api/v1/recordings/:id/transcription/retry',
+    wrap(async (request, response) => {
+      const owner = await principal(request, response, dependencies, true);
+      if (owner === undefined) return;
+      const key = idempotencyKey(request, response);
+      const params = parse(
+        request,
+        response,
+        paramsSchema,
+        request.params,
+        'path',
+      );
+      if (key === undefined || params === undefined) return;
+      const result = await service.retryTranscription(
+        owner.ownerId,
+        params.id,
+        key,
+      );
+      sendValidated(response, recordingMutationResponseSchema, {
+        recording: result.recording,
+        idempotency: { key, replayed: result.replayed },
+      });
+    }),
+  );
+
   app.get(
     '/api/v1/recordings/:id/audio',
     wrap(async (request, response) => {

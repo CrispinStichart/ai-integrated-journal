@@ -11,6 +11,7 @@ export const queueNames = {
   maintenance: 'journal.maintenance',
   notifications: 'journal.notifications',
   processing: 'journal.processing',
+  transcription: 'journal.transcription',
 } as const;
 
 export type QueueName = (typeof queueNames)[keyof typeof queueNames];
@@ -65,6 +66,19 @@ export const queueDefinitions: Readonly<Record<QueueName, QueueDefinition>> =
         retryLimit: 5,
       },
       2,
+    ),
+    [queueNames.transcription]: queueDefinition(
+      queueNames.transcription,
+      {
+        deadLetter: queueNames.deadLetter,
+        deleteAfterSeconds: 30 * 24 * 60 * 60,
+        expireInSeconds: 2 * 60 * 60,
+        retentionSeconds: 30 * 24 * 60 * 60,
+        retryBackoff: true,
+        retryDelay: 30,
+        retryLimit: 5,
+      },
+      1,
     ),
     [queueNames.maintenance]: queueDefinition(
       queueNames.maintenance,

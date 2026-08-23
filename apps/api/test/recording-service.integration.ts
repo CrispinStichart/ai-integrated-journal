@@ -17,6 +17,7 @@ import {
 import { createUuidV7 } from '@journal/domain';
 import { LocalBlobStore } from '@journal/storage';
 import { createPostgresTestContainer } from '@journal/test-support';
+import type { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PostgresJournalService } from '../src/journal-service.js';
@@ -83,6 +84,10 @@ describe('recording persistence and recoverable finalization', () => {
     service = new PostgresRecordingService(
       client.database,
       new LocalBlobStore(blobRoot),
+      {
+        send: async (_name: string, _data: object, options?: { id?: string }) =>
+          options?.id ?? null,
+      } as unknown as PgBoss,
       () => now,
     );
   }, 120_000);
@@ -210,6 +215,10 @@ describe('recording persistence and recoverable finalization', () => {
     );
     expect(durable.recording).toMatchObject({
       persistenceState: 'durable',
+      transcription: {
+        state: 'queued',
+        runId: expect.any(String),
+      },
       byteSize: '11',
       sha256: sha256('hello audio'),
       durationMilliseconds: '10000',
@@ -222,6 +231,10 @@ describe('recording persistence and recoverable finalization', () => {
       recording: {
         id: recordingId,
         persistenceState: 'durable',
+        transcription: {
+          state: 'queued',
+          runId: expect.any(String),
+        },
         byteSize: '11',
         durationMilliseconds: '10000',
       },
