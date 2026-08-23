@@ -22,6 +22,11 @@ import {
   enqueueTranscriptCleanup,
   type CleanupPromptSnapshot,
 } from './transcript-cleanup-repository.js';
+import {
+  canonicalTranscriptEvidenceText,
+  persistTranscriptSegments,
+  type PersistableTranscriptSegment,
+} from './transcript-evidence-repository.js';
 
 export const TRANSCRIPTION_JOB_OPERATION = 'transcribe_recording' as const;
 
@@ -191,7 +196,11 @@ export type PersistedTranscriptionSuccess = Readonly<{
   rawResponseRetention: 'days_30';
   rawResponseExpiresAt: Date;
   text: string;
-  segments: readonly Readonly<Record<string, unknown>>[];
+  segments: readonly Readonly<{
+    rawSegmentId: string;
+    correctedSegmentId: string;
+    segment: Omit<PersistableTranscriptSegment, 'id' | 'sourceSegmentId'>;
+  }>[];
   language: Readonly<Record<string, unknown>>;
   timingAvailability: Readonly<Record<string, unknown>>;
   effectiveContext: readonly PersistedSpeechContextItem[];
@@ -334,17 +343,36 @@ export class TranscriptionRepository {
         throw new TranscriptionStateError('Raw transcript was not created.');
       }
       const revision = transcript.currentRevision + 1;
+      const evidenceText = canonicalTranscriptEvidenceText(result.text);
+      const rawSegments = result.segments.map(({ rawSegmentId, segment }) => ({
+        ...segment,
+        id: rawSegmentId,
+      }));
+      const rawSegmentJson = rawSegments.map(
+        ({ providerMetadata, ...segment }) => ({
+          ...segment,
+          ...providerMetadata,
+        }),
+      );
       await transaction.insert(transcriptRevisions).values({
         id: result.revisionId,
         transcriptId: transcript.id,
         sourceRunId: runId,
         revision,
         text: result.text,
-        segments: result.segments,
+        evidenceText,
+        segments: rawSegmentJson,
         language: result.language,
         timingAvailability: result.timingAvailability,
         authority: 'generated',
         contentHash: sha256(result.text),
+        createdAt: result.now,
+      });
+      await persistTranscriptSegments({
+        transaction,
+        transcriptRevisionId: result.revisionId,
+        evidenceText,
+        segments: rawSegments,
         createdAt: result.now,
       });
       await transaction
@@ -389,11 +417,35 @@ export class TranscriptionRepository {
           sourceRevisionId: result.revisionId,
           revision: 1,
           text: result.text,
-          segments: result.segments,
+          evidenceText,
+          segments: result.segments.map(
+            ({ rawSegmentId, correctedSegmentId, segment }) => {
+              const { providerMetadata, ...metadata } = segment;
+              return {
+                ...metadata,
+                ...providerMetadata,
+                id: correctedSegmentId,
+                sourceSegmentId: rawSegmentId,
+              };
+            },
+          ),
           language: result.language,
           timingAvailability: result.timingAvailability,
           authority: 'generated',
           contentHash: sha256(result.text),
+          createdAt: result.now,
+        });
+        await persistTranscriptSegments({
+          transaction,
+          transcriptRevisionId: result.correctedRevisionId,
+          evidenceText,
+          segments: result.segments.map(
+            ({ rawSegmentId, correctedSegmentId, segment }) => ({
+              ...segment,
+              id: correctedSegmentId,
+              sourceSegmentId: rawSegmentId,
+            }),
+          ),
           createdAt: result.now,
         });
         await transaction

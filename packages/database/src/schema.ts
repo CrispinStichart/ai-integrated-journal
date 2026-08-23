@@ -59,6 +59,12 @@ export const transcriptLayer = pgEnum('transcript_layer', [
   'cleaned',
 ]);
 
+export const evidenceResolutionStatus = pgEnum('evidence_resolution_status', [
+  'resolved',
+  'unresolved',
+  'stale',
+]);
+
 export const journalDateAssignment = pgEnum('journal_date_assignment', [
   'default',
   'user_override',
@@ -637,6 +643,7 @@ export const transcriptRevisions = journalSchema.table(
     sourceRevisionId: uuid('source_revision_id'),
     revision: integer('revision').notNull(),
     text: text('text').notNull(),
+    evidenceText: text('evidence_text').notNull(),
     segments: jsonb('segments')
       .$type<readonly Readonly<Record<string, unknown>>[]>()
       .notNull(),
@@ -652,6 +659,8 @@ export const transcriptRevisions = journalSchema.table(
     }),
     editReason: text('edit_reason'),
     contentHash: text('content_hash').notNull(),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    staleReason: text('stale_reason'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -679,6 +688,10 @@ export const transcriptRevisions = journalSchema.table(
       sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`,
     ),
     check(
+      'transcript_revision_staleness_consistent',
+      sql`(${table.staleAt} is null and ${table.staleReason} is null) or (${table.staleAt} is not null and ${table.staleReason} is not null)`,
+    ),
+    check(
       'transcript_revision_source_exactly_one',
       sql`num_nonnulls(${table.sourceRunId}, ${table.sourceRevisionId}) = 1`,
     ),
@@ -691,6 +704,146 @@ export const transcriptRevisions = journalSchema.table(
       foreignColumns: [table.id],
       name: 'transcript_revision_source_revision_id_fk',
     }).onDelete('restrict'),
+  ],
+);
+
+export const transcriptSegments = journalSchema.table(
+  'transcript_segment',
+  {
+    id: uuid('id').primaryKey(),
+    transcriptRevisionId: uuid('transcript_revision_id')
+      .notNull()
+      .references(() => transcriptRevisions.id, { onDelete: 'restrict' }),
+    sourceSegmentId: uuid('source_segment_id'),
+    ordinal: integer('ordinal').notNull(),
+    startUtf16: integer('start_utf16').notNull(),
+    endUtf16: integer('end_utf16').notNull(),
+    startMs: bigint('start_ms', { mode: 'bigint' }),
+    endMs: bigint('end_ms', { mode: 'bigint' }),
+    quote: text('quote').notNull(),
+    quoteHash: text('quote_hash').notNull(),
+    providerMetadata:
+      jsonb('provider_metadata').$type<Readonly<Record<string, unknown>>>(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('transcript_segment_revision_ordinal_unique').on(
+      table.transcriptRevisionId,
+      table.ordinal,
+    ),
+    uniqueIndex('transcript_segment_revision_id_unique').on(
+      table.transcriptRevisionId,
+      table.id,
+    ),
+    index('transcript_segment_source_segment_idx').on(table.sourceSegmentId),
+    foreignKey({
+      columns: [table.sourceSegmentId],
+      foreignColumns: [table.id],
+      name: 'transcript_segment_source_segment_id_fk',
+    }).onDelete('restrict'),
+    check(
+      'transcript_segment_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('transcript_segment_ordinal_nonnegative', sql`${table.ordinal} >= 0`),
+    check(
+      'transcript_segment_text_range_valid',
+      sql`${table.startUtf16} >= 0 and ${table.startUtf16} < ${table.endUtf16}`,
+    ),
+    check(
+      'transcript_segment_audio_range_valid',
+      sql`(${table.startMs} is null and ${table.endMs} is null) or (${table.startMs} >= 0 and ${table.startMs} < ${table.endMs})`,
+    ),
+    check(
+      'transcript_segment_quote_not_empty',
+      sql`length(${table.quote}) > 0`,
+    ),
+    check(
+      'transcript_segment_quote_hash_sha256',
+      sql`${table.quoteHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const transcriptEvidenceSpans = journalSchema.table(
+  'transcript_evidence_span',
+  {
+    id: uuid('id').primaryKey(),
+    dependentTranscriptRevisionId: uuid('dependent_transcript_revision_id')
+      .notNull()
+      .references(() => transcriptRevisions.id, { onDelete: 'restrict' }),
+    sourceTranscriptRevisionId: uuid('source_transcript_revision_id')
+      .notNull()
+      .references(() => transcriptRevisions.id, { onDelete: 'restrict' }),
+    sourceSegmentId: uuid('source_segment_id'),
+    normalization: text('normalization').notNull().default('NFC_LF_V1'),
+    offsetUnit: text('offset_unit').notNull().default('utf16_code_unit'),
+    startUtf16: integer('start_utf16').notNull(),
+    endUtf16: integer('end_utf16').notNull(),
+    startMs: bigint('start_ms', { mode: 'bigint' }),
+    endMs: bigint('end_ms', { mode: 'bigint' }),
+    quote: text('quote').notNull(),
+    quoteHash: text('quote_hash').notNull(),
+    resolutionStatus: evidenceResolutionStatus('resolution_status')
+      .notNull()
+      .default('resolved'),
+    unresolvedReason: text('unresolved_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('transcript_evidence_span_dependent_idx').on(
+      table.dependentTranscriptRevisionId,
+    ),
+    index('transcript_evidence_span_source_idx').on(
+      table.sourceTranscriptRevisionId,
+    ),
+    foreignKey({
+      columns: [table.sourceTranscriptRevisionId, table.sourceSegmentId],
+      foreignColumns: [
+        transcriptSegments.transcriptRevisionId,
+        transcriptSegments.id,
+      ],
+      name: 'transcript_evidence_span_source_segment_fk',
+    }).onDelete('restrict'),
+    check(
+      'transcript_evidence_span_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'transcript_evidence_span_coordinate_contract',
+      sql`${table.normalization} = 'NFC_LF_V1' and ${table.offsetUnit} = 'utf16_code_unit'`,
+    ),
+    check(
+      'transcript_evidence_span_text_range_valid',
+      sql`${table.startUtf16} >= 0 and ${table.startUtf16} < ${table.endUtf16}`,
+    ),
+    check(
+      'transcript_evidence_span_audio_range_valid',
+      sql`(${table.startMs} is null and ${table.endMs} is null) or (${table.startMs} >= 0 and ${table.startMs} < ${table.endMs})`,
+    ),
+    check(
+      'transcript_evidence_span_quote_not_empty',
+      sql`length(${table.quote}) > 0`,
+    ),
+    check(
+      'transcript_evidence_span_quote_hash_sha256',
+      sql`${table.quoteHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'transcript_evidence_span_resolution_consistent',
+      sql`(${table.resolutionStatus} = 'resolved' and ${table.unresolvedReason} is null) or (${table.resolutionStatus} <> 'resolved' and ${table.unresolvedReason} is not null)`,
+    ),
+    check(
+      'transcript_evidence_span_reason_code_valid',
+      sql`${table.unresolvedReason} is null or ${table.unresolvedReason} ~ '^[a-z][a-z0-9_]{0,63}$'`,
+    ),
   ],
 );
 
@@ -741,6 +894,8 @@ export const transcriptCleanupRuns = journalSchema.table(
     }),
     errorCode: text('error_code'),
     errorRetryable: boolean('error_retryable'),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    staleReason: text('stale_reason'),
     queuedAt: timestamp('queued_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -809,6 +964,10 @@ export const transcriptCleanupRuns = journalSchema.table(
     check(
       'transcript_cleanup_run_output_consistent',
       sql`(${table.status} = 'succeeded' and ${table.outputCleanedRevisionId} is not null) or (${table.status} <> 'succeeded' and ${table.outputCleanedRevisionId} is null)`,
+    ),
+    check(
+      'transcript_cleanup_run_staleness_consistent',
+      sql`(${table.staleAt} is null and ${table.staleReason} is null) or (${table.status} = 'succeeded' and ${table.staleAt} is not null and ${table.staleReason} is not null)`,
     ),
     check(
       'transcript_cleanup_run_raw_response_consistent',
@@ -1160,8 +1319,11 @@ export const databaseSchema = {
   recordingUploads,
   schedules,
   sessions,
+  transcriptCleanupRuns,
   transcriptionRuns,
+  transcriptEvidenceSpans,
   transcriptRevisions,
+  transcriptSegments,
   transcripts,
   users,
 };

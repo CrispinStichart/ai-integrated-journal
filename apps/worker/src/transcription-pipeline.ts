@@ -16,7 +16,7 @@ import {
   type DatabaseClient,
   type QueueJobPayload,
 } from '@journal/database';
-import { createUuidV7 } from '@journal/domain';
+import { DomainInvariantError, createUuidV7 } from '@journal/domain';
 import {
   BlobConflictError,
   BlobNotFoundError,
@@ -61,6 +61,9 @@ function classify(error: unknown): PipelineFailure {
   }
   if (error instanceof BlobNotFoundError) {
     return new PipelineFailure('audio_temporarily_unavailable', true);
+  }
+  if (error instanceof DomainInvariantError) {
+    return new PipelineFailure('invalid_provider_result', false);
   }
   if (error instanceof Error && error.name === 'AbortError') {
     return new PipelineFailure('canceled', false);
@@ -214,7 +217,15 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
           capturedAt.getTime() + RAW_RESPONSE_RETENTION_MILLISECONDS,
         ),
         text: result.text,
-        segments: result.segments.map(jsonRecord),
+        segments: result.segments.map((segment) => ({
+          rawSegmentId: this.createId(),
+          correctedSegmentId: this.createId(),
+          segment: {
+            text: segment.text,
+            timing: segment.timing,
+            providerMetadata: { words: segment.words },
+          },
+        })),
         language: jsonRecord(result.language),
         timingAvailability: jsonRecord(result.timingAvailability),
         effectiveContext: result.effectiveContext,

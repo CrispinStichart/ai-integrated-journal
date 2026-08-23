@@ -17,6 +17,10 @@ import {
   transcripts,
 } from './schema.js';
 import { inTransaction } from './transaction.js';
+import {
+  canonicalTranscriptEvidenceText,
+  invalidateTranscriptRevisionDependents,
+} from './transcript-evidence-repository.js';
 
 export const TRANSCRIPT_CLEANUP_JOB_OPERATION = 'clean_transcript';
 
@@ -219,7 +223,13 @@ export async function appendCorrectedTranscriptRevision(input: {
         current.revision.id,
       );
     }
+    await invalidateTranscriptRevisionDependents({
+      transaction,
+      sourceRevisionId: current.revision.id,
+      now,
+    });
     const revisionId = createId();
+    const evidenceText = canonicalTranscriptEvidenceText(input.text);
     const [revision] = await transaction
       .insert(transcriptRevisions)
       .values({
@@ -228,6 +238,7 @@ export async function appendCorrectedTranscriptRevision(input: {
         sourceRevisionId: current.revision.id,
         revision: current.transcript.currentRevision + 1,
         text: input.text,
+        evidenceText,
         segments: [],
         language: current.revision.language,
         timingAvailability: { segments: 'unknown', words: 'unknown' },
@@ -415,12 +426,14 @@ export class TranscriptCleanupRepository {
         );
       }
       const revisionNumber = cleanedTranscript.currentRevision + 1;
+      const evidenceText = canonicalTranscriptEvidenceText(result.text);
       await transaction.insert(transcriptRevisions).values({
         id: result.cleanedRevisionId,
         transcriptId: cleanedTranscript.id,
         sourceRevisionId: canonical.sourceRevision.id,
         revision: revisionNumber,
         text: result.text,
+        evidenceText,
         segments: [],
         language: canonical.sourceRevision.language,
         timingAvailability: { segments: 'unknown', words: 'unknown' },
@@ -512,6 +525,7 @@ export class TranscriptCleanupRepository {
     run: TranscriptCleanupRunRecord,
     now: Date,
   ): Promise<void> {
+    if (run.status === 'succeeded') return;
     await transaction
       .update(transcriptCleanupRuns)
       .set({ status: 'canceled', completedAt: now, updatedAt: now })

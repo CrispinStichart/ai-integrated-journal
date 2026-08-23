@@ -14,6 +14,7 @@ import {
   journalDays,
   migrateDatabase,
   recordings,
+  TranscriptEvidenceRepository,
   transcriptCleanupRuns,
   transcriptionRuns,
   transcriptRevisions,
@@ -127,7 +128,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       await rm(blobRoot, { recursive: true, force: true });
   });
 
-  it('[STT-001][DATA-022][DATA-023][DATA-024][DATA-025][DATA-026][ARCH-004][AC-011][MODEL-002] preserves distinct raw, corrected, and cleaned revision lineage', async () => {
+  it('[STT-001][DATA-022][DATA-023][DATA-024][DATA-025][DATA-026][DATA-027][PROV-003][EDIT-001][ARCH-004][AC-011][AC-012][MODEL-002] preserves exact evidence and targeted transcript lineage', async () => {
     const context = [
       { text: 'Nicolette', purpose: 'approved vocabulary', version: '3' },
     ] as const;
@@ -315,6 +316,88 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       authority: 'generated',
     });
 
+    if (
+      revision === undefined ||
+      initialCorrection === undefined ||
+      firstCleanedRevision === undefined
+    ) {
+      throw new Error('Expected exact transcript revision lineage.');
+    }
+    const evidenceRepository = new TranscriptEvidenceRepository(
+      client.database,
+    );
+    const [rawSegment] = await evidenceRepository.listSegments(revision.id);
+    const [correctedSegment] = await evidenceRepository.listSegments(
+      initialCorrection.id,
+    );
+    expect(rawSegment).toMatchObject({
+      transcriptRevisionId: revision.id,
+      ordinal: 0,
+      startUtf16: 0,
+      endUtf16: 13,
+      startMs: 0n,
+      endMs: 500n,
+      quote: 'hello journal',
+      quoteHash: sha256(new TextEncoder().encode('hello journal')),
+    });
+    expect(correctedSegment).toMatchObject({
+      transcriptRevisionId: initialCorrection.id,
+      sourceSegmentId: rawSegment?.id,
+      ordinal: 0,
+      startUtf16: 0,
+      endUtf16: 13,
+    });
+    if (rawSegment === undefined || correctedSegment === undefined) {
+      throw new Error('Expected stable raw and corrected transcript segments.');
+    }
+    const evidenceSpanId = createUuidV7<'transcript-evidence'>({
+      timestamp: 203_500,
+    });
+    const evidence = await evidenceRepository.createSpan({
+      id: evidenceSpanId,
+      dependentTranscriptRevisionId: firstCleanedRevision.id,
+      sourceTranscriptRevisionId: initialCorrection.id,
+      sourceSegmentId: correctedSegment.id,
+      startUtf16: 0,
+      endUtf16: 5,
+      audioRange: { startMs: 0, endMs: 200 },
+      now,
+    });
+    expect(evidence).toMatchObject({
+      sourceTranscriptRevisionId: initialCorrection.id,
+      sourceSegmentId: correctedSegment.id,
+      normalization: 'NFC_LF_V1',
+      offsetUnit: 'utf16_code_unit',
+      quote: 'hello',
+      quoteHash: sha256(new TextEncoder().encode('hello')),
+      startMs: 0n,
+      endMs: 200n,
+      resolutionStatus: 'resolved',
+    });
+    expect(await evidenceRepository.verifySpan(evidence.id, now)).toMatchObject(
+      { resolutionStatus: 'resolved' },
+    );
+    await expect(
+      evidenceRepository.createSpan({
+        id: createUuidV7<'transcript-evidence'>({ timestamp: 203_501 }),
+        dependentTranscriptRevisionId: firstCleanedRevision.id,
+        sourceTranscriptRevisionId: initialCorrection.id,
+        sourceSegmentId: rawSegment.id,
+        startUtf16: 0,
+        endUtf16: 5,
+      }),
+    ).rejects.toThrowError(/does not belong/);
+    expect(
+      await evidenceRepository.setUnresolved(
+        evidence.id,
+        'synthetic_resolution_failure',
+        now,
+      ),
+    ).toMatchObject({
+      resolutionStatus: 'unresolved',
+      unresolvedReason: 'synthetic_resolution_failure',
+    });
+
     if (correctedTranscript === undefined || initialCorrection === undefined) {
       throw new Error('Expected initialized corrected transcript.');
     }
@@ -337,6 +420,23 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       authorId: ownerId,
       editReason: 'Corrected the name.',
     });
+    const [staleCleanedRevision] = await client.database
+      .select()
+      .from(transcriptRevisions)
+      .where(eq(transcriptRevisions.id, firstCleanedRevision.id));
+    expect(staleCleanedRevision).toMatchObject({
+      staleAt: now,
+      staleReason: 'source_revision_superseded',
+    });
+    expect(
+      await evidenceRepository.listSpansForDependent(firstCleanedRevision.id),
+    ).toMatchObject([
+      {
+        id: evidence.id,
+        resolutionStatus: 'stale',
+        unresolvedReason: 'source_revision_superseded',
+      },
+    ]);
     expect(queuedPayload).toMatchObject({
       operation: 'clean_transcript',
       identifiers: { sourceRevisionId: correction.revision.id },
@@ -406,6 +506,24 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     expect(cleanupRuns.every(({ status }) => status === 'succeeded')).toBe(
       true,
     );
+    expect(cleanupRuns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceCorrectedRevisionId: initialCorrection.id,
+          staleAt: now,
+          staleReason: 'source_revision_superseded',
+        }),
+        expect.objectContaining({
+          sourceCorrectedRevisionId: correction.revision.id,
+          staleAt: null,
+          staleReason: null,
+        }),
+      ]),
+    );
+    expect(cleanedHistory).toMatchObject([
+      { staleAt: now, staleReason: 'source_revision_superseded' },
+      { staleAt: null, staleReason: null },
+    ]);
     await expect(
       appendCorrectedTranscriptRevision({
         boss,

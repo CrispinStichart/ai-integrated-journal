@@ -58,7 +58,7 @@ export default defineConfig({
         // blobs, provider ports, and queue attempts; the real-adapter contract
         // is covered by the infrastructure suite.
         'apps/worker/src/{raw-response-store,transcription-pipeline,transcript-cleanup-pipeline}.ts',
-        'packages/database/src/{transcription-repository,transcript-cleanup-repository}.ts',
+        'packages/database/src/{transcription-repository,transcript-cleanup-repository,transcript-evidence-repository}.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

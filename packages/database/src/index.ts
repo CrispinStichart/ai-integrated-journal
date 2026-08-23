@@ -31,8 +31,10 @@ export {
   recordingUploads,
   sessions,
   transcriptCleanupRuns,
+  transcriptEvidenceSpans,
   transcriptionRuns,
   transcriptRevisions,
+  transcriptSegments,
   transcripts,
   users,
 } from './schema.js';
@@ -79,6 +81,18 @@ export {
   type TranscriptRecord,
   type TranscriptRevisionRecord,
 } from './transcript-cleanup-repository.js';
+export {
+  canonicalTranscriptEvidenceText,
+  evidenceQuoteHash,
+  invalidateTranscriptRevisionDependents,
+  persistTranscriptSegments,
+  TranscriptEvidenceRepository,
+  TranscriptEvidenceStateError,
+  type PersistableTranscriptSegment,
+  type TranscriptEvidenceSpanRecord,
+  type TranscriptInvalidationResult,
+  type TranscriptSegmentRecord,
+} from './transcript-evidence-repository.js';
 export {
   allQueueDefinitions,
   createJobFingerprint,
