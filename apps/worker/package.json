@@ -21,6 +21,7 @@
     "pg-boss": "12.26.3"
   },
   "devDependencies": {
+    "@journal/contracts": "workspace:*",
     "@journal/test-support": "workspace:*"
   }
 }

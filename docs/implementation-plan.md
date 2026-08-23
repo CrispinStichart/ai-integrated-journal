@@ -320,7 +320,7 @@ Implement immutable versioned definitions containing instructions, JSON Schema o
 
 Processor dependency graphs must be acyclic. Bound schema complexity, prompt/input size, runtime, and result size. Journal content is untrusted prompt input, and generated output can never execute code, tools, SQL, or HTML.
 
-### 32. Processor runtime
+### 32. Processor runtime - FINISHED
 
 Assemble bounded inputs with stable labels and exact temporal context, invoke deterministic or provider processing, validate structured output, verify evidence ranges, and store complete or explicitly partial results.
 

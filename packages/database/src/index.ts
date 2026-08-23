@@ -39,6 +39,10 @@ export {
   transcripts,
   users,
   processorInstallations,
+  processorResultEvidence,
+  processorResults,
+  processorRunInputs,
+  processorRuns,
   processorVersionDependencies,
   processorVersions,
 } from './schema.js';
@@ -60,6 +64,16 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  enqueueProcessorRun,
+  PROCESSOR_JOB_OPERATION,
+  ProcessorRuntimeRepository,
+  ProcessorRuntimeStateError,
+  type CanonicalProcessorRunInput,
+  type ProcessorResultRecord,
+  type ProcessorRunRecord,
+  type ProcessorRunTarget,
+} from './processor-runtime-repository.js';
 export {
   enqueueTranscriptionRun,
   TRANSCRIPTION_JOB_OPERATION,

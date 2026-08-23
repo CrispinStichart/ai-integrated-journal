@@ -1,0 +1,3 @@
+DROP INDEX "journal"."processor_run_target_attempt_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "processor_run_day_attempt_unique" ON "journal"."processor_run" USING btree ("processor_version_id","target_journal_day_id","attempt") WHERE "journal"."processor_run"."target_scope" = 'journal_day';--> statement-breakpoint
+CREATE UNIQUE INDEX "processor_run_contribution_attempt_unique" ON "journal"."processor_run" USING btree ("processor_version_id","target_contribution_id","attempt") WHERE "journal"."processor_run"."target_scope" = 'contribution';

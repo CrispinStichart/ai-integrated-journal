@@ -1099,6 +1099,26 @@ export const processorRequirementMode = pgEnum('processor_requirement_mode', [
   'required',
 ]);
 
+export const processorRunStatus = pgEnum('processor_run_status', [
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'canceled',
+]);
+
+export const processorCompleteness = pgEnum('processor_completeness', [
+  'complete',
+  'partial',
+]);
+
+export const processorInputKind = pgEnum('processor_input_kind', [
+  'typed_text',
+  'corrected_transcript',
+  'cleaned_transcript',
+  'processor_result',
+]);
+
 export const queueConfigurations = journalSchema.table(
   'queue_configuration',
   {
@@ -1326,6 +1346,327 @@ export const processorVersionDependencies = journalSchema.table(
   ],
 );
 
+export const processorRuns = journalSchema.table(
+  'processor_run',
+  {
+    id: uuid('id').primaryKey(),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    targetScope: text('target_scope').notNull(),
+    targetJournalDayId: uuid('target_journal_day_id').references(
+      () => journalDays.id,
+      { onDelete: 'restrict' },
+    ),
+    targetContributionId: uuid('target_contribution_id').references(
+      () => contributions.id,
+      { onDelete: 'restrict' },
+    ),
+    predecessorRunId: uuid('predecessor_run_id'),
+    attempt: integer('attempt').notNull(),
+    executionCount: integer('execution_count').notNull().default(0),
+    status: processorRunStatus('status').notNull().default('queued'),
+    inputCompleteness: processorCompleteness('input_completeness').notNull(),
+    inputFingerprint: text('input_fingerprint').notNull(),
+    promptAssemblyVersion: text('prompt_assembly_version').notNull(),
+    promptTemplateHash: text('prompt_template_hash').notNull(),
+    requestedConfiguration: jsonb('requested_configuration')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull()
+      .default({}),
+    provider: jsonb('provider').$type<Readonly<Record<string, unknown>>>(),
+    model: jsonb('model').$type<Readonly<Record<string, unknown>>>(),
+    effectiveConfiguration: jsonb('effective_configuration').$type<
+      Readonly<Record<string, unknown>>
+    >(),
+    effectiveMessagesHash: text('effective_messages_hash'),
+    usage: jsonb('usage').$type<Readonly<Record<string, unknown>>>(),
+    processingTimeMilliseconds: bigint('processing_time_milliseconds', {
+      mode: 'bigint',
+    }),
+    rawResponseId: uuid('raw_response_id'),
+    rawResponseBlobKey: text('raw_response_blob_key'),
+    rawResponseMediaType: text('raw_response_media_type'),
+    rawResponseByteSize: bigint('raw_response_byte_size', { mode: 'bigint' }),
+    rawResponseSha256: text('raw_response_sha256'),
+    rawResponseProviderRequestId: text('raw_response_provider_request_id'),
+    rawResponseRetention: text('raw_response_retention'),
+    rawResponseExpiresAt: timestamp('raw_response_expires_at', {
+      withTimezone: true,
+    }),
+    outputResultId: uuid('output_result_id'),
+    errorCode: text('error_code'),
+    errorRetryable: boolean('error_retryable'),
+    queuedAt: timestamp('queued_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_run_day_attempt_unique')
+      .on(table.processorVersionId, table.targetJournalDayId, table.attempt)
+      .where(sql`${table.targetScope} = 'journal_day'`),
+    uniqueIndex('processor_run_contribution_attempt_unique')
+      .on(table.processorVersionId, table.targetContributionId, table.attempt)
+      .where(sql`${table.targetScope} = 'contribution'`),
+    index('processor_run_target_status_idx').on(
+      table.targetJournalDayId,
+      table.status,
+    ),
+    foreignKey({
+      columns: [table.predecessorRunId],
+      foreignColumns: [table.id],
+      name: 'processor_run_predecessor_fk',
+    }).onDelete('restrict'),
+    check(
+      'processor_run_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('processor_run_attempt_positive', sql`${table.attempt} > 0`),
+    check(
+      'processor_run_execution_nonnegative',
+      sql`${table.executionCount} >= 0`,
+    ),
+    check(
+      'processor_run_scope_valid',
+      sql`${table.targetScope} in ('contribution', 'journal_day')`,
+    ),
+    check(
+      'processor_run_target_consistent',
+      sql`(${table.targetScope} = 'journal_day' and ${table.targetJournalDayId} is not null and ${table.targetContributionId} is null) or (${table.targetScope} = 'contribution' and ${table.targetJournalDayId} is not null and ${table.targetContributionId} is not null)`,
+    ),
+    check(
+      'processor_run_input_hash_sha256',
+      sql`${table.inputFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_run_prompt_hash_sha256',
+      sql`${table.promptTemplateHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_run_effective_messages_hash_sha256',
+      sql`${table.effectiveMessagesHash} is null or ${table.effectiveMessagesHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'processor_run_error_consistent',
+      sql`(${table.status} = 'failed' and ${table.errorCode} is not null and ${table.errorRetryable} is not null) or (${table.status} <> 'failed' and ${table.errorCode} is null and ${table.errorRetryable} is null)`,
+    ),
+    check(
+      'processor_run_completion_consistent',
+      sql`(${table.status} in ('succeeded', 'failed', 'canceled') and ${table.completedAt} is not null) or (${table.status} in ('queued', 'running') and ${table.completedAt} is null)`,
+    ),
+    check(
+      'processor_run_output_consistent',
+      sql`(${table.status} = 'succeeded' and ${table.outputResultId} is not null) or (${table.status} <> 'succeeded' and ${table.outputResultId} is null)`,
+    ),
+  ],
+);
+
+export const processorResults = journalSchema.table(
+  'processor_result',
+  {
+    id: uuid('id').primaryKey(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    targetJournalDayId: uuid('target_journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    targetContributionId: uuid('target_contribution_id').references(
+      () => contributions.id,
+      { onDelete: 'restrict' },
+    ),
+    kind: text('kind').notNull(),
+    lifecycle: text('lifecycle').notNull().default('active'),
+    completeness: processorCompleteness('completeness').notNull(),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    authority: contributionAuthority('authority')
+      .notNull()
+      .default('generated'),
+    manuallyModified: boolean('manually_modified').notNull().default(false),
+    staleAt: timestamp('stale_at', { withTimezone: true }),
+    staleReason: text('stale_reason'),
+    supersededById: uuid('superseded_by_id'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('processor_result_run_unique').on(table.runId),
+    index('processor_result_target_idx').on(
+      table.targetJournalDayId,
+      table.processorVersionId,
+      table.createdAt,
+    ),
+    foreignKey({
+      columns: [table.supersededById],
+      foreignColumns: [table.id],
+      name: 'processor_result_superseded_by_fk',
+    }).onDelete('restrict'),
+    check(
+      'processor_result_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_result_kind_valid',
+      sql`${table.kind} in ('source_transform', 'observation', 'interpretation', 'other')`,
+    ),
+    check(
+      'processor_result_lifecycle_valid',
+      sql`${table.lifecycle} in ('active', 'superseded')`,
+    ),
+    check(
+      'processor_result_generated_only',
+      sql`${table.authority} = 'generated' and ${table.manuallyModified} = false`,
+    ),
+    check(
+      'processor_result_staleness_consistent',
+      sql`(${table.staleAt} is null and ${table.staleReason} is null) or (${table.staleAt} is not null and ${table.staleReason} is not null)`,
+    ),
+  ],
+);
+
+export const processorRunInputs = journalSchema.table(
+  'processor_run_input',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => processorRuns.id, { onDelete: 'restrict' }),
+    ordinal: integer('ordinal').notNull(),
+    label: text('label').notNull(),
+    inputKind: processorInputKind('input_kind').notNull(),
+    contributionRevisionId: uuid('contribution_revision_id').references(
+      () => contributionRevisions.id,
+      { onDelete: 'restrict' },
+    ),
+    transcriptRevisionId: uuid('transcript_revision_id').references(
+      () => transcriptRevisions.id,
+      { onDelete: 'restrict' },
+    ),
+    processorResultId: uuid('processor_result_id').references(
+      () => processorResults.id,
+      { onDelete: 'restrict' },
+    ),
+    includedStartUtf16: integer('included_start_utf16').notNull().default(0),
+    includedEndUtf16: integer('included_end_utf16').notNull(),
+    fullLengthUtf16: integer('full_length_utf16').notNull(),
+    contentHash: text('content_hash').notNull(),
+    temporalContext: jsonb('temporal_context')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'processor_run_input_pk',
+      columns: [table.runId, table.ordinal],
+    }),
+    uniqueIndex('processor_run_input_label_unique').on(
+      table.runId,
+      table.label,
+    ),
+    check(
+      'processor_run_input_ordinal_nonnegative',
+      sql`${table.ordinal} >= 0`,
+    ),
+    check(
+      'processor_run_input_exactly_one_source',
+      sql`num_nonnulls(${table.contributionRevisionId}, ${table.transcriptRevisionId}, ${table.processorResultId}) = 1`,
+    ),
+    check(
+      'processor_run_input_range_valid',
+      sql`${table.includedStartUtf16} = 0 and ${table.includedEndUtf16} >= 0 and ${table.includedEndUtf16} <= ${table.fullLengthUtf16}`,
+    ),
+    check(
+      'processor_run_input_content_hash_sha256',
+      sql`${table.contentHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const processorResultEvidence = journalSchema.table(
+  'processor_result_evidence',
+  {
+    id: uuid('id').primaryKey(),
+    processorResultId: uuid('processor_result_id')
+      .notNull()
+      .references(() => processorResults.id, { onDelete: 'restrict' }),
+    sourceLabel: text('source_label').notNull(),
+    contributionRevisionId: uuid('contribution_revision_id').references(
+      () => contributionRevisions.id,
+      { onDelete: 'restrict' },
+    ),
+    transcriptRevisionId: uuid('transcript_revision_id').references(
+      () => transcriptRevisions.id,
+      { onDelete: 'restrict' },
+    ),
+    normalization: text('normalization').notNull(),
+    offsetUnit: text('offset_unit').notNull(),
+    startUtf16: integer('start_utf16').notNull(),
+    endUtf16: integer('end_utf16').notNull(),
+    startMs: bigint('start_ms', { mode: 'bigint' }),
+    endMs: bigint('end_ms', { mode: 'bigint' }),
+    quote: text('quote').notNull(),
+    quoteHash: text('quote_hash').notNull(),
+    resolutionStatus: evidenceResolutionStatus('resolution_status')
+      .notNull()
+      .default('resolved'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('processor_result_evidence_result_idx').on(table.processorResultId),
+    index('processor_result_evidence_transcript_idx').on(
+      table.transcriptRevisionId,
+    ),
+    check(
+      'processor_result_evidence_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'processor_result_evidence_exactly_one_source',
+      sql`num_nonnulls(${table.contributionRevisionId}, ${table.transcriptRevisionId}) = 1`,
+    ),
+    check(
+      'processor_result_evidence_coordinate_contract',
+      sql`${table.normalization} = 'NFC_LF_V1' and ${table.offsetUnit} = 'utf16_code_unit'`,
+    ),
+    check(
+      'processor_result_evidence_text_range_valid',
+      sql`${table.startUtf16} >= 0 and ${table.startUtf16} < ${table.endUtf16}`,
+    ),
+    check(
+      'processor_result_evidence_audio_range_valid',
+      sql`(${table.startMs} is null and ${table.endMs} is null) or (${table.startMs} >= 0 and ${table.startMs} < ${table.endMs})`,
+    ),
+    check(
+      'processor_result_evidence_quote_hash_sha256',
+      sql`${table.quoteHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const processorApiIdempotency = journalSchema.table(
   'processor_api_idempotency',
   {
@@ -1458,6 +1799,10 @@ export const databaseSchema = {
   passwordCredentials,
   processorApiIdempotency,
   processorInstallations,
+  processorResultEvidence,
+  processorResults,
+  processorRunInputs,
+  processorRuns,
   processorVersionDependencies,
   processorVersions,
   queueConfigurations,

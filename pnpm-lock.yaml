@@ -221,6 +221,9 @@ importers:
         specifier: 12.26.3
         version: 12.26.3
     devDependencies:
+      '@journal/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@journal/test-support':
         specifier: workspace:*
         version: link:../../packages/test-support
@@ -252,9 +255,15 @@ importers:
 
   packages/database:
     dependencies:
+      '@journal/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@journal/domain':
         specifier: workspace:*
         version: link:../domain
+      '@journal/processors':
+        specifier: workspace:*
+        version: link:../processors
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@types/pg@8.20.0)(pg@8.23.0)
@@ -292,9 +301,19 @@ importers:
 
   packages/processors:
     dependencies:
+      '@journal/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@journal/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@journal/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
 
   packages/storage:
     devDependencies:

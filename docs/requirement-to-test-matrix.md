@@ -1,6 +1,6 @@
 # Requirement-to-test matrix
 
-- Status: Maintained through Phase 5 Task 31
+- Status: Maintained through Phase 5 Task 32
 - Date: 2026-08-23
 - Normative source: [`AI-Integrated-Journaling-Application-Specification.md`](../AI-Integrated-Journaling-Application-Specification.md)
 - Delivery source: [`implementation-plan.md`](implementation-plan.md)
@@ -72,9 +72,9 @@ Status values are:
 | DATA-024–026 | `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, `apps/api/test/transcript-routes.test.ts`, and `apps/web/test/transcript-inspector.test.ts` cover distinct logical layers, generated initialization, append-only manual correction history, exact corrected-revision cleanup inputs, immutable prior revisions, and inspectable UI history. | 28–30 | Transcript journal | Verified |
 | DATA-027–028 | `packages/test-support/test/fake-ai.test.ts`, `packages/database/test/transcript-evidence-migration.integration.ts`, `apps/worker/test/transcription-pipeline.integration.ts`, `apps/api/test/transcript-service.integration.ts`, and `apps/web/test/transcript-inspector.test.ts` cover persisted timed and explicitly untimed valid results, stable segment IDs, exact UTF-16/audio ranges, audio seeking, and a clear valid-but-unavailable timing state. | 26, 27, 29, 30 | Transcript journal | Verified |
 | DATA-030 | `packages/processors/test/index.test.ts`, `apps/api/test/processor-service.integration.ts`, `apps/api/test/processor-routes.test.ts`, and `apps/web/test/processors-view.test.ts` validate every required definition field, stable identity, immutable version history, enablement, and current-version behavior. | 31 | AI journal | Verified |
-| DATA-031 | `PROCESSOR`: persist and inspect every common-envelope field, direct input, authority, staleness, and provenance field. | 31–35 | AI journal | Planned |
-| DATA-032–033 | Task 31 contracts and persistence preserve immutable extensible JSON Schema versions; Task 32 still must validate and retain processor-specific result payloads without inventing unknown optionals. | 9, 10, 31, 32 | AI journal | Partial |
-| PROV-001–002 | `TRANSCRIPT`, `PROCESSOR`: observations validate evidence exceptions; interpretations identify exact observations/sources. | 29, 32, 33 | AI journal | Planned |
+| DATA-031 | `apps/worker/test/processor-runtime.integration.ts` persists stable generated result identity, exact processor/target/run lineage, lifecycle, completeness, payload, evidence, model/provider/prompt/configuration, authority, and timestamps. Task 33 adds artifact dependency edges/staleness and Task 35 manual modification. | 31–35 | AI journal | Partial |
+| DATA-032–033 | `packages/processors/test/runtime.test.ts` and `apps/worker/test/processor-runtime.integration.ts` validate processor payloads against their immutable extensible schemas, reject undeclared fields, preserve explicit semantic states, and store JSONB without inventing unknown optionals. | 9, 10, 31, 32 | AI journal | Verified |
+| PROV-001–002 | `packages/processors/test/runtime.test.ts` and `apps/worker/test/processor-runtime.integration.ts` verify exact source-revision evidence ranges and quote hashes for generated observations. Task 33 adds interpretation-to-observation dependency edges. | 29, 32, 33 | AI journal | Partial |
 | PROV-003 | Domain evidence tests and `apps/worker/test/transcription-pipeline.integration.ts` cover canonical NFC/LF evidence text, exact revision-bound UTF-16 spans, quote hashes, explicit unresolved/stale states, and targeted transcript invalidation; processor dependency propagation remains in Task 33. | 29, 33 | AI journal | Partial |
 | PROV-004 | Transcript contracts/API/UI expose exact source revision evidence, transcript run attempts, provider/model/configuration/context, cleanup prompt version, and correction history; processor-result provenance remains in Tasks 33, 35, and 51. | 30, 33, 35, 51 | AI journal | Partial |
 
@@ -104,7 +104,7 @@ Status values are:
 | PROC-001–004 | Processor contract, API/service integration, route, client, and accessible component tests cover first-class create/configure/enable flows plus declared kind and input scope/selectors. | 31 | AI journal | Verified |
 | PROC-005 | `PROCESSOR`, `BUILTINS`: whole-day reconciliation covers create/update/supersede/remove/unchanged without duplicates. | 34, 38–42 | AI journal | Planned |
 | PROC-006–008 | Task 31 processor unit/property/integration tests cover immutable definitions, exact dependency DAGs, schemas, hashes, history, and extensible version contracts; run/result provenance and historical payload readers remain in Tasks 32–33. | 31–33 | AI journal | Partial |
-| PROC-009–010 | `PROCESSOR`, `BUILTINS`: absence is not a negative fact; supported uncertainty replaces fabricated precision. | 32, 38–42 | AI journal | Planned |
+| PROC-009–010 | `packages/processors/test/runtime.test.ts` rejects invented schema fields, preserves explicit `unknown` separately from known zero, and requires partial labeling. Built-in domain rules remain in Tasks 38–42. | 32, 38–42 | AI journal | Partial |
 | NUDGE-001–003 | Task 31 definition/API/UI tests cover required/optional configuration and reject enabled default nudges for optional definitions; exact evaluation states and nudge generation remain in Task 43. | 31, 43 | Complete local release | Partial |
 | NUDGE-004 | `NUDGE`, `WORKER`: only successful-enough evaluation can create insufficiency/nudge work. | 43 | Complete local release | Planned |
 | NUDGE-005–006 | `NUDGE`: digest consolidation, limits, answer/defer/dismiss/not-applicable, and durable response linkage. | 43 | Complete local release | Planned |
@@ -138,10 +138,10 @@ Status values are:
 | EDIT-005 | `PROCESSOR`: immutable history and supersession remain inspectable after reconciliation/reprocessing. | 33–36 | AI journal | Planned |
 | EDIT-006–007 | `PROCESSOR`: manual values win and conflicts create reviewable candidates. | 35, 36 | AI journal | Planned |
 | EDIT-008 | `PROCESSOR`, `PORTABILITY`: reports expose version basis or explicitly normalized data. | 31, 36, 48 | Complete local release | Planned |
-| STATE-001 | `WORKER`, `UI-PWA`: every stage stores and displays its independent exact lifecycle state. | 13, 27, 32, 43 | Complete local release | Planned |
+| STATE-001 | `apps/worker/test/processor-runtime.integration.ts` verifies queued/running/succeeded processor lifecycle persistence; visible API/UI state remains in later processing-activity work. | 13, 27, 32, 43 | Complete local release | Partial |
 | STATE-002–003 | `WORKER`, `RELEASE-E2E`: isolated failures preserve other stages and expose affected-stage retry. | 13, 27, 32, 52 | AI journal | Planned |
-| STATE-004 | `WORKER`, `PROCESSOR`: retry fingerprint/attempt lineage prevents silent duplicate observations. | 13, 27, 32, 34 | AI journal | Planned |
-| STATE-005 | `WORKER`, `PROCESSOR`: partial results remain labeled and ineligible as complete day state. | 13, 32 | AI journal | Planned |
+| STATE-004 | `apps/worker/test/processor-runtime.integration.ts` verifies identifier-only fingerprints, completed-run replay, exact version/config lineage, and one result per run; task 34 adds logical-artifact reconciliation idempotency. | 13, 27, 32, 34 | AI journal | Partial |
+| STATE-005 | `packages/processors/test/runtime.test.ts` requires explicitly partial output for a bounded partial input, and processor run/result rows persist completeness separately. | 13, 32 | AI journal | Verified |
 | STATE-006–007 | `apps/api/test/text-journal-milestone.integration.ts`, `apps/web/test/offline-journal.test.ts`, and `playwright/shell.spec.ts`: source durability and journal use do not depend on optional processing. | 12–14, 19, 20 | Source-only journal | Verified |
 | SEARCH-001 | `SEARCH`: deterministic selected-layer full-text retrieval. | 44 | Complete local release | Planned |
 | SEARCH-002 | `SEARCH`: optional semantic retrieval is capability-gated and lifecycle aware. | 45 | Complete local release | Planned |
@@ -154,7 +154,7 @@ Status values are:
 | RET-006–007 | `RETENTION`, `PORTABILITY`: grace/recovery/hard-delete propagates across blobs, indexes, caches, exports, and backups. | 47–49, 52 | Complete local release | Planned |
 | SEC-001–003 | `SECURITY`: authentication/session/access, secret separation, cache isolation, and no client/log/export credential exposure. | 15, 19, 53 | Source-only journal; repeated later | Planned |
 | SEC-004–006 | `packages/ai/test/index.test.ts` covers pre-creation provider capability/data-use disclosure and disabled-provider resolution; settings UI and operational review remain in `SECURITY`, `TRANSCRIPT`, and `MANUAL-OPS`. | 26, 50, 53, 55 | Complete local release | Partial |
-| SEC-007 | `API-OPS`, `SECURITY`: deny-by-default serializers and synthetic canary tests keep content out of diagnostics. | 12, 53 | Foundation | Planned |
+| SEC-007 | API deny-by-default logging tests plus `apps/worker/test/processor-runtime.integration.ts` verify processor jobs contain identifiers/fingerprints but no source content; the full security review remains Task 53. | 12, 53 | Foundation | Partial |
 | SEC-008 | `DB-JOURNAL`, `SECURITY`: administrative/destructive operations append content-safe audit events. | 11, 15, 47, 53 | Complete local release | Planned |
 | SEC-009 | `PROCESSOR`, `SECURITY`: third-party memories follow identical authorization, logging, export, and deletion controls. | 37, 47, 48, 53 | Complete local release | Planned |
 | PORT-001–002 | `PORTABILITY`, `MANUAL-OPS`: complete checksummed backup, retention policy, empty-target restore, and repeatable drill. | 49, 55 | Complete local release | Planned |
@@ -162,7 +162,7 @@ Status values are:
 | PORT-007 | `PORTABILITY`, `DOMAIN-KERNEL`: export/restore round trip preserves semantic and authority states. | 9, 48, 49 | Complete local release | Planned |
 | PORT-008 | Storage adapter contracts plus `packages/ai/test/index.test.ts` prove replaceable storage/provider boundaries; export and restore remain in `PORTABILITY`. | 21, 26, 48, 49 | Complete local release | Partial |
 | MODEL-001 | `packages/ai/test/index.test.ts` verifies capability-based ports and factory resolution without provider SDK dependencies. | 26 | Transcript journal | Verified |
-| MODEL-002 | AI port result contracts, `packages/test-support/test/fake-ai.test.ts`, and `apps/worker/test/transcription-pipeline.integration.ts` cover provider/model/configuration/context snapshots and persisted STT run lineage; processor prompt lineage remains in Tasks 32–33. | 26, 27, 32, 33 | AI journal | Partial |
+| MODEL-002 | AI port fixtures plus transcription and processor worker integration tests persist provider/model/effective configuration, exact prompt/processor versions, processing time, raw response, and requested input/configuration lineage; task 33 adds cross-artifact provenance traversal. | 26, 27, 32, 33 | AI journal | Partial |
 | MODEL-003–005 | `packages/ai/test/index.test.ts`, `packages/test-support/test/fake-ai.test.ts`, and `apps/worker/test/transcription-pipeline.integration.ts` cover factories, explicit capability absence, persisted provider selection, and deterministic timed/untimed results; structured/embedding persistence remains in Task 32. | 26, 27, 32 | AI journal | Partial |
 | MODEL-006 | The `RawResponseStore` port, `packages/test-support/test/fake-ai.test.ts`, and `apps/worker/test/transcription-pipeline.integration.ts` cover exact immutable bytes, integrity, configured 30-day retention metadata, and retrieval; expiry/export lifecycle remains in `RETENTION` and `PORTABILITY`. | 26, 27, 47, 48, 50 | Complete local release | Partial |
 

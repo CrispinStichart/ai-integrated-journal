@@ -18,6 +18,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@journal/contracts": "workspace:*"
+    "@journal/ai": "workspace:*",
+    "@journal/contracts": "workspace:*",
+    "@journal/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0"
   }
 }

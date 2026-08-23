@@ -6,6 +6,7 @@ import { LocalBlobStore } from '@journal/storage';
 
 import { registerTranscriptionConsumer } from './transcription-pipeline.js';
 import { registerTranscriptCleanupConsumer } from './transcript-cleanup-pipeline.js';
+import { registerProcessorConsumer } from './processor-runtime.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -37,6 +38,16 @@ const worker = new WorkerRuntime({
         ),
     });
     await registerTranscriptCleanupConsumer({
+      boss: queue,
+      database,
+      blobs,
+      resolveProvider: () =>
+        providers.resolve(
+          { providerId: 'unconfigured', enabled: false, settings: {} },
+          'structured_generation',
+        ),
+    });
+    await registerProcessorConsumer({
       boss: queue,
       database,
       blobs,
