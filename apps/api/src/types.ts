@@ -9,6 +9,7 @@ import type { TranscriptService } from './transcript-service.js';
 import type { ArtifactService } from './artifact-service.js';
 import type { ReprocessingService } from './reprocessing-service.js';
 import type { MemoryService } from './memory-service.js';
+import type { NudgeService } from './nudge-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -50,6 +51,7 @@ export interface ApiDependencies {
   readonly logger: ContentSafeLogger;
   readonly journalService?: JournalService;
   readonly memoryService?: MemoryService;
+  readonly nudgeService?: NudgeService;
   readonly recordingService?: RecordingService;
   readonly processorService?: ProcessorService;
   readonly reprocessingService?: ReprocessingService;

@@ -10,6 +10,7 @@ import {
 } from '@journal/ai';
 import {
   PROCESSOR_JOB_OPERATION,
+  NudgeRepository,
   ProcessorRuntimeRepository,
   QueueJobError,
   queueNames,
@@ -130,6 +131,7 @@ async function withAbort<T>(
 
 export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcessorRunInput> {
   readonly #repository: ProcessorRuntimeRepository;
+  readonly #nudges: NudgeRepository;
   readonly #rawResponses: BlobRawResponseStore;
 
   public constructor(
@@ -144,6 +146,7 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
     boss?: PgBoss,
   ) {
     this.#repository = new ProcessorRuntimeRepository(database.database, boss);
+    this.#nudges = new NudgeRepository(database.database);
     this.#rawResponses = new BlobRawResponseStore(database.database, blobs);
   }
 
@@ -353,6 +356,7 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
         now: this.now(),
         createId: this.createId,
       });
+      await this.#nudges.recordProcessorRun(runId, this.now());
     } catch (error) {
       if (error instanceof QueueJobError) throw error;
       const failure = classify(error);
@@ -366,6 +370,7 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
         failure.retryable,
         this.now(),
       );
+      await this.#nudges.recordProcessorRun(runId, this.now());
       throw new QueueJobError(
         failure.retryable ? 'transient' : 'permanent',
         'Processor attempt failed.',

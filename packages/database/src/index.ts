@@ -28,6 +28,11 @@ export {
   memories,
   memoryApiIdempotency,
   memoryRevisions,
+  nudgeActions,
+  nudgeApiIdempotency,
+  nudgeDigests,
+  nudgeItems,
+  nudgePreferences,
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,
@@ -59,6 +64,7 @@ export {
   reprocessingApiIdempotency,
   reprocessingBatchItems,
   reprocessingBatches,
+  requirementEvaluations,
 } from './schema.js';
 export {
   DeletedContributionError,
@@ -78,6 +84,14 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  NudgeConflictError,
+  NudgeNotFoundError,
+  NudgeRepository,
+  NudgeStateError,
+  type NudgeActionResult,
+  type NudgeScheduleResult,
+} from './nudge-repository.js';
 export {
   assembleApprovedTranscriptionContext,
   MAX_STT_MEMORY_CONTEXT_ITEMS,

@@ -83,6 +83,11 @@ export default defineConfig({
         // database uniqueness constraints; its real concurrent behavior is
         // exercised by the separately gated Testcontainers integration suite.
         'packages/database/src/processor-reconciliation-repository.ts',
+        // Requirement evaluation, owner-timezone scheduling, digest
+        // concurrency, durable response contributions, and idempotency use
+        // real PostgreSQL constraints and are exercised in the separately
+        // gated nudge integration suite.
+        'packages/database/src/nudge-repository.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

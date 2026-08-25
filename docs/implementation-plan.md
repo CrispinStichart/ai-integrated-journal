@@ -368,7 +368,7 @@ Distinguish completed, firm, tentative, contemplative, suggested, and general-in
 
 Keep narrative summaries separate from notable/accomplishment bullets. Support editing, adding, removal, pinning, evidence, and preservation of manual changes during reprocessing.
 
-### 43. Requirement evaluation and nudge engine
+### 43. Requirement evaluation and nudge engine - FINISHED
 
 Implement the exact states:
 

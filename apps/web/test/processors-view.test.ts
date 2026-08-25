@@ -16,10 +16,15 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   publish: vi.fn(),
   update: vi.fn(),
+  getNudgePreferences: vi.fn(),
+  updateNudgePreferences: vi.fn(),
 }));
 
 vi.mock('../src/auth', () => ({
   useAuthentication: () => ({ status: ref({ csrfToken: 'csrf-token' }) }),
+}));
+vi.mock('../src/stores/ui', () => ({
+  useUiStore: () => ({ announce: vi.fn() }),
 }));
 vi.mock('../src/journal/api', () => ({
   createUuidV7: () => '019c5b90-0000-7000-8000-000000000099',
@@ -30,6 +35,10 @@ vi.mock('../src/processor/api', () => ({
   listProcessors: mocks.list,
   publishProcessorVersion: mocks.publish,
   updateProcessor: mocks.update,
+}));
+vi.mock('../src/nudge/api', () => ({
+  getNudgePreferences: mocks.getNudgePreferences,
+  updateNudgePreferences: mocks.updateNudgePreferences,
 }));
 
 import ProcessorsView from '../src/views/ProcessorsView.vue';
@@ -111,6 +120,14 @@ function mountView() {
     defaultOptions: { queries: { retry: false } },
   });
   mocks.list.mockResolvedValue([processor]);
+  mocks.getNudgePreferences.mockResolvedValue({
+    quietStartHour: 21,
+    quietEndHour: 8,
+    dailyLimit: 1,
+    revision: 1,
+    ownerTimezone: 'Etc/UTC',
+    updatedAt: NOW,
+  });
   return {
     wrapper: mount(ProcessorsView, {
       attachTo: document.body,

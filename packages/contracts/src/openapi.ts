@@ -45,6 +45,14 @@ import {
   memorySearchRequestSchema,
 } from './memory.js';
 import {
+  nudgeActionRequestSchema,
+  nudgeDayResourceSchema,
+  nudgeMutationResponseSchema,
+  nudgePreferenceMutationResponseSchema,
+  nudgePreferenceSchema,
+  updateNudgePreferenceRequestSchema,
+} from './nudge.js';
+import {
   cursorPageMetadataSchema,
   cursorPaginationRequestSchema,
 } from './pagination.js';
@@ -854,6 +862,65 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/nudges': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [
+            {
+              in: 'query',
+              name: 'journalDate',
+              required: true,
+              schema: { type: 'string', format: 'date' },
+            },
+          ],
+          responses: {
+            '200': schemaResponse(
+              'Exact-version requirement states and consolidated day digest',
+              'NudgeDayResource',
+            ),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+      },
+      '/api/v1/nudges/{id}/actions': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          requestBody: jsonRequest('NudgeActionRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Durable linked nudge action response',
+              'NudgeMutationResponse',
+            ),
+            '404': problemResponse('Nudge digest or item not found'),
+            '409': problemResponse('Nudge state conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/nudges/preferences': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Owner-timezone quiet hours and digest limits',
+              'NudgePreference',
+            ),
+          },
+        },
+        put: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('UpdateNudgePreferenceRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Updated nudge delivery preference',
+              'NudgePreferenceMutationResponse',
+            ),
+            '409': problemResponse('Nudge preference conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -1001,6 +1068,16 @@ export function createOpenApiDocument(): Record<string, unknown> {
         MemoryPage: componentSchema(memoryPageSchema),
         MemoryResource: componentSchema(memoryResourceSchema),
         MemorySearchRequest: componentSchema(memorySearchRequestSchema),
+        NudgeActionRequest: componentSchema(nudgeActionRequestSchema),
+        NudgeDayResource: componentSchema(nudgeDayResourceSchema),
+        NudgeMutationResponse: componentSchema(nudgeMutationResponseSchema),
+        NudgePreference: componentSchema(nudgePreferenceSchema),
+        NudgePreferenceMutationResponse: componentSchema(
+          nudgePreferenceMutationResponseSchema,
+        ),
+        UpdateNudgePreferenceRequest: componentSchema(
+          updateNudgePreferenceRequestSchema,
+        ),
         FinalizeRecordingRequest: componentSchema(
           finalizeRecordingRequestSchema,
         ),

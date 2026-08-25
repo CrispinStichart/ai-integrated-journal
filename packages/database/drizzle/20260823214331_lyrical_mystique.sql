@@ -1,0 +1,7 @@
+ALTER TABLE "journal"."nudge_api_idempotency" ALTER COLUMN "digest_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal"."nudge_api_idempotency" ALTER COLUMN "action_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal"."nudge_api_idempotency" ALTER COLUMN "response_contribution_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal"."nudge_api_idempotency" ADD COLUMN "preference_revision" integer;--> statement-breakpoint
+ALTER TABLE "journal"."nudge_preference" ADD COLUMN "revision" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "journal"."nudge_api_idempotency" ADD CONSTRAINT "nudge_api_idempotency_result_consistent" CHECK ((num_nonnulls("journal"."nudge_api_idempotency"."digest_id", "journal"."nudge_api_idempotency"."action_id", "journal"."nudge_api_idempotency"."response_contribution_id") = 3 and "journal"."nudge_api_idempotency"."preference_revision" is null) or (num_nonnulls("journal"."nudge_api_idempotency"."digest_id", "journal"."nudge_api_idempotency"."action_id", "journal"."nudge_api_idempotency"."response_contribution_id") = 0 and "journal"."nudge_api_idempotency"."preference_revision" is not null and "journal"."nudge_api_idempotency"."preference_revision" > 0));--> statement-breakpoint
+ALTER TABLE "journal"."nudge_preference" ADD CONSTRAINT "nudge_preference_revision_positive" CHECK ("journal"."nudge_preference"."revision" > 0);

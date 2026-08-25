@@ -7,6 +7,7 @@ import { LocalBlobStore } from '@journal/storage';
 import { registerTranscriptionConsumer } from './transcription-pipeline.js';
 import { registerTranscriptCleanupConsumer } from './transcript-cleanup-pipeline.js';
 import { registerProcessorConsumer } from './processor-runtime.js';
+import { registerNudgeDigestConsumer } from './nudge-engine.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -57,6 +58,7 @@ const worker = new WorkerRuntime({
           'structured_generation',
         ),
     });
+    await registerNudgeDigestConsumer({ boss: queue, database });
   },
 });
 await worker.start();

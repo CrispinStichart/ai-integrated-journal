@@ -10,6 +10,7 @@ export * from './errors.js';
 export * from './identity.js';
 export * from './journal.js';
 export * from './memory.js';
+export * from './nudges.js';
 export * from './processing-lifecycle.js';
 export * from './reconciliation.js';
 export * from './reprocessing.js';

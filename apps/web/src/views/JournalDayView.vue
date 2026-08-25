@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 import AudioContributionCard from '../components/AudioContributionCard.vue';
 import ArtifactReviewPanel from '../components/ArtifactReviewPanel.vue';
 import ContributionCard from '../components/ContributionCard.vue';
+import NudgeDigestCard from '../components/NudgeDigestCard.vue';
 import { useAuthentication } from '../auth';
 import {
   createUuidV7,
@@ -577,6 +578,8 @@ await loadPending();
         Dismiss
       </button>
     </div>
+
+    <NudgeDigestCard :journal-date="journalDate" @updated="refresh" />
 
     <div
       v-if="conflict"

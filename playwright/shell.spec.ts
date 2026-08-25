@@ -47,6 +47,17 @@ test('[DATA-001][DATA-002] distinguishes a missing Journal Day from a load failu
   page,
 }) => {
   await authenticateShell(page);
+  await page.route('**/api/v1/nudges?journalDate=*', (route) => {
+    const journalDate = new URL(route.request().url()).searchParams.get(
+      'journalDate',
+    );
+    if (journalDate === null) throw new Error('Nudge fixture date missing.');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ journalDate, evaluations: [] }),
+    });
+  });
   await page.route('**/api/v1/journal-days/2040-01-01**', (route) =>
     route.fulfill({
       status: 404,
@@ -81,9 +92,11 @@ test('[DATA-001][DATA-002] distinguishes a missing Journal Day from a load failu
   );
   await page.goto('/journal/2040-01-02');
 
-  await expect(page.getByRole('alert')).toContainText(
-    'Could not load this Journal Day.',
-  );
+  await expect(
+    page
+      .getByRole('alert')
+      .filter({ hasText: 'Could not load this Journal Day.' }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
 

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
+import NudgePreferencesCard from '../components/NudgePreferencesCard.vue';
 import { createUuidV7 } from '../journal/api';
 import {
   createProcessor,
@@ -256,6 +257,7 @@ async function publish(): Promise<void> {
         HTML.</span
       >
     </div>
+    <NudgePreferencesCard />
     <div v-if="feedback" class="alert alert-success" role="status">
       <span>{{ feedback }}</span>
     </div>

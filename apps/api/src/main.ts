@@ -14,6 +14,7 @@ import { createApiApp } from './app.js';
 import { AuthenticationService } from './auth.js';
 import { createPostgresAuthenticationStore as createAuthStore } from './auth-store.js';
 import { createInMemoryEventFeed } from './events.js';
+import { PostgresNudgeService } from './nudge-service.js';
 import { createGracefulShutdown } from './shutdown.js';
 import type { HealthProbe } from './types.js';
 import { PostgresJournalService } from './journal-service.js';
@@ -92,11 +93,12 @@ const authenticationService = new AuthenticationService({
   secureCookies: config.auth.secureCookies,
 });
 
+const eventFeed = createInMemoryEventFeed();
 const app = createApiApp({
   artifactService: new PostgresArtifactService(database.database),
   authenticator: authenticationService,
   authenticationService,
-  eventFeed: createInMemoryEventFeed(),
+  eventFeed,
   healthProbes,
   logger,
   journalService: new PostgresJournalService(
@@ -105,6 +107,9 @@ const app = createApiApp({
     boss,
   ),
   memoryService: new PostgresMemoryService(database.database),
+  nudgeService: new PostgresNudgeService(database.database, (ownerId, event) =>
+    eventFeed.publish(ownerId, event),
+  ),
   recordingService: new PostgresRecordingService(
     database.database,
     new LocalBlobStore(config.blobDataDirectory),

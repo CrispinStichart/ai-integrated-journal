@@ -37,6 +37,7 @@ import {
   processorRuns,
   processorVersionDependencies,
   processorVersions,
+  requirementEvaluations,
   recordings,
   transcriptRevisions,
   transcriptSegments,
@@ -176,7 +177,7 @@ async function loadSourceInputs(
       .where(
         and(
           contributionFilter,
-          eq(contributions.sourceType, 'typed_text'),
+          inArray(contributions.sourceType, ['typed_text', 'nudge_response']),
           isNull(contributions.deletedAt),
         ),
       )
@@ -462,6 +463,50 @@ export async function enqueueProcessorRun(input: {
     .returning();
   if (run === undefined)
     throw new ProcessorRuntimeStateError('Processor run was not created.');
+  if (
+    published.processor.enabled &&
+    published.processor.requirementMode === 'required' &&
+    definition.nudgePolicy.enabled
+  ) {
+    const insertedEvaluation = await input.transaction
+      .insert(requirementEvaluations)
+      .values({
+        id: createId(),
+        journalDayId: input.target.journalDayId,
+        processorId: published.processor.id,
+        processorVersionId: published.version.id,
+        supportingRunId: run.id,
+        state: 'not_evaluated',
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+      .returning({ id: requirementEvaluations.id });
+    if (insertedEvaluation.length === 0)
+      await input.transaction
+        .update(requirementEvaluations)
+        .set({
+          supportingRunId: run.id,
+          state: 'not_evaluated',
+          evaluatedAt: null,
+          revision: sql`${requirementEvaluations.revision} + 1`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(requirementEvaluations.journalDayId, input.target.journalDayId),
+            eq(requirementEvaluations.processorVersionId, published.version.id),
+            eq(requirementEvaluations.manualResolution, false),
+            inArray(requirementEvaluations.state, [
+              'not_evaluated',
+              'satisfied',
+              'insufficient_information',
+              'failed',
+            ]),
+          ),
+        );
+  }
   if (sources.length > 0) {
     const persistedInputs: (typeof processorRunInputs.$inferInsert)[] =
       sources.map((source, ordinal) => {

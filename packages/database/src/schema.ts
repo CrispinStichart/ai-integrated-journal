@@ -96,6 +96,34 @@ export const journalDateAssignment = pgEnum('journal_date_assignment', [
   'migration',
 ]);
 
+export const requirementEvaluationState = pgEnum(
+  'requirement_evaluation_state',
+  [
+    'not_evaluated',
+    'satisfied',
+    'insufficient_information',
+    'pending_user_response',
+    'dismissed',
+    'not_applicable',
+    'failed',
+  ],
+);
+
+export const nudgeDigestStatus = pgEnum('nudge_digest_status', [
+  'queued',
+  'published',
+  'deferred',
+  'dismissed',
+  'resolved',
+]);
+
+export const nudgeActionKind = pgEnum('nudge_action_kind', [
+  'answer',
+  'defer',
+  'dismiss',
+  'not_applicable',
+]);
+
 export const users = journalSchema.table(
   'user',
   {
@@ -2516,6 +2544,258 @@ export const memoryApiIdempotency = journalSchema.table(
   ],
 );
 
+export const nudgePreferences = journalSchema.table(
+  'nudge_preference',
+  {
+    ownerId: uuid('owner_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    quietStartHour: integer('quiet_start_hour').notNull().default(21),
+    quietEndHour: integer('quiet_end_hour').notNull().default(8),
+    dailyLimit: integer('daily_limit').notNull().default(1),
+    revision: integer('revision').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      'nudge_preference_hours_valid',
+      sql`${table.quietStartHour} between 0 and 23 and ${table.quietEndHour} between 0 and 23 and ${table.quietStartHour} <> ${table.quietEndHour}`,
+    ),
+    check(
+      'nudge_preference_daily_limit_valid',
+      sql`${table.dailyLimit} between 0 and 24`,
+    ),
+    check('nudge_preference_revision_positive', sql`${table.revision} > 0`),
+  ],
+);
+
+export const requirementEvaluations = journalSchema.table(
+  'requirement_evaluation',
+  {
+    id: uuid('id').primaryKey(),
+    journalDayId: uuid('journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    processorId: uuid('processor_id')
+      .notNull()
+      .references(() => processorInstallations.id, { onDelete: 'restrict' }),
+    processorVersionId: uuid('processor_version_id')
+      .notNull()
+      .references(() => processorVersions.id, { onDelete: 'restrict' }),
+    supportingRunId: uuid('supporting_run_id').references(
+      () => processorRuns.id,
+      { onDelete: 'restrict' },
+    ),
+    state: requirementEvaluationState('state')
+      .notNull()
+      .default('not_evaluated'),
+    revision: integer('revision').notNull().default(1),
+    manualResolution: boolean('manual_resolution').notNull().default(false),
+    responseContributionId: uuid('response_contribution_id').references(
+      () => contributions.id,
+      { onDelete: 'restrict' },
+    ),
+    evaluatedAt: timestamp('evaluated_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('requirement_evaluation_day_version_unique').on(
+      table.journalDayId,
+      table.processorVersionId,
+    ),
+    index('requirement_evaluation_state_day_idx').on(
+      table.state,
+      table.journalDayId,
+    ),
+    check(
+      'requirement_evaluation_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'requirement_evaluation_revision_positive',
+      sql`${table.revision} > 0`,
+    ),
+    check(
+      'requirement_evaluation_manual_consistent',
+      sql`(${table.manualResolution} = false and ${table.responseContributionId} is null) or (${table.manualResolution} = true and ${table.state} in ('satisfied', 'dismissed', 'not_applicable') and ${table.responseContributionId} is not null)`,
+    ),
+    check(
+      'requirement_evaluation_run_consistent',
+      sql`(${table.state} = 'not_evaluated' and ${table.evaluatedAt} is null) or (${table.state} <> 'not_evaluated' and ${table.evaluatedAt} is not null)`,
+    ),
+  ],
+);
+
+export const nudgeDigests = journalSchema.table(
+  'nudge_digest',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    journalDayId: uuid('journal_day_id')
+      .notNull()
+      .references(() => journalDays.id, { onDelete: 'restrict' }),
+    notificationDate: date('notification_date', { mode: 'string' }).notNull(),
+    status: nudgeDigestStatus('status').notNull().default('queued'),
+    revision: integer('revision').notNull().default(1),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }).notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    deferredUntil: timestamp('deferred_until', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('nudge_digest_journal_day_unique').on(table.journalDayId),
+    index('nudge_digest_delivery_idx').on(table.status, table.scheduledAt),
+    index('nudge_digest_owner_notification_date_idx').on(
+      table.ownerId,
+      table.notificationDate,
+    ),
+    check(
+      'nudge_digest_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check('nudge_digest_revision_positive', sql`${table.revision} > 0`),
+    check(
+      'nudge_digest_published_consistent',
+      sql`(${table.status} = 'published' and ${table.publishedAt} is not null) or (${table.status} <> 'published')`,
+    ),
+    check(
+      'nudge_digest_deferred_consistent',
+      sql`(${table.status} = 'deferred' and ${table.deferredUntil} is not null) or (${table.status} <> 'deferred' and ${table.deferredUntil} is null)`,
+    ),
+  ],
+);
+
+export const nudgeItems = journalSchema.table(
+  'nudge_item',
+  {
+    id: uuid('id').primaryKey(),
+    digestId: uuid('digest_id')
+      .notNull()
+      .references(() => nudgeDigests.id, { onDelete: 'restrict' }),
+    evaluationId: uuid('evaluation_id')
+      .notNull()
+      .references(() => requirementEvaluations.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('nudge_item_digest_evaluation_unique').on(
+      table.digestId,
+      table.evaluationId,
+    ),
+    uniqueIndex('nudge_item_evaluation_unique').on(table.evaluationId),
+    check(
+      'nudge_item_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+  ],
+);
+
+export const nudgeActions = journalSchema.table(
+  'nudge_action',
+  {
+    id: uuid('id').primaryKey(),
+    digestId: uuid('digest_id')
+      .notNull()
+      .references(() => nudgeDigests.id, { onDelete: 'restrict' }),
+    itemId: uuid('item_id').references(() => nudgeItems.id, {
+      onDelete: 'restrict',
+    }),
+    actorId: uuid('actor_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    action: nudgeActionKind('action').notNull(),
+    responseContributionId: uuid('response_contribution_id')
+      .notNull()
+      .references(() => contributions.id, { onDelete: 'restrict' }),
+    deferredUntil: timestamp('deferred_until', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('nudge_action_response_contribution_unique').on(
+      table.responseContributionId,
+    ),
+    check(
+      'nudge_action_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'nudge_action_item_consistent',
+      sql`(${table.action} in ('answer', 'not_applicable') and ${table.itemId} is not null) or (${table.action} in ('defer', 'dismiss') and ${table.itemId} is null)`,
+    ),
+    check(
+      'nudge_action_defer_consistent',
+      sql`(${table.action} = 'defer' and ${table.deferredUntil} is not null) or (${table.action} <> 'defer' and ${table.deferredUntil} is null)`,
+    ),
+  ],
+);
+
+export const nudgeApiIdempotency = journalSchema.table(
+  'nudge_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    digestId: uuid('digest_id').references(() => nudgeDigests.id, {
+      onDelete: 'restrict',
+    }),
+    actionId: uuid('action_id').references(() => nudgeActions.id, {
+      onDelete: 'restrict',
+    }),
+    responseContributionId: uuid('response_contribution_id').references(
+      () => contributions.id,
+      { onDelete: 'restrict' },
+    ),
+    preferenceRevision: integer('preference_revision'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('nudge_api_idempotency_owner_operation_key_unique').on(
+      table.ownerId,
+      table.operation,
+      table.idempotencyKey,
+    ),
+    check(
+      'nudge_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'nudge_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'nudge_api_idempotency_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'nudge_api_idempotency_result_consistent',
+      sql`(num_nonnulls(${table.digestId}, ${table.actionId}, ${table.responseContributionId}) = 3 and ${table.preferenceRevision} is null) or (num_nonnulls(${table.digestId}, ${table.actionId}, ${table.responseContributionId}) = 0 and ${table.preferenceRevision} is not null and ${table.preferenceRevision} > 0)`,
+    ),
+  ],
+);
+
 export const auditEvents = journalSchema.table(
   'audit_event',
   {
@@ -2585,6 +2865,11 @@ export const databaseSchema = {
   memories,
   memoryApiIdempotency,
   memoryRevisions,
+  nudgeActions,
+  nudgeApiIdempotency,
+  nudgeDigests,
+  nudgeItems,
+  nudgePreferences,
   passwordCredentials,
   processorApiIdempotency,
   processorArtifacts,
@@ -2600,6 +2885,7 @@ export const databaseSchema = {
   processorRuns,
   processorVersionDependencies,
   processorVersions,
+  requirementEvaluations,
   reprocessingApiIdempotency,
   reprocessingBatchItems,
   reprocessingBatches,

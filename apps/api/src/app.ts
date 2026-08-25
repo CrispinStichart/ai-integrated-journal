@@ -60,6 +60,7 @@ import {
   sendReprocessingError,
 } from './reprocessing-routes.js';
 import { registerMemoryRoutes, sendMemoryError } from './memory-routes.js';
+import { registerNudgeRoutes, sendNudgeError } from './nudge-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -473,6 +474,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
   registerArtifactRoutes(app, dependencies);
   registerTranscriptRoutes(app, dependencies);
   registerMemoryRoutes(app, dependencies);
+  registerNudgeRoutes(app, dependencies);
 
   app.use((request, response) => {
     sendProblem(request, response, {
@@ -514,6 +516,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       if (sendArtifactError(error, request, response)) return;
       if (sendTranscriptError(error, request, response)) return;
       if (sendMemoryError(error, request, response)) return;
+      if (sendNudgeError(error, request, response)) return;
       dependencies.logger.error(
         {
           correlationId: correlationId(response),
