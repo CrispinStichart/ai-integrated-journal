@@ -7,10 +7,13 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  recordingSyncController,
   RecordingSyncController,
   type RecordingSyncDependencies,
+  useRecordingSyncController,
 } from '../src/recording/sync-controller';
 import {
+  browserMetadata,
   JournalIndexedDb,
   type LocalRecordingRecord,
 } from '../src/storage/indexed-db';
@@ -131,6 +134,7 @@ function harness(overrides: Partial<RecordingSyncDependencies> = {}) {
 afterEach(async () => {
   await Promise.all(stores.map((store) => store.destroy()));
   stores.length = 0;
+  vi.unstubAllGlobals();
 });
 
 describe('recording synchronization', () => {
@@ -147,6 +151,7 @@ describe('recording synchronization', () => {
     await controller.initialize(OWNER_ID, 'csrf-token');
 
     const resuming = controller.resume();
+    const duplicateResume = controller.resume();
     await vi.waitFor(() => expect(finalize).toHaveBeenCalledOnce());
 
     expect(dependencies.create).toHaveBeenCalledOnce();
@@ -178,7 +183,8 @@ describe('recording synchronization', () => {
     });
 
     confirmFinalize(remote('durable'));
-    await resuming;
+    await Promise.all([resuming, duplicateResume]);
+    expect(finalize).toHaveBeenCalledOnce();
     expect(await store.listRecordingChunks(OWNER_ID, RECORDING_ID)).toEqual([]);
     await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
       state: 'transcription_pending',
@@ -314,5 +320,148 @@ describe('recording synchronization', () => {
     await expect(
       offlineHarness.store.getRecording(RECORDING_ID),
     ).resolves.toMatchObject({ journalDate: '2026-08-20' });
+  });
+
+  it.each([503, 408, 429])(
+    '[CAP-003][CAP-006] keeps API status %i failures retryable and clears the failure after a successful retry',
+    async (status) => {
+      const upload = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new RecordingApiError(
+            `Upload temporarily unavailable (${status}).`,
+            status,
+            `upload_${status}`,
+          ),
+        )
+        .mockResolvedValue(undefined);
+      const { controller, store } = harness({ upload });
+      await populate(store);
+      await controller.initialize(OWNER_ID, 'csrf-token');
+      await controller.resume();
+
+      await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
+        state: 'failed',
+        retrySafe: true,
+        syncErrorCode: `upload_${status}`,
+        syncErrorMessage: `Upload temporarily unavailable (${status}).`,
+      });
+
+      await controller.retry(RECORDING_ID);
+      const recovered = await store.getRecording(RECORDING_ID);
+      expect(recovered).toMatchObject({
+        state: 'transcription_pending',
+        retrySafe: false,
+        serverPersistenceState: 'durable',
+      });
+      expect(recovered).not.toHaveProperty('syncErrorCode');
+      expect(recovered).not.toHaveProperty('syncErrorMessage');
+    },
+  );
+
+  it('[CAP-003][CAP-006][SEC-003] distinguishes local corruption, an incomplete manifest, and a disconnected server', async () => {
+    const corruptHarness = harness({
+      decryptChunk: vi
+        .fn()
+        .mockRejectedValue(
+          new DOMException('Authentication failed.', 'OperationError'),
+        ),
+    });
+    await populate(corruptHarness.store);
+    await corruptHarness.controller.initialize(OWNER_ID, 'csrf-token');
+    await corruptHarness.controller.resume();
+    await expect(
+      corruptHarness.store.getRecording(RECORDING_ID),
+    ).resolves.toMatchObject({
+      state: 'failed',
+      retrySafe: false,
+      syncErrorCode: 'local_recording_corrupt',
+      syncErrorMessage: 'A saved audio checkpoint could not be decrypted.',
+    });
+
+    const incompleteHarness = harness();
+    await incompleteHarness.store.putRecording(
+      localRecording({
+        nextChunkIndex: 1,
+        totalBytes: '3',
+        serverCreated: true,
+      }),
+    );
+    await incompleteHarness.controller.initialize(OWNER_ID, 'csrf-token');
+    await incompleteHarness.controller.resume();
+    await expect(
+      incompleteHarness.store.getRecording(RECORDING_ID),
+    ).resolves.toMatchObject({
+      state: 'failed',
+      retrySafe: false,
+      syncErrorCode: 'local_recording_incomplete',
+      syncErrorMessage: 'Audio checkpoint is missing at index 0.',
+    });
+
+    const disconnectedHarness = harness({
+      status: vi.fn().mockRejectedValue(new TypeError('connection reset')),
+    });
+    await populate(disconnectedHarness.store);
+    await disconnectedHarness.controller.initialize(OWNER_ID, 'csrf-token');
+    await disconnectedHarness.controller.resume();
+    await expect(
+      disconnectedHarness.store.getRecording(RECORDING_ID),
+    ).resolves.toMatchObject({
+      state: 'failed',
+      retrySafe: true,
+      syncErrorCode: 'network_unavailable',
+      syncErrorMessage:
+        'Audio is still saved locally. Reconnect and retry the upload.',
+    });
+  });
+
+  it("[CAP-003][SEC-001] never retries or moves another owner's local recording", async () => {
+    const { controller, store } = harness();
+    await controller.initialize(OWNER_ID, 'csrf-token');
+
+    await expect(controller.retry(RECORDING_ID)).rejects.toThrow(
+      'local recording is unavailable',
+    );
+    await store.putRecording(
+      localRecording({
+        ownerId: '018f0000-0000-7000-8000-000000000099',
+        nextChunkIndex: 0,
+        totalBytes: '0',
+      }),
+    );
+    await expect(controller.move(RECORDING_ID, '2026-08-20')).rejects.toThrow(
+      'local recording is unavailable',
+    );
+  });
+
+  it('[CAP-003][CAP-007] exposes offline recovery through the browser-backed composable without contacting the server', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    await browserMetadata.putRecording(
+      localRecording({ nextChunkIndex: 0, totalBytes: '0' }),
+    );
+
+    try {
+      const sync = useRecordingSyncController();
+      expect(sync.recordings).toBe(recordingSyncController.recordings);
+      await sync.initialize(OWNER_ID, 'csrf-token');
+      expect(sync.recordings.value).toHaveLength(1);
+
+      await sync.resume();
+      await sync.move(RECORDING_ID, '2026-08-20');
+      await sync.refresh();
+      await expect(sync.retry('missing-recording')).rejects.toThrow(
+        'local recording is unavailable',
+      );
+
+      expect(sync.recordings.value[0]).toMatchObject({
+        recordingId: RECORDING_ID,
+        journalDate: '2026-08-20',
+        journalDateAssignment: 'user_override',
+        state: 'saved_locally',
+      });
+      expect(sync.recordings.value[0]?.proposedJournalDayId).not.toBe(DAY_ID);
+    } finally {
+      await browserMetadata.destroy();
+    }
   });
 });

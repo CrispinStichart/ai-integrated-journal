@@ -1,18 +1,24 @@
 // @vitest-environment jsdom
 
+import 'fake-indexeddb/auto';
+
 import { MAX_AUDIO_CHUNK_BYTES } from '@journal/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AUDIO_MIME_CANDIDATES,
+  browserCaptureController,
   BrowserCaptureController,
   CAPTURE_TIMESLICE_MILLISECONDS,
   type BrowserCaptureDependencies,
+  useBrowserCaptureController,
 } from '../src/recording/capture-controller';
+import { offlineJournal } from '../src/journal/offline';
 import type {
   EncryptedRecordingChunkRecord,
   LocalRecordingRecord,
 } from '../src/storage/indexed-db';
+import { browserMetadata } from '../src/storage/indexed-db';
 
 const OWNER_ID = '018f0000-0000-7000-8000-000000000001';
 const DAY_ID = '018f0000-0000-7000-8000-000000000002';
@@ -27,8 +33,10 @@ class MemoryCaptureStorage {
   readonly recordings = new Map<string, LocalRecordingRecord>();
   readonly chunks: EncryptedRecordingChunkRecord[] = [];
   failAtIndex: number | undefined;
+  putRecordingError: Error | undefined;
 
   async putRecording(record: LocalRecordingRecord): Promise<void> {
+    if (this.putRecordingError !== undefined) throw this.putRecordingError;
     this.recordings.set(record.recordingId, { ...record });
   }
 
@@ -99,11 +107,14 @@ function createHarness(
     estimates?: StorageEstimate[];
     estimateError?: Error;
     failAtIndex?: number;
+    protectedByteSize?: number;
+    putRecordingError?: Error;
   } = {},
 ) {
   const calls: string[] = [];
   const storage = new MemoryCaptureStorage();
   storage.failAtIndex = options.failAtIndex;
+  storage.putRecordingError = options.putRecordingError;
   const recorder = new FakeMediaRecorder(
     options.recorderMimeType ??
       options.supportedMimeTypes?.[0] ??
@@ -149,7 +160,7 @@ function createHarness(
       return recorder as unknown as MediaRecorder;
     },
     protectChunk: async (_recordingId, _index, chunk) => ({
-      byteSize: chunk.size,
+      byteSize: options.protectedByteSize ?? chunk.size,
       sha256: SHA256,
       nonce: 'nonce',
       ciphertext: new ArrayBuffer(chunk.size + 16),
@@ -175,7 +186,10 @@ const captureInput = {
   journalDateAssignment: 'default',
 } as const;
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('browser capture controller', () => {
   it('[CAP-002][CAP-004][CAP-005] allocates stable identities before capture, negotiates MIME, and persists bounded timeslices', async () => {
@@ -333,6 +347,62 @@ describe('browser capture controller', () => {
     await harness.controller.stop();
   });
 
+  it('[CAP-005] releases permission immediately when the recorder reports no usable MIME type', async () => {
+    const harness = createHarness({ recorderMimeType: '   ' });
+
+    await expect(harness.controller.start(captureInput)).rejects.toThrow(
+      'did not report an audio MIME type',
+    );
+
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.storage.recordings.size).toBe(0);
+    expect(harness.controller.snapshot.value).toMatchObject({
+      phase: 'failed',
+      errorCode: 'capture_failed',
+    });
+    await expect(harness.controller.stop()).resolves.toBeUndefined();
+  });
+
+  it('[CAP-003][CAP-006] treats an aborted IndexedDB manifest transaction as exhausted storage', async () => {
+    const harness = createHarness({
+      putRecordingError: new DOMException(
+        'IndexedDB transaction aborted.',
+        'AbortError',
+      ),
+    });
+
+    await expect(harness.controller.start(captureInput)).rejects.toThrow(
+      'IndexedDB transaction aborted',
+    );
+
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+    expect(harness.controller.snapshot.value).toMatchObject({
+      phase: 'failed',
+      storageState: 'exhausted',
+      errorCode: 'browser_storage_exhausted',
+    });
+  });
+
+  it('[CAP-004][CAP-006] rejects a protected checkpoint that violates the protocol byte bound', async () => {
+    const harness = createHarness({
+      protectedByteSize: MAX_AUDIO_CHUNK_BYTES + 1,
+    });
+    await harness.controller.start(captureInput);
+
+    harness.recorder.emit(new Blob(['oversized protected unit']));
+    await harness.controller.flushPendingWrites();
+    await vi.waitFor(() => {
+      expect(harness.controller.snapshot.value).toMatchObject({
+        phase: 'failed',
+        errorCode: 'capture_failed',
+        message: 'A local recording unit exceeded the protocol bound.',
+      });
+    });
+
+    expect(harness.storage.chunks).toHaveLength(0);
+    expect(harness.track.stop).toHaveBeenCalledOnce();
+  });
+
   it('[CAP-003][CAP-006] records a MediaRecorder failure without replacing stable identities', async () => {
     const harness = createHarness();
     await harness.controller.start(captureInput);
@@ -349,5 +419,134 @@ describe('browser capture controller', () => {
       contributionId: IDS[1],
       errorCode: 'capture_failed',
     });
+  });
+
+  it('[CAP-002][CAP-004][CAP-005] uses the browser adapters to persist an encrypted checkpoint and stop the microphone', async () => {
+    class BrowserMediaRecorder extends EventTarget {
+      static instance: BrowserMediaRecorder | undefined;
+
+      static isTypeSupported(mimeType: string): boolean {
+        return mimeType === AUDIO_MIME_CANDIDATES[0];
+      }
+
+      readonly mimeType: string;
+      state: RecordingState = 'inactive';
+
+      constructor(
+        _stream: MediaStream,
+        options?: Readonly<{ mimeType?: string }>,
+      ) {
+        super();
+        this.mimeType = options?.mimeType ?? 'audio/mp4';
+        BrowserMediaRecorder.instance = this;
+      }
+
+      start(): void {
+        this.state = 'recording';
+      }
+
+      stop(): void {
+        this.state = 'inactive';
+        this.dispatchEvent(new Event('stop'));
+      }
+
+      emit(blob: Blob): void {
+        const event = new Event('dataavailable');
+        Object.defineProperty(event, 'data', { value: blob });
+        this.dispatchEvent(event);
+      }
+    }
+
+    const track = { stop: vi.fn() };
+    const stream = {
+      getTracks: () => [track],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    const persist = vi.fn().mockResolvedValue(true);
+    const estimate = vi
+      .fn()
+      .mockResolvedValueOnce({ quota: 1024 ** 3, usage: 960 * 1024 ** 2 })
+      .mockResolvedValue(highCapacity());
+    const protectChunk = vi
+      .spyOn(offlineJournal, 'protectRecordingChunk')
+      .mockImplementation(async (_recordingId, _index, chunk) => ({
+        byteSize: chunk.size,
+        sha256: SHA256,
+        nonce: 'browser-adapter-nonce',
+        ciphertext: new ArrayBuffer(chunk.size + 16),
+      }));
+    const clearReadCache = vi
+      .spyOn(offlineJournal, 'clearReadCache')
+      .mockResolvedValue(undefined);
+    vi.stubGlobal('MediaRecorder', BrowserMediaRecorder);
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia },
+      onLine: true,
+      storage: { estimate, persist },
+    });
+
+    try {
+      const controller = new BrowserCaptureController();
+      const identities = await controller.start(captureInput);
+      const recorder = BrowserMediaRecorder.instance;
+      if (recorder === undefined)
+        throw new Error('MediaRecorder was not made.');
+      recorder.emit(
+        new Blob(['encrypted checkpoint'], {
+          type: AUDIO_MIME_CANDIDATES[0],
+        }),
+      );
+      await controller.flushPendingWrites();
+      await controller.stop();
+
+      expect(persist).toHaveBeenCalledOnce();
+      expect(clearReadCache).toHaveBeenCalledOnce();
+      expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+      expect(protectChunk).toHaveBeenCalledWith(
+        identities.recordingId,
+        0,
+        expect.any(Blob),
+      );
+      expect(track.stop).toHaveBeenCalledOnce();
+      await expect(
+        browserMetadata.getRecording(identities.recordingId),
+      ).resolves.toMatchObject({
+        state: 'saved_locally',
+        nextChunkIndex: 1,
+        totalBytes: '20',
+      });
+    } finally {
+      await browserMetadata.destroy();
+    }
+  });
+
+  it('[CAP-002] exposes the shared capture lifecycle through the composable API', async () => {
+    const start = vi
+      .spyOn(browserCaptureController, 'start')
+      .mockResolvedValue({
+        recordingId: IDS[0],
+        contributionId: IDS[1],
+        uploadId: IDS[2],
+      });
+    const stop = vi
+      .spyOn(browserCaptureController, 'stop')
+      .mockResolvedValue(undefined);
+    const checkStorage = vi
+      .spyOn(browserCaptureController, 'checkStorage')
+      .mockResolvedValue(undefined);
+    const capture = useBrowserCaptureController();
+
+    expect(capture.snapshot).toBe(browserCaptureController.snapshot);
+    await expect(capture.start(captureInput)).resolves.toEqual({
+      recordingId: IDS[0],
+      contributionId: IDS[1],
+      uploadId: IDS[2],
+    });
+    await capture.checkStorage();
+    await capture.stop();
+
+    expect(start).toHaveBeenCalledWith(captureInput);
+    expect(checkStorage).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledOnce();
   });
 });
