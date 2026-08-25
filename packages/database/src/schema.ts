@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  customType,
   date,
   foreignKey,
   index,
@@ -18,6 +19,10 @@ import {
 } from 'drizzle-orm/pg-core';
 
 export const journalSchema = pgSchema('journal');
+
+const tsvector = customType<{ data: string }>({
+  dataType: () => 'tsvector',
+});
 
 export const authChallengePurpose = pgEnum('auth_challenge_purpose', [
   'passkey_registration',
@@ -2459,6 +2464,97 @@ export const memoryRevisions = journalSchema.table(
   ],
 );
 
+/** Current, independently addressable lexical retrieval material. */
+export const searchFragments = journalSchema.table(
+  'search_fragment',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sourceKind: text('source_kind').notNull(),
+    layer: text('layer').notNull(),
+    sourceId: uuid('source_id').notNull(),
+    sourceRevisionId: uuid('source_revision_id').notNull(),
+    sourceRevision: integer('source_revision').notNull(),
+    journalDayId: uuid('journal_day_id').references(() => journalDays.id, {
+      onDelete: 'cascade',
+    }),
+    journalDate: date('journal_date', { mode: 'string' }),
+    contributionId: uuid('contribution_id').references(() => contributions.id, {
+      onDelete: 'cascade',
+    }),
+    transcriptId: uuid('transcript_id').references(() => transcripts.id, {
+      onDelete: 'cascade',
+    }),
+    artifactId: uuid('artifact_id').references(() => processorArtifacts.id, {
+      onDelete: 'cascade',
+    }),
+    memoryId: uuid('memory_id').references(() => memories.id, {
+      onDelete: 'cascade',
+    }),
+    processorId: uuid('processor_id').references(
+      () => processorInstallations.id,
+      { onDelete: 'restrict' },
+    ),
+    processorVersionId: uuid('processor_version_id').references(
+      () => processorVersions.id,
+      { onDelete: 'restrict' },
+    ),
+    contributionType: text('contribution_type'),
+    resultType: text('result_type'),
+    authority: contributionAuthority('authority').notNull(),
+    content: text('content').notNull(),
+    searchVector: tsvector('search_vector')
+      .generatedAlwaysAs(
+        (): ReturnType<typeof sql> =>
+          sql`to_tsvector('english', coalesce(content, ''))`,
+      )
+      .notNull(),
+    indexedAt: timestamp('indexed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('search_fragment_source_revision_unique').on(
+      table.sourceKind,
+      table.sourceRevisionId,
+    ),
+    index('search_fragment_vector_idx').using('gin', table.searchVector),
+    index('search_fragment_owner_rank_idx').on(
+      table.ownerId,
+      table.journalDate,
+      table.id,
+    ),
+    index('search_fragment_filter_idx').on(
+      table.ownerId,
+      table.layer,
+      table.authority,
+      table.processorId,
+    ),
+    check(
+      'search_fragment_revision_positive',
+      sql`${table.sourceRevision} > 0`,
+    ),
+    check(
+      'search_fragment_content_not_blank',
+      sql`length(btrim(${table.content})) > 0`,
+    ),
+    check(
+      'search_fragment_source_kind_valid',
+      sql`${table.sourceKind} in ('contribution_revision', 'transcript_revision', 'artifact_version', 'artifact_manual_revision', 'memory_revision')`,
+    ),
+    check(
+      'search_fragment_layer_valid',
+      sql`${table.layer} in ('typed_text', 'nudge_response', 'raw_stt', 'corrected', 'cleaned', 'observation', 'interpretation', 'summary', 'memory')`,
+    ),
+    check(
+      'search_fragment_location_consistent',
+      sql`(${table.memoryId} is not null and ${table.journalDayId} is null and ${table.journalDate} is null) or (${table.memoryId} is null and ${table.journalDayId} is not null and ${table.journalDate} is not null)`,
+    ),
+  ],
+);
+
 export const feedback = journalSchema.table(
   'feedback',
   {
@@ -2896,6 +2992,7 @@ export const databaseSchema = {
   recordings,
   recordingUploads,
   schedules,
+  searchFragments,
   sessions,
   transcriptCleanupRuns,
   transcriptionRuns,

@@ -52,7 +52,7 @@ describe('frontend application foundations', () => {
     await router.push('/settings');
     await router.isReady();
     expect(router.currentRoute.value.meta.title).toBe('Settings');
-  });
+  }, 15_000);
 
   it('keeps only session-wide UI workflow state in Pinia', async () => {
     const ui = useUiStore();

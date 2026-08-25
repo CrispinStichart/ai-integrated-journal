@@ -27,11 +27,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/search',
     name: 'search',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Find source entries and generated artifacts.',
-      title: 'Search',
-    },
+    component: () => import('../views/SearchView.vue'),
     meta: { title: 'Search' },
   },
   {

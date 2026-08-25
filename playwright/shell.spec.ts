@@ -100,6 +100,72 @@ test('[DATA-001][DATA-002] distinguishes a missing Journal Day from a load failu
   await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
 });
 
+test('[SEARCH-001][SEARCH-003–SEARCH-006] searches selected layers with safe exact-revision source links', async ({
+  page,
+}) => {
+  await authenticateShell(page);
+  await page.route('**/api/v1/processors', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '{"items":[]}',
+    }),
+  );
+  let requestedSearch: URL | undefined;
+  await page.route('**/api/v1/search?*', (route) => {
+    requestedSearch = new URL(route.request().url());
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [
+          {
+            fragmentId: '019c5b90-0000-7000-8000-000000000041',
+            sourceKind: 'contribution_revision',
+            layer: 'typed_text',
+            sourceId: '019c5b90-0000-7000-8000-000000000042',
+            sourceRevisionId: '019c5b90-0000-7000-8000-000000000041',
+            sourceRevision: 2,
+            journalDate: '2026-08-25',
+            contributionId: '019c5b90-0000-7000-8000-000000000042',
+            contributionType: 'typed_text',
+            authority: 'manual',
+            score: 0.75,
+            snippet: [
+              { text: 'Morning ', highlighted: false },
+              {
+                text: '<img src=x onerror=window.searchXss=true>',
+                highlighted: true,
+              },
+            ],
+            href: '/journal/2026-08-25?source=contribution_revision&revision=019c5b90-0000-7000-8000-000000000041',
+          },
+        ],
+        page: { hasMore: false },
+      }),
+    });
+  });
+
+  await page.goto('/search');
+  await page
+    .getByRole('searchbox', { name: 'Words or quoted phrase' })
+    .fill('morning');
+  await page.getByRole('button', { name: 'Search journal' }).click();
+  await expect(page.getByText('Retrieved sources and results')).toBeVisible();
+  await expect(page.locator('mark')).toContainText('<img src=x onerror=');
+  await expect(page.locator('blockquote img')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => Reflect.get(window, 'searchXss')),
+  ).toBeUndefined();
+  expect(requestedSearch?.searchParams.get('layers')).toContain('typed_text');
+  await expect(
+    page.getByRole('link', { name: 'Open supporting Journal Day' }),
+  ).toHaveAttribute(
+    'href',
+    '/journal/2026-08-25?source=contribution_revision&revision=019c5b90-0000-7000-8000-000000000041',
+  );
+});
+
 test('exposes an installable manifest and reloads the shell offline', async ({
   context,
   page,

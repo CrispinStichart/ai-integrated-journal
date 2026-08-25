@@ -24,6 +24,7 @@ import { PostgresReprocessingService } from './reprocessing-service.js';
 import { PostgresTranscriptService } from './transcript-service.js';
 import { PostgresArtifactService } from './artifact-service.js';
 import { PostgresMemoryService } from './memory-service.js';
+import { PostgresSearchService } from './search-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -117,6 +118,7 @@ const app = createApiApp({
   ),
   processorService: new PostgresProcessorService(database.database),
   reprocessingService: new PostgresReprocessingService(database.database, boss),
+  searchService: new PostgresSearchService(database.database),
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

@@ -95,6 +95,11 @@ import {
   startReprocessingRequestSchema,
 } from './reprocessing.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
+import {
+  lexicalSearchPageSchema,
+  lexicalSearchRequestSchema,
+  lexicalSearchResultSchema,
+} from './search.js';
 import { uuidV7Schema } from './primitives.js';
 import {
   editCorrectedTranscriptRequestSchema,
@@ -822,6 +827,35 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/search': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [
+            {
+              in: 'query',
+              name: 'q',
+              required: true,
+              schema: { type: 'string', minLength: 1, maxLength: 200 },
+            },
+            {
+              in: 'query',
+              name: 'cursor',
+              required: false,
+              schema: componentSchema(
+                cursorPaginationRequestSchema.shape.cursor,
+              ),
+            },
+          ],
+          responses: {
+            '200': schemaResponse(
+              'Deterministically ranked exact-revision lexical results',
+              'LexicalSearchPage',
+            ),
+            '400': problemResponse('Invalid query, filters, or cursor'),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+      },
       '/api/v1/memories/{id}': {
         get: {
           security: [{ sessionCookie: [] }],
@@ -1056,6 +1090,9 @@ export function createOpenApiDocument(): Record<string, unknown> {
           idempotentMutationHeadersSchema,
         ),
         LivenessResponse: componentSchema(livenessResponseSchema),
+        LexicalSearchPage: componentSchema(lexicalSearchPageSchema),
+        LexicalSearchRequest: componentSchema(lexicalSearchRequestSchema),
+        LexicalSearchResult: componentSchema(lexicalSearchResultSchema),
         JournalDaySummaryPage: componentSchema(journalDaySummaryPageSchema),
         JournalDayView: componentSchema(journalDayViewSchema),
         FeedbackMutationResponse: componentSchema(

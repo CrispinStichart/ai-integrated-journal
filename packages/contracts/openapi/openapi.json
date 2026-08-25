@@ -2146,6 +2146,71 @@
         }
       }
     },
+    "/api/v1/search": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Opaque, server-issued deterministic pagination cursor."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deterministically ranked exact-revision lexical results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LexicalSearchPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query, filters, or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/memories/{id}": {
       "get": {
         "security": [
@@ -6481,6 +6546,429 @@
         },
         "required": [
           "status"
+        ],
+        "additionalProperties": false
+      },
+      "LexicalSearchPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fragmentId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "sourceKind": {
+                  "type": "string",
+                  "enum": [
+                    "contribution_revision",
+                    "transcript_revision",
+                    "artifact_version",
+                    "artifact_manual_revision",
+                    "memory_revision"
+                  ]
+                },
+                "layer": {
+                  "type": "string",
+                  "enum": [
+                    "typed_text",
+                    "nudge_response",
+                    "raw_stt",
+                    "corrected",
+                    "cleaned",
+                    "observation",
+                    "interpretation",
+                    "summary",
+                    "memory"
+                  ]
+                },
+                "sourceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "sourceRevisionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "sourceRevision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "journalDate": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                  "description": "Canonical YYYY-MM-DD journal date."
+                },
+                "contributionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "transcriptId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "artifactId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "memoryId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "processorId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "processorVersionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "processorName": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "contributionType": {
+                  "type": "string",
+                  "enum": [
+                    "typed_text",
+                    "recording",
+                    "nudge_response"
+                  ]
+                },
+                "resultType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "authority": {
+                  "type": "string",
+                  "enum": [
+                    "manual",
+                    "generated"
+                  ]
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "snippet": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "highlighted": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "text",
+                      "highlighted"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "href": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "fragmentId",
+                "sourceKind",
+                "layer",
+                "sourceId",
+                "sourceRevisionId",
+                "sourceRevision",
+                "authority",
+                "score",
+                "snippet",
+                "href"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "hasMore": {
+                "type": "boolean"
+              },
+              "nextCursor": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "Opaque, server-issued deterministic pagination cursor."
+              }
+            },
+            "required": [
+              "hasMore"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "LexicalSearchRequest": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "limit": {
+            "default": 20,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque, server-issued deterministic pagination cursor."
+          },
+          "layers": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "typed_text",
+                "nudge_response",
+                "raw_stt",
+                "corrected",
+                "cleaned",
+                "observation",
+                "interpretation",
+                "summary",
+                "memory"
+              ]
+            }
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Canonical YYYY-MM-DD journal date."
+          },
+          "dateTo": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Canonical YYYY-MM-DD journal date."
+          },
+          "contributionTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "typed_text",
+                "recording",
+                "nudge_response"
+              ]
+            }
+          },
+          "processorId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "resultType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "entity": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "generated"
+            ]
+          }
+        },
+        "required": [
+          "q",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "LexicalSearchResult": {
+        "type": "object",
+        "properties": {
+          "fragmentId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "contribution_revision",
+              "transcript_revision",
+              "artifact_version",
+              "artifact_manual_revision",
+              "memory_revision"
+            ]
+          },
+          "layer": {
+            "type": "string",
+            "enum": [
+              "typed_text",
+              "nudge_response",
+              "raw_stt",
+              "corrected",
+              "cleaned",
+              "observation",
+              "interpretation",
+              "summary",
+              "memory"
+            ]
+          },
+          "sourceId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "sourceRevisionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "journalDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+            "description": "Canonical YYYY-MM-DD journal date."
+          },
+          "contributionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "transcriptId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "artifactId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "memoryId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "processorId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "processorVersionId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "description": "Canonical lowercase RFC 9562 UUIDv7."
+          },
+          "processorName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contributionType": {
+            "type": "string",
+            "enum": [
+              "typed_text",
+              "recording",
+              "nudge_response"
+            ]
+          },
+          "resultType": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "generated"
+            ]
+          },
+          "score": {
+            "type": "number",
+            "minimum": 0
+          },
+          "snippet": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "highlighted": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "text",
+                "highlighted"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "href": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "fragmentId",
+          "sourceKind",
+          "layer",
+          "sourceId",
+          "sourceRevisionId",
+          "sourceRevision",
+          "authority",
+          "score",
+          "snippet",
+          "href"
         ],
         "additionalProperties": false
       },

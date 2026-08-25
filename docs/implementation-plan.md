@@ -384,7 +384,7 @@ Nudges are generated only after successful-enough processing, consolidated into 
 
 ## 10. Phase 7: Retrieval and data lifecycle
 
-### 44. Lexical search
+### 44. Lexical search - FINISHED
 
 Build revision-aware PostgreSQL full-text indexing, deterministic ranking, filters, snippets, layer selection, and immediate exclusion of stale or deleted data.
 

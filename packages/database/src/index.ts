@@ -45,6 +45,7 @@ export {
   recordings,
   recordingUploads,
   sessions,
+  searchFragments,
   transcriptCleanupRuns,
   transcriptEvidenceSpans,
   transcriptionRuns,
@@ -92,6 +93,12 @@ export {
   type NudgeActionResult,
   type NudgeScheduleResult,
 } from './nudge-repository.js';
+export {
+  SearchRepository,
+  type LexicalSearchCursor,
+  type LexicalSearchFilters,
+  type LexicalSearchRow,
+} from './search-repository.js';
 export {
   assembleApprovedTranscriptionContext,
   MAX_STT_MEMORY_CONTEXT_ITEMS,

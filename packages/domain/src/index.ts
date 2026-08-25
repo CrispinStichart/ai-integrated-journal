@@ -14,6 +14,7 @@ export * from './nudges.js';
 export * from './processing-lifecycle.js';
 export * from './reconciliation.js';
 export * from './reprocessing.js';
+export * from './search.js';
 export * from './revision.js';
 export * from './semantic-value.js';
 export * from './temporal.js';

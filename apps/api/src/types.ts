@@ -10,6 +10,7 @@ import type { ArtifactService } from './artifact-service.js';
 import type { ReprocessingService } from './reprocessing-service.js';
 import type { MemoryService } from './memory-service.js';
 import type { NudgeService } from './nudge-service.js';
+import type { SearchService } from './search-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -55,6 +56,7 @@ export interface ApiDependencies {
   readonly recordingService?: RecordingService;
   readonly processorService?: ProcessorService;
   readonly reprocessingService?: ReprocessingService;
+  readonly searchService?: SearchService;
   readonly transcriptService?: TranscriptService;
   readonly now?: () => Date;
   readonly createCorrelationId?: () => string;
