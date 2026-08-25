@@ -1,6 +1,8 @@
 import {
+  groundedAnswerSchema,
   lexicalSearchPageSchema,
   problemDetailsSchema,
+  type GroundedAnswerRequest,
   type LexicalSearchRequest,
 } from '@journal/contracts';
 
@@ -33,4 +35,44 @@ export async function lexicalSearch(input: SearchInput, cursor?: string) {
     );
   }
   return lexicalSearchPageSchema.parse(body);
+}
+
+async function parseResponse(response: Response, fallback: string) {
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    const problem = problemDetailsSchema.safeParse(body);
+    throw new Error(
+      problem.success ? (problem.data.detail ?? problem.data.title) : fallback,
+    );
+  }
+  return body;
+}
+
+export async function askGroundedAnswer(input: {
+  request: GroundedAnswerRequest;
+  csrfToken: string;
+}) {
+  const response = await fetch('/api/v1/search/answers', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'content-type': 'application/json',
+      'idempotency-key': `answer-${crypto.randomUUID()}`,
+      'x-csrf-token': input.csrfToken,
+    },
+    body: JSON.stringify(input.request),
+  });
+  return groundedAnswerSchema.parse(
+    await parseResponse(response, 'The grounded answer could not be started.'),
+  );
+}
+
+export async function getGroundedAnswer(answerId: string) {
+  const response = await fetch(
+    `/api/v1/search/answers/${encodeURIComponent(answerId)}`,
+    { credentials: 'same-origin' },
+  );
+  return groundedAnswerSchema.parse(
+    await parseResponse(response, 'The grounded answer could not be loaded.'),
+  );
 }

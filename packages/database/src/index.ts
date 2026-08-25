@@ -23,6 +23,8 @@ export {
   contributionRevisions,
   contributions,
   feedback,
+  groundedAnswerCitations,
+  groundedAnswers,
   journalDays,
   journalApiIdempotency,
   memories,
@@ -88,6 +90,15 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  GROUNDED_ANSWER_CONFIGURATION,
+  GROUNDED_ANSWER_OPERATION,
+  GroundedAnswerIdempotencyConflictError,
+  GroundedAnswerRepository,
+  type CanonicalGroundedAnswerInput,
+  type GroundedAnswerCandidateRecord,
+  type GroundedAnswerRecord,
+} from './grounded-answer-repository.js';
 export {
   NudgeConflictError,
   NudgeNotFoundError,

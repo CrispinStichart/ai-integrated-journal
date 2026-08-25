@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import type { SearchLayer } from '@journal/contracts';
-import { useInfiniteQuery, useQuery } from '@tanstack/vue-query';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/vue-query';
 import { computed, reactive, ref } from 'vue';
 
+import { useAuthentication } from '../auth';
 import { listProcessors } from '../processor/api';
-import { lexicalSearch, type SearchInput } from '../search/api';
+import {
+  askGroundedAnswer,
+  getGroundedAnswer,
+  lexicalSearch,
+  type SearchInput,
+} from '../search/api';
 
 const layerOptions: readonly Readonly<{ value: SearchLayer; label: string }>[] =
   [
@@ -38,6 +44,8 @@ const form = reactive({
 });
 const submitted = ref<SearchInput>();
 const validationMessage = ref('');
+const answerId = ref<string>();
+const auth = useAuthentication();
 
 const processorQuery = useQuery({
   queryKey: ['processors', 'search-filter'],
@@ -54,6 +62,26 @@ const searchQuery = useInfiniteQuery({
   },
   getNextPageParam: (lastPage) => lastPage.page.nextCursor,
 });
+const answerMutation = useMutation({
+  mutationFn: askGroundedAnswer,
+  onSuccess: (answer) => {
+    answerId.value = answer.id;
+  },
+});
+const answerQuery = useQuery({
+  queryKey: computed(() => ['grounded-answer', answerId.value]),
+  enabled: computed(() => answerId.value !== undefined),
+  queryFn: () => {
+    if (answerId.value === undefined)
+      throw new Error('No grounded answer has been requested.');
+    return getGroundedAnswer(answerId.value);
+  },
+  refetchInterval: (query) =>
+    query.state.data?.status === 'queued' ||
+    query.state.data?.status === 'running'
+      ? 750
+      : false,
+});
 const results = computed(
   () => searchQuery.data.value?.pages.flatMap((page) => page.items) ?? [],
 );
@@ -68,17 +96,23 @@ const fallbackMessage = computed(() => {
 });
 
 function submit(): void {
+  const input = formInput();
+  if (input === undefined) return;
+  submitted.value = input;
+}
+
+function formInput(): SearchInput | undefined {
   const q = form.q.trim();
   if (q.length === 0) {
     validationMessage.value = 'Enter words or a quoted phrase to search.';
-    return;
+    return undefined;
   }
   if (selectedLayers.value.length === 0) {
     validationMessage.value = 'Choose at least one source or result layer.';
-    return;
+    return undefined;
   }
   validationMessage.value = '';
-  submitted.value = {
+  return {
     q,
     mode: form.mode,
     layers: [...selectedLayers.value],
@@ -99,6 +133,40 @@ function submit(): void {
       ? { authority: form.authority as 'manual' | 'generated' }
       : {}),
   };
+}
+
+function ask(): void {
+  const input = formInput();
+  if (input === undefined) return;
+  submitted.value = input;
+  answerId.value = undefined;
+  const csrfToken = auth.status.value?.csrfToken;
+  if (csrfToken === undefined) {
+    validationMessage.value =
+      'Refresh your session before generating an answer.';
+    return;
+  }
+  answerMutation.mutate({
+    csrfToken,
+    request: {
+      question: input.q,
+      mode: input.mode ?? 'hybrid',
+      ...(input.layers === undefined ? {} : { layers: input.layers }),
+      ...(input.dateFrom === undefined ? {} : { dateFrom: input.dateFrom }),
+      ...(input.dateTo === undefined ? {} : { dateTo: input.dateTo }),
+      ...(input.contributionTypes === undefined
+        ? {}
+        : { contributionTypes: input.contributionTypes }),
+      ...(input.processorId === undefined
+        ? {}
+        : { processorId: input.processorId }),
+      ...(input.resultType === undefined
+        ? {}
+        : { resultType: input.resultType }),
+      ...(input.entity === undefined ? {} : { entity: input.entity }),
+      ...(input.authority === undefined ? {} : { authority: input.authority }),
+    },
+  });
 }
 
 function label(value: string): string {
@@ -147,7 +215,17 @@ function label(value: string): string {
             <option value="lexical">Words & phrases</option>
           </select>
         </fieldset>
-        <button class="btn" type="submit">Search journal</button>
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <button class="btn" type="submit">Search journal</button>
+          <button
+            class="btn"
+            type="button"
+            :disabled="answerMutation.isPending.value"
+            @click="ask"
+          >
+            Answer from evidence
+          </button>
+        </div>
       </div>
 
       <fieldset class="fieldset rounded-box border border-base-300 p-4">
@@ -264,6 +342,119 @@ function label(value: string): string {
     >
       {{ fallbackMessage }}
     </div>
+    <div
+      v-if="
+        answerMutation.isPending.value ||
+        answerQuery.data.value?.status === 'queued' ||
+        answerQuery.data.value?.status === 'running'
+      "
+      class="card card-border mt-6"
+      role="status"
+      aria-live="polite"
+    >
+      <div class="card-body flex-row items-center gap-3">
+        <span class="loading loading-spinner" aria-hidden="true" />
+        <div>
+          <h2 class="card-title">Building a grounded answer</h2>
+          <p class="text-sm text-base-content/70">
+            Generating only from the bounded retrieved sources.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div
+      v-else-if="
+        answerMutation.isError.value ||
+        answerQuery.isError.value ||
+        answerQuery.data.value?.status === 'failed'
+      "
+      class="alert alert-error mt-6"
+      role="alert"
+    >
+      Answer generation is unavailable or failed. This is a processing failure,
+      not a claim that your journal lacks information. Retrieved sources remain
+      available below.
+    </div>
+    <article
+      v-else-if="answerQuery.data.value?.status === 'insufficient_support'"
+      class="card card-border mt-6"
+      aria-labelledby="insufficient-answer-title"
+    >
+      <div class="card-body">
+        <span class="badge badge-warning"
+          >Insufficient supporting evidence</span
+        >
+        <h2 id="insufficient-answer-title" class="card-title">
+          I can’t answer that from the retrieved journal material
+        </h2>
+        <p class="text-base-content/70">
+          Try broader wording, fewer filters, or add a relevant journal entry.
+          No unsupported recollection was generated.
+        </p>
+      </div>
+    </article>
+    <article
+      v-else-if="answerQuery.data.value?.status === 'succeeded'"
+      class="card card-border mt-6"
+      aria-labelledby="grounded-answer-title"
+    >
+      <div class="card-body">
+        <div class="flex flex-wrap items-center gap-2">
+          <h2 id="grounded-answer-title" class="card-title">
+            Answer from your journal
+          </h2>
+          <span class="badge badge-outline">AI-generated synthesis</span>
+        </div>
+        <p class="whitespace-pre-wrap">
+          {{ answerQuery.data.value.synthesis }}
+        </p>
+        <div>
+          <h3 class="font-semibold">Retrieved supporting sources</h3>
+          <p class="mt-1 text-sm text-base-content/60">
+            These are quoted source fragments, separate from the synthesis.
+          </p>
+          <ul class="list mt-3 gap-3" aria-label="Answer citations">
+            <li
+              v-for="citation in answerQuery.data.value.citations"
+              :key="citation.citationId"
+              class="list-row rounded-box border border-base-300 p-4"
+            >
+              <div class="list-col-grow min-w-0">
+                <div class="flex flex-wrap gap-2">
+                  <span class="badge badge-ghost">Retrieved quote</span>
+                  <span class="badge badge-outline">{{
+                    label(citation.layer)
+                  }}</span>
+                </div>
+                <blockquote class="mt-3 border-l-4 border-base-300 pl-4">
+                  {{ citation.retrievedQuote }}
+                </blockquote>
+                <p class="mt-2 text-xs text-base-content/60">
+                  Exact revision {{ citation.sourceRevision }} ·
+                  {{ citation.journalDate ?? 'Approved memory' }} · UTF-16
+                  {{ citation.evidence.startUtf16 }}–{{
+                    citation.evidence.endUtf16
+                  }}
+                </p>
+                <RouterLink class="link mt-2 inline-block" :to="citation.href">
+                  Open precise supporting evidence
+                </RouterLink>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <details v-if="answerQuery.data.value.lineage" class="mt-2">
+          <summary class="cursor-pointer font-semibold">
+            Generation details
+          </summary>
+          <p class="mt-2 text-sm text-base-content/70">
+            Prompt {{ answerQuery.data.value.lineage.prompt.version }} · model
+            {{ answerQuery.data.value.lineage.model.id }} ·
+            {{ answerQuery.data.value.lineage.processingTimeMilliseconds }} ms
+          </p>
+        </details>
+      </div>
+    </article>
     <div
       v-if="searchQuery.isPending.value && submitted"
       class="mt-8 flex justify-center"

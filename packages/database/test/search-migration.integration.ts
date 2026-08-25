@@ -166,4 +166,16 @@ describe('lexical search forward migration', () => {
       },
     ]);
   });
+
+  it('[SEARCH-003][SEARCH-007] forward-migrates durable grounded-answer lineage and exact citation tables', async () => {
+    const tables = await client.pool.query<{ name: string | null }>(
+      `select to_regclass('journal.grounded_answer')::text as name
+       union all
+       select to_regclass('journal.grounded_answer_citation')::text as name`,
+    );
+    expect(tables.rows.map(({ name }) => name).sort()).toEqual([
+      'journal.grounded_answer',
+      'journal.grounded_answer_citation',
+    ]);
+  });
 });

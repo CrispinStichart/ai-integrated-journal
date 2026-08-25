@@ -175,6 +175,93 @@ test('[SEARCH-001][SEARCH-003–SEARCH-006] searches selected layers with safe e
   );
 });
 
+test('[SEARCH-003][SEARCH-004][SEARCH-007][SEC-005] renders grounded synthesis separately from inert exact evidence', async ({
+  page,
+}) => {
+  await authenticateShell(page);
+  const answerId = '019c5b90-0000-7000-8000-000000000043';
+  const revisionId = '019c5b90-0000-7000-8000-000000000041';
+  await page.route('**/api/v1/processors', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '{"items":[]}',
+    }),
+  );
+  await page.route('**/api/v1/search?*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [],
+        retrieval: { requestedMode: 'hybrid', effectiveMode: 'lexical' },
+        page: { hasMore: false },
+      }),
+    }),
+  );
+  const answer = {
+    id: answerId,
+    question: 'What did I do this morning?',
+    status: 'succeeded',
+    retrieval: { requestedMode: 'hybrid', effectiveMode: 'lexical' },
+    synthesis: 'You took a morning walk.',
+    citations: [
+      {
+        citationId: `cite_${'a'.repeat(32)}`,
+        sourceKind: 'contribution_revision',
+        layer: 'typed_text',
+        sourceId: '019c5b90-0000-7000-8000-000000000042',
+        sourceRevisionId: revisionId,
+        sourceRevision: 2,
+        journalDate: '2026-08-25',
+        authority: 'manual',
+        retrievedQuote:
+          '<img src=x onerror=window.answerXss=true> Morning walk',
+        evidence: {
+          normalization: 'NFC_LF_V1',
+          offsetUnit: 'utf16_code_unit',
+          startUtf16: 0,
+          endUtf16: 57,
+          quoteSha256: 'b'.repeat(64),
+        },
+        href: `/journal/2026-08-25?source=contribution_revision&revision=${revisionId}&startUtf16=0&endUtf16=57`,
+      },
+    ],
+    requestedAt: '2026-08-25T04:00:00.000Z',
+    completedAt: '2026-08-25T04:00:01.000Z',
+  };
+  await page.route('**/api/v1/search/answers', (route) =>
+    route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify(answer),
+    }),
+  );
+  await page.route(`**/api/v1/search/answers/${answerId}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(answer),
+    }),
+  );
+
+  await page.goto('/search');
+  await page
+    .getByRole('searchbox', { name: 'Words or quoted phrase' })
+    .fill('What did I do this morning?');
+  await page.getByRole('button', { name: 'Answer from evidence' }).click();
+  await expect(page.getByText('AI-generated synthesis')).toBeVisible();
+  await expect(page.getByText('You took a morning walk.')).toBeVisible();
+  await expect(page.getByText('Retrieved quote')).toBeVisible();
+  await expect(page.locator('blockquote img')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => Reflect.get(window, 'answerXss')),
+  ).toBeUndefined();
+  await expect(
+    page.getByRole('link', { name: 'Open precise supporting evidence' }),
+  ).toHaveAttribute('href', expect.stringContaining(`revision=${revisionId}`));
+});
+
 test('exposes an installable manifest and reloads the shell offline', async ({
   context,
   page,

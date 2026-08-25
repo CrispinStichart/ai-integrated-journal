@@ -1,4 +1,4 @@
-import type { LexicalSearchResult } from '@journal/contracts';
+import type { GroundedAnswer, LexicalSearchResult } from '@journal/contracts';
 import { silentLogger } from '@journal/observability';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
@@ -9,6 +9,7 @@ import {
   SearchCursorError,
   type SearchService,
 } from '../src/search-service.js';
+import type { GroundedAnswerService } from '../src/grounded-answer-service.js';
 
 const OWNER_ID = '019c5b90-0000-7000-8000-000000000040';
 const REVISION_ID = '019c5b90-0000-7000-8000-000000000041';
@@ -29,7 +30,10 @@ const result: LexicalSearchResult = {
   href: `/journal/2026-08-25?source=contribution_revision&revision=${REVISION_ID}`,
 };
 
-function app(service: SearchService) {
+function app(
+  service: SearchService,
+  groundedAnswerService?: GroundedAnswerService,
+) {
   return createApiApp({
     authenticator: {
       authenticate: async (incoming) =>
@@ -40,9 +44,20 @@ function app(service: SearchService) {
     eventFeed: createInMemoryEventFeed(),
     healthProbes: [],
     logger: silentLogger,
+    ...(groundedAnswerService === undefined ? {} : { groundedAnswerService }),
     searchService: service,
   });
 }
+
+const answer: GroundedAnswer = {
+  id: '019c5b90-0000-7000-8000-000000000043',
+  question: 'What happened?',
+  status: 'insufficient_support',
+  retrieval: { requestedMode: 'hybrid', effectiveMode: 'lexical' },
+  citations: [],
+  requestedAt: '2026-08-25T04:00:00.000Z',
+  completedAt: '2026-08-25T04:00:00.000Z',
+};
 
 describe('lexical search API', () => {
   it('[SEARCH-001][SEARCH-003][SEARCH-005][SEC-001] validates and owner-scopes complete lexical filters', async () => {
@@ -94,5 +109,44 @@ describe('lexical search API', () => {
       .set('authorization', 'Bearer valid')
       .expect(400)
       .expect((response) => expect(response.body.code).toBe('invalid_cursor'));
+  });
+
+  it('[SEARCH-003][SEARCH-007][SEC-001][STATE-004] authenticates, validates, and idempotently queues owner-scoped grounded answers', async () => {
+    const search: SearchService = {
+      search: vi.fn(async () => ({ items: [], retrieval: answer.retrieval })),
+    };
+    const grounded: GroundedAnswerService = {
+      ask: vi.fn(async () => answer),
+      get: vi.fn(async () => answer),
+    };
+    await request(app(search, grounded))
+      .post('/api/v1/search/answers')
+      .set('authorization', 'Bearer valid')
+      .send({ question: 'What happened?' })
+      .expect(428);
+    await request(app(search, grounded))
+      .post('/api/v1/search/answers')
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'grounded-fixture-1')
+      .send({ question: '' })
+      .expect(400);
+    const response = await request(app(search, grounded))
+      .post('/api/v1/search/answers')
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'grounded-fixture-1')
+      .send({ question: 'What happened?', mode: 'hybrid' })
+      .expect('cache-control', 'private, no-store')
+      .expect(202);
+    expect(response.body.status).toBe('insufficient_support');
+    expect(grounded.ask).toHaveBeenCalledWith(
+      OWNER_ID,
+      expect.objectContaining({ question: 'What happened?', mode: 'hybrid' }),
+      'grounded-fixture-1',
+    );
+    await request(app(search, grounded))
+      .get(`/api/v1/search/answers/${answer.id}`)
+      .set('authorization', 'Bearer valid')
+      .expect(200);
+    expect(grounded.get).toHaveBeenCalledWith(OWNER_ID, answer.id);
   });
 });

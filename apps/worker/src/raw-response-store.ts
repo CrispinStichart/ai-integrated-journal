@@ -11,6 +11,7 @@ import {
   transcriptCleanupRuns,
   transcriptionRuns,
   processorRuns,
+  groundedAnswers,
   type JournalDatabase,
 } from '@journal/database';
 import { BlobNotFoundError, type BlobStore } from '@journal/storage';
@@ -141,7 +142,22 @@ export class BlobRawResponseStore implements RawResponseStore {
             .where(eq(processorRuns.rawResponseId, id))
             .limit(1)
         : [];
-    const run = transcriptionRun ?? cleanupRun ?? processorRun;
+    const [groundedAnswer] =
+      transcriptionRun === undefined &&
+      cleanupRun === undefined &&
+      processorRun === undefined
+        ? await this.database
+            .select({
+              blobKey: groundedAnswers.rawResponseBlobKey,
+              mediaType: groundedAnswers.rawResponseMediaType,
+              providerRequestId: groundedAnswers.rawResponseProviderRequestId,
+            })
+            .from(groundedAnswers)
+            .where(eq(groundedAnswers.rawResponseId, id))
+            .limit(1)
+        : [];
+    const run =
+      transcriptionRun ?? cleanupRun ?? processorRun ?? groundedAnswer;
     if (run?.blobKey === null || run?.mediaType === null || run === undefined) {
       throw new RawResponseNotAvailableError();
     }

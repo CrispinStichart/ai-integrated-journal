@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { lexicalSearch } from '../src/search/api';
+import {
+  askGroundedAnswer,
+  getGroundedAnswer,
+  lexicalSearch,
+} from '../src/search/api';
 
 const response = {
   items: [
@@ -54,5 +58,46 @@ describe('search API client', () => {
     expect(url).toContain('contributionTypes=typed_text%2Crecording');
     expect(url).toContain('cursor=next_cursor');
     expect(url).toContain('mode=hybrid');
+  });
+
+  it('[SEARCH-003][SEARCH-007][SEC-002] submits an idempotent CSRF-protected answer request and validates polling responses', async () => {
+    const answer = {
+      id: '019c5b90-0000-7000-8000-000000000043',
+      question: 'What happened?',
+      status: 'insufficient_support',
+      retrieval: {
+        requestedMode: 'hybrid',
+        effectiveMode: 'lexical',
+        fallbackReason: 'provider_unavailable',
+      },
+      citations: [],
+      requestedAt: '2026-08-25T04:00:00.000Z',
+      completedAt: '2026-08-25T04:00:00.000Z',
+    };
+    const fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(answer), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    vi.stubGlobal('crypto', { randomUUID: () => 'fixture-request-id' });
+    await expect(
+      askGroundedAnswer({
+        csrfToken: 'csrf-fixture',
+        request: { question: 'What happened?', mode: 'hybrid' },
+      }),
+    ).resolves.toMatchObject({ status: 'insufficient_support' });
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      headers: expect.objectContaining({
+        'idempotency-key': 'answer-fixture-request-id',
+        'x-csrf-token': 'csrf-fixture',
+      }),
+    });
+    await expect(getGroundedAnswer(answer.id)).resolves.toMatchObject({
+      id: answer.id,
+    });
+    expect(String(fetch.mock.calls[1]?.[0])).toContain(answer.id);
   });
 });

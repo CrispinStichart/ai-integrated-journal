@@ -26,6 +26,7 @@ import { PostgresTranscriptService } from './transcript-service.js';
 import { PostgresArtifactService } from './artifact-service.js';
 import { PostgresMemoryService } from './memory-service.js';
 import { PostgresSearchService } from './search-service.js';
+import { PostgresGroundedAnswerService } from './grounded-answer-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -97,12 +98,26 @@ const authenticationService = new AuthenticationService({
 });
 
 const eventFeed = createInMemoryEventFeed();
+const searchService = new PostgresSearchService(
+  database.database,
+  undefined,
+  () =>
+    providers.resolve(
+      { providerId: 'unconfigured', enabled: false, settings: {} },
+      'embeddings',
+    ),
+);
 const app = createApiApp({
   artifactService: new PostgresArtifactService(database.database),
   authenticator: authenticationService,
   authenticationService,
   eventFeed,
   healthProbes,
+  groundedAnswerService: new PostgresGroundedAnswerService(
+    database.database,
+    boss,
+    searchService,
+  ),
   logger,
   journalService: new PostgresJournalService(
     database.database,
@@ -120,12 +135,7 @@ const app = createApiApp({
   ),
   processorService: new PostgresProcessorService(database.database),
   reprocessingService: new PostgresReprocessingService(database.database, boss),
-  searchService: new PostgresSearchService(database.database, undefined, () =>
-    providers.resolve(
-      { providerId: 'unconfigured', enabled: false, settings: {} },
-      'embeddings',
-    ),
-  ),
+  searchService,
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

@@ -9,6 +9,7 @@ export const queueNames = {
   backup: 'journal.backup',
   cleanup: 'journal.cleanup',
   deadLetter: 'journal.dead-letter',
+  groundedAnswers: 'journal.grounded-answers',
   maintenance: 'journal.maintenance',
   notifications: 'journal.notifications',
   processing: 'journal.processing',
@@ -133,6 +134,19 @@ export const queueDefinitions: Readonly<Record<QueueName, QueueDefinition>> =
         retryLimit: 5,
       },
       2,
+    ),
+    [queueNames.groundedAnswers]: queueDefinition(
+      queueNames.groundedAnswers,
+      {
+        deadLetter: queueNames.deadLetter,
+        deleteAfterSeconds: 30 * 24 * 60 * 60,
+        expireInSeconds: 2 * 60,
+        retentionSeconds: 30 * 24 * 60 * 60,
+        retryBackoff: true,
+        retryDelay: 30,
+        retryLimit: 3,
+      },
+      1,
     ),
     [queueNames.backup]: queueDefinition(
       queueNames.backup,

@@ -392,7 +392,7 @@ Build revision-aware PostgreSQL full-text indexing, deterministic ranking, filte
 
 Add optional embeddings, compatible provider/model/dimension cohorts, reciprocal-rank fusion, and lifecycle-aware reindexing.
 
-### 46. Grounded answers
+### 46. Grounded answers - FINISHED
 
 Generate only from retrieved fragments. Validate returned citation IDs, link to precise evidence, distinguish quoted or retrieved sources from synthesis, and report insufficient support instead of inventing an answer.
 

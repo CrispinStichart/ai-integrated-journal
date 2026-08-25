@@ -136,6 +136,14 @@ export const nudgeActionKind = pgEnum('nudge_action_kind', [
   'not_applicable',
 ]);
 
+export const groundedAnswerStatus = pgEnum('grounded_answer_status', [
+  'queued',
+  'running',
+  'succeeded',
+  'insufficient_support',
+  'failed',
+]);
+
 export const users = journalSchema.table(
   'user',
   {
@@ -2731,6 +2739,175 @@ export const searchEmbeddingRequests = journalSchema.table(
   ],
 );
 
+/** Immutable request, generation lineage, and terminal grounded synthesis. */
+export const groundedAnswers = journalSchema.table(
+  'grounded_answer',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    question: text('question').notNull(),
+    request: jsonb('request')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    requestHash: text('request_hash').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    retrieval: jsonb('retrieval')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    status: groundedAnswerStatus('status').notNull().default('queued'),
+    jobId: uuid('job_id'),
+    synthesis: text('synthesis'),
+    failureCode: text('failure_code'),
+    promptId: text('prompt_id').notNull(),
+    promptVersion: text('prompt_version').notNull(),
+    promptTemplateHash: text('prompt_template_hash').notNull(),
+    requestedConfiguration: jsonb('requested_configuration')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    effectiveMessagesHash: text('effective_messages_hash'),
+    provider: jsonb('provider').$type<Readonly<Record<string, unknown>>>(),
+    model: jsonb('model').$type<Readonly<Record<string, unknown>>>(),
+    effectiveConfiguration: jsonb('effective_configuration').$type<
+      Readonly<Record<string, unknown>>
+    >(),
+    usage: jsonb('usage').$type<Readonly<Record<string, unknown>>>(),
+    processingTimeMilliseconds: bigint('processing_time_milliseconds', {
+      mode: 'bigint',
+    }),
+    rawResponseId: uuid('raw_response_id'),
+    rawResponseBlobKey: text('raw_response_blob_key'),
+    rawResponseMediaType: text('raw_response_media_type'),
+    rawResponseByteSize: bigint('raw_response_byte_size', { mode: 'bigint' }),
+    rawResponseSha256: text('raw_response_sha256'),
+    rawResponseProviderRequestId: text('raw_response_provider_request_id'),
+    rawResponseRetention: text('raw_response_retention'),
+    rawResponseExpiresAt: timestamp('raw_response_expires_at', {
+      withTimezone: true,
+    }),
+    requestedAt: timestamp('requested_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('grounded_answer_owner_idempotency_unique').on(
+      table.ownerId,
+      table.idempotencyKey,
+    ),
+    index('grounded_answer_owner_requested_idx').on(
+      table.ownerId,
+      table.requestedAt,
+      table.id,
+    ),
+    uniqueIndex('grounded_answer_job_unique')
+      .on(table.jobId)
+      .where(sql`${table.jobId} is not null`),
+    uniqueIndex('grounded_answer_raw_response_unique')
+      .on(table.rawResponseId)
+      .where(sql`${table.rawResponseId} is not null`),
+    check(
+      'grounded_answer_id_uuid_v7',
+      sql`substring(${table.id}::text from 15 for 1) = '7'`,
+    ),
+    check(
+      'grounded_answer_question_bounded',
+      sql`length(btrim(${table.question})) between 1 and 200`,
+    ),
+    check(
+      'grounded_answer_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'grounded_answer_prompt_hash_sha256',
+      sql`${table.promptTemplateHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'grounded_answer_effective_messages_hash_sha256',
+      sql`${table.effectiveMessagesHash} is null or ${table.effectiveMessagesHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'grounded_answer_raw_response_hash_sha256',
+      sql`${table.rawResponseSha256} is null or ${table.rawResponseSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      'grounded_answer_terminal_consistent',
+      sql`(${table.status} in ('succeeded', 'insufficient_support', 'failed') and ${table.completedAt} is not null) or (${table.status} in ('queued', 'running') and ${table.completedAt} is null)`,
+    ),
+    check(
+      'grounded_answer_synthesis_consistent',
+      sql`(${table.status} = 'succeeded' and length(btrim(${table.synthesis})) > 0 and ${table.failureCode} is null) or (${table.status} = 'failed' and ${table.synthesis} is null and ${table.failureCode} is not null) or (${table.status} in ('queued', 'running', 'insufficient_support') and ${table.synthesis} is null)`,
+    ),
+    check(
+      'grounded_answer_raw_response_complete',
+      sql`(${table.rawResponseId} is null and ${table.rawResponseBlobKey} is null and ${table.rawResponseMediaType} is null and ${table.rawResponseByteSize} is null and ${table.rawResponseSha256} is null and ${table.rawResponseRetention} is null and ${table.rawResponseExpiresAt} is null) or (${table.rawResponseId} is not null and ${table.rawResponseBlobKey} is not null and ${table.rawResponseMediaType} is not null and ${table.rawResponseByteSize} is not null and ${table.rawResponseSha256} is not null and ${table.rawResponseRetention} is not null and ${table.rawResponseExpiresAt} is not null)`,
+    ),
+  ],
+);
+
+/** Exact retrieved text supplied to generation, with opaque model-facing IDs. */
+export const groundedAnswerCitations = journalSchema.table(
+  'grounded_answer_citation',
+  {
+    answerId: uuid('answer_id')
+      .notNull()
+      .references(() => groundedAnswers.id, { onDelete: 'cascade' }),
+    citationId: text('citation_id').notNull(),
+    suppliedOrdinal: integer('supplied_ordinal').notNull(),
+    citedOrdinal: integer('cited_ordinal'),
+    fragmentId: uuid('fragment_id').notNull(),
+    sourceKind: text('source_kind').notNull(),
+    layer: text('layer').notNull(),
+    sourceId: uuid('source_id').notNull(),
+    sourceRevisionId: uuid('source_revision_id').notNull(),
+    sourceRevision: integer('source_revision').notNull(),
+    journalDate: date('journal_date', { mode: 'string' }),
+    authority: contributionAuthority('authority').notNull(),
+    retrievedQuote: text('retrieved_quote').notNull(),
+    normalization: text('normalization').notNull(),
+    offsetUnit: text('offset_unit').notNull(),
+    startUtf16: integer('start_utf16').notNull(),
+    endUtf16: integer('end_utf16').notNull(),
+    quoteSha256: text('quote_sha256').notNull(),
+    href: text('href').notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'grounded_answer_citation_pk',
+      columns: [table.answerId, table.citationId],
+    }),
+    uniqueIndex('grounded_answer_citation_supplied_unique').on(
+      table.answerId,
+      table.suppliedOrdinal,
+    ),
+    uniqueIndex('grounded_answer_citation_cited_unique')
+      .on(table.answerId, table.citedOrdinal)
+      .where(sql`${table.citedOrdinal} is not null`),
+    check(
+      'grounded_answer_citation_id_opaque',
+      sql`${table.citationId} ~ '^cite_[0-9a-f]{32}$'`,
+    ),
+    check(
+      'grounded_answer_citation_ordinals_valid',
+      sql`${table.suppliedOrdinal} between 0 and 7 and (${table.citedOrdinal} is null or ${table.citedOrdinal} between 0 and 7)`,
+    ),
+    check(
+      'grounded_answer_citation_quote_bounded',
+      sql`length(${table.retrievedQuote}) between 1 and 2000`,
+    ),
+    check(
+      'grounded_answer_citation_evidence_contract',
+      sql`${table.normalization} = 'NFC_LF_V1' and ${table.offsetUnit} = 'utf16_code_unit' and ${table.startUtf16} = 0 and ${table.endUtf16} between 1 and 2000`,
+    ),
+    check(
+      'grounded_answer_citation_quote_sha256',
+      sql`${table.quoteSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const feedback = journalSchema.table(
   'feedback',
   {
@@ -3132,6 +3309,8 @@ export const databaseSchema = {
   contributions,
   developmentFixtures,
   feedback,
+  groundedAnswerCitations,
+  groundedAnswers,
   journalDays,
   journalApiIdempotency,
   memories,

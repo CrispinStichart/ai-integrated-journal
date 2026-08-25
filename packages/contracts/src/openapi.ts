@@ -96,6 +96,8 @@ import {
 } from './reprocessing.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
 import {
+  groundedAnswerRequestSchema,
+  groundedAnswerSchema,
   lexicalSearchPageSchema,
   lexicalSearchRequestSchema,
   lexicalSearchResultSchema,
@@ -866,6 +868,37 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/search/answers': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('GroundedAnswerRequest'),
+          responses: {
+            '202': schemaResponse(
+              'Queued grounded answer or immediate insufficient-support result',
+              'GroundedAnswer',
+            ),
+            '400': problemResponse('Invalid grounded-answer request'),
+            '401': problemResponse('Authentication required'),
+            '409': problemResponse('Idempotency conflict'),
+            '428': problemResponse('Idempotency-Key header required'),
+          },
+        },
+      },
+      '/api/v1/search/answers/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Grounded synthesis and separately typed exact-revision evidence',
+              'GroundedAnswer',
+            ),
+            '400': problemResponse('Invalid answer ID'),
+            '401': problemResponse('Authentication required'),
+            '404': problemResponse('Grounded answer not found'),
+          },
+        },
+      },
       '/api/v1/memories/{id}': {
         get: {
           security: [{ sessionCookie: [] }],
@@ -1093,6 +1126,8 @@ export function createOpenApiDocument(): Record<string, unknown> {
         ),
         HealthDependency: componentSchema(healthDependencySchema),
         HealthDetailsResponse: componentSchema(healthDetailsResponseSchema),
+        GroundedAnswer: componentSchema(groundedAnswerSchema),
+        GroundedAnswerRequest: componentSchema(groundedAnswerRequestSchema),
         IdempotencyResponseMetadata: componentSchema(
           idempotencyResponseMetadataSchema,
         ),

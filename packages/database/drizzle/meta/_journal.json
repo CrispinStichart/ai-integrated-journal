@@ -176,6 +176,20 @@
       "when": 1787629697586,
       "tag": "20260825034817_perpetual_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787633286049,
+      "tag": "20260825044806_worthless_nekra",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1787633905895,
+      "tag": "20260825045825_robust_sage",
+      "breakpoints": true
     }
   ]
 }

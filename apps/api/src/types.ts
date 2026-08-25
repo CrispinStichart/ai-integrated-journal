@@ -11,6 +11,7 @@ import type { ReprocessingService } from './reprocessing-service.js';
 import type { MemoryService } from './memory-service.js';
 import type { NudgeService } from './nudge-service.js';
 import type { SearchService } from './search-service.js';
+import type { GroundedAnswerService } from './grounded-answer-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -49,6 +50,7 @@ export interface ApiDependencies {
   readonly authenticationService?: AuthenticationService;
   readonly eventFeed: EventFeed;
   readonly healthProbes: readonly HealthProbe[];
+  readonly groundedAnswerService?: GroundedAnswerService;
   readonly logger: ContentSafeLogger;
   readonly journalService?: JournalService;
   readonly memoryService?: MemoryService;

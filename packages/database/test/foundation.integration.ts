@@ -58,7 +58,7 @@ describe('DB-JOURNAL foundation', () => {
       sql`select count(*)::integer as count from journal.queue_configuration`,
     );
 
-    expect(before.rows).toEqual([{ count: 8 }]);
+    expect(before.rows).toEqual([{ count: 9 }]);
     expect(after.rows).toEqual(before.rows);
 
     const fixtures = await client.database.execute(
@@ -79,7 +79,7 @@ describe('DB-JOURNAL foundation', () => {
       sql`select key from journal.development_fixture order by key`,
     );
 
-    expect(queues).toHaveLength(8);
+    expect(queues).toHaveLength(9);
     expect(schedules).toHaveLength(4);
     expect(schedules.map(({ key }) => key)).toContain(
       'search.embeddings.dispatch',
@@ -271,7 +271,7 @@ describe('DB-JOURNAL foundation', () => {
         });
 
         const repository = new FoundationRepository(transaction);
-        expect(await repository.listQueueConfigurations()).toHaveLength(8);
+        expect(await repository.listQueueConfigurations()).toHaveLength(9);
         throw forcedRollback;
       }),
     ).rejects.toBe(forcedRollback);
