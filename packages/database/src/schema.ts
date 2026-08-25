@@ -144,6 +144,33 @@ export const groundedAnswerStatus = pgEnum('grounded_answer_status', [
   'failed',
 ]);
 
+export const retentionEntityKind = pgEnum('retention_entity_kind', [
+  'journal_day',
+  'contribution',
+  'recording_audio',
+  'provider_raw_response',
+]);
+
+export const deletionRequestStatus = pgEnum('deletion_request_status', [
+  'pending',
+  'purging',
+  'completed',
+  'failed',
+]);
+
+export const retentionBlobKind = pgEnum('retention_blob_kind', [
+  'final_audio',
+  'staging_chunk',
+  'provider_raw_response',
+  'export_archive',
+]);
+
+export const retentionCleanupStatus = pgEnum('retention_cleanup_status', [
+  'pending',
+  'deleted',
+  'failed',
+]);
+
 export const users = journalSchema.table(
   'user',
   {
@@ -3300,11 +3327,192 @@ export const auditEvents = journalSchema.table(
   ],
 );
 
+/** Owner defaults are independently configurable; task 50 provides the full settings UI. */
+export const retentionPolicies = journalSchema.table(
+  'retention_policy',
+  {
+    ownerId: uuid('owner_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    materialGraceDays: integer('material_grace_days').notNull().default(30),
+    audioGraceDays: integer('audio_grace_days').notNull().default(30),
+    rawResponseRetentionDays: integer('raw_response_retention_days')
+      .notNull()
+      .default(30),
+    originalAudioRetention: text('original_audio_retention')
+      .notNull()
+      .default('indefinite'),
+    deletionGeneration: integer('deletion_generation').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      'retention_policy_material_grace_bounded',
+      sql`${table.materialGraceDays} between 0 and 3650`,
+    ),
+    check(
+      'retention_policy_audio_grace_bounded',
+      sql`${table.audioGraceDays} between 0 and 3650`,
+    ),
+    check(
+      'retention_policy_raw_response_bounded',
+      sql`${table.rawResponseRetentionDays} between 0 and 3650`,
+    ),
+    check(
+      'retention_policy_audio_default_valid',
+      sql`${table.originalAudioRetention} in ('indefinite', '30_days', '90_days', '365_days')`,
+    ),
+    check(
+      'retention_policy_generation_nonnegative',
+      sql`${table.deletionGeneration} >= 0`,
+    ),
+  ],
+);
+
+/** Append-only, owner-scoped and deliberately free of content, keys, and hashes. */
+export const deletionTombstones = journalSchema.table(
+  'deletion_tombstone',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    entityKind: retentionEntityKind('entity_kind').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull(),
+    generation: integer('generation').notNull(),
+    correlationId: uuid('correlation_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('deletion_tombstone_owner_kind_entity_unique').on(
+      table.ownerId,
+      table.entityKind,
+      table.entityId,
+    ),
+    uniqueIndex('deletion_tombstone_owner_generation_unique').on(
+      table.ownerId,
+      table.generation,
+    ),
+    index('deletion_tombstone_owner_generation_idx').on(
+      table.ownerId,
+      table.generation,
+    ),
+    check(
+      'deletion_tombstone_generation_positive',
+      sql`${table.generation} > 0`,
+    ),
+  ],
+);
+
+export const permanentDeletionRequests = journalSchema.table(
+  'permanent_deletion_request',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    entityKind: retentionEntityKind('entity_kind').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    tombstoneId: uuid('tombstone_id')
+      .notNull()
+      .references(() => deletionTombstones.id, { onDelete: 'restrict' }),
+    generation: integer('generation').notNull(),
+    status: deletionRequestStatus('status').notNull().default('pending'),
+    eligibleAt: timestamp('eligible_at', { withTimezone: true }).notNull(),
+    requestedAt: timestamp('requested_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    backupCheckpoint: text('backup_checkpoint')
+      .notNull()
+      .default('not_configured'),
+    browserPurgeAcknowledged: boolean('browser_purge_acknowledged')
+      .notNull()
+      .default(false),
+    errorCode: text('error_code'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('permanent_deletion_request_owner_kind_entity_unique').on(
+      table.ownerId,
+      table.entityKind,
+      table.entityId,
+    ),
+    index('permanent_deletion_request_work_idx').on(
+      table.status,
+      table.eligibleAt,
+      table.id,
+    ),
+    check(
+      'permanent_deletion_request_generation_positive',
+      sql`${table.generation} > 0`,
+    ),
+    check(
+      'permanent_deletion_request_attempts_nonnegative',
+      sql`${table.attempts} >= 0`,
+    ),
+    check(
+      'permanent_deletion_request_backup_state_valid',
+      sql`${table.backupCheckpoint} in ('not_configured', 'pending', 'committed')`,
+    ),
+    check(
+      'permanent_deletion_request_completion_consistent',
+      sql`(${table.status} = 'completed' and ${table.completedAt} is not null) or (${table.status} <> 'completed' and ${table.completedAt} is null)`,
+    ),
+  ],
+);
+
+/** Temporary operational keys disappear with the completed request; tombstones never contain them. */
+export const retentionBlobCleanupItems = journalSchema.table(
+  'retention_blob_cleanup_item',
+  {
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => permanentDeletionRequests.id, { onDelete: 'cascade' }),
+    blobKey: text('blob_key').notNull(),
+    blobKind: retentionBlobKind('blob_kind').notNull(),
+    status: retentionCleanupStatus('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastErrorCode: text('last_error_code'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'retention_blob_cleanup_item_pk',
+      columns: [table.requestId, table.blobKey],
+    }),
+    index('retention_blob_cleanup_pending_idx').on(
+      table.status,
+      table.requestId,
+    ),
+    check(
+      'retention_blob_cleanup_key_not_blank',
+      sql`length(${table.blobKey}) > 0`,
+    ),
+    check(
+      'retention_blob_cleanup_attempts_nonnegative',
+      sql`${table.attempts} >= 0`,
+    ),
+  ],
+);
+
 export const databaseSchema = {
   artifactApiIdempotency,
   authChallenges,
   authenticators,
   auditEvents,
+  deletionTombstones,
   contributionRevisions,
   contributions,
   developmentFixtures,
@@ -3313,6 +3521,7 @@ export const databaseSchema = {
   groundedAnswers,
   journalDays,
   journalApiIdempotency,
+  permanentDeletionRequests,
   memories,
   memoryApiIdempotency,
   memoryRevisions,
@@ -3340,6 +3549,8 @@ export const databaseSchema = {
   reprocessingApiIdempotency,
   reprocessingBatchItems,
   reprocessingBatches,
+  retentionBlobCleanupItems,
+  retentionPolicies,
   queueConfigurations,
   recoveryCodes,
   recordingApiIdempotency,

@@ -94,6 +94,15 @@ import {
   reprocessingPreviewResponseSchema,
   startReprocessingRequestSchema,
 } from './reprocessing.js';
+import {
+  browserPurgeAcknowledgementSchema,
+  deletionTombstonePageSchema,
+  permanentDeletionMutationResponseSchema,
+  permanentDeletionPreviewRequestSchema,
+  permanentDeletionPreviewSchema,
+  permanentDeletionRequestSchema,
+  permanentDeletionResourceSchema,
+} from './retention.js';
 import { semanticJsonValueSchema } from './semantic-value.js';
 import {
   groundedAnswerRequestSchema,
@@ -1073,6 +1082,91 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/retention/permanent-deletions/preview': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('PermanentDeletionPreviewRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Permanent deletion impact and eligibility',
+              'PermanentDeletionPreview',
+            ),
+            '401': problemResponse('Authentication required'),
+            '409': problemResponse(
+              'Target is not recoverably deleted or still in grace',
+            ),
+          },
+        },
+      },
+      '/api/v1/retention/permanent-deletions': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('PermanentDeletionRequest'),
+          responses: {
+            '202': schemaResponse(
+              'Permanent deletion accepted',
+              'PermanentDeletionMutationResponse',
+            ),
+            '401': problemResponse('Authentication required'),
+            '409': problemResponse('Target is not eligible'),
+          },
+        },
+      },
+      '/api/v1/retention/permanent-deletions/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse(
+              'Permanent deletion status',
+              'PermanentDeletionResource',
+            ),
+            '404': problemResponse('Deletion not found'),
+          },
+        },
+      },
+      '/api/v1/retention/tombstones': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [
+            {
+              in: 'query',
+              name: 'afterGeneration',
+              required: false,
+              schema: { type: 'integer', minimum: 0, default: 0 },
+            },
+            {
+              in: 'query',
+              name: 'limit',
+              required: false,
+              schema: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 500,
+                default: 100,
+              },
+            },
+          ],
+          responses: {
+            '200': schemaResponse(
+              'Content-free browser purge ledger',
+              'DeletionTombstonePage',
+            ),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+      },
+      '/api/v1/retention/browser-purge-acknowledgements': {
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('BrowserPurgeAcknowledgement'),
+          responses: {
+            '204': { description: 'Browser purge generation acknowledged' },
+            '401': problemResponse('Authentication required'),
+            '403': problemResponse('CSRF validation failed'),
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -1088,6 +1182,9 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
       },
       schemas: {
+        BrowserPurgeAcknowledgement: componentSchema(
+          browserPurgeAcknowledgementSchema,
+        ),
         ArtifactAddRequest: componentSchema(artifactAddRequestSchema),
         ArtifactEditRequest: componentSchema(artifactEditRequestSchema),
         ArtifactListResponse: componentSchema(artifactListResponseSchema),
@@ -1173,6 +1270,22 @@ export function createOpenApiDocument(): Record<string, unknown> {
           persistedExtensibleValueSchema,
         ),
         ProblemDetails: componentSchema(problemDetailsSchema),
+        PermanentDeletionMutationResponse: componentSchema(
+          permanentDeletionMutationResponseSchema,
+        ),
+        PermanentDeletionPreview: componentSchema(
+          permanentDeletionPreviewSchema,
+        ),
+        PermanentDeletionPreviewRequest: componentSchema(
+          permanentDeletionPreviewRequestSchema,
+        ),
+        PermanentDeletionRequest: componentSchema(
+          permanentDeletionRequestSchema,
+        ),
+        PermanentDeletionResource: componentSchema(
+          permanentDeletionResourceSchema,
+        ),
+        DeletionTombstonePage: componentSchema(deletionTombstonePageSchema),
         CreateProcessorRequest: componentSchema(createProcessorRequestSchema),
         ProcessorDryRunRequest: componentSchema(processorDryRunRequestSchema),
         ProcessorDryRunResponse: componentSchema(processorDryRunResponseSchema),

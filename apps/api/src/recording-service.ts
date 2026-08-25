@@ -9,6 +9,7 @@ import {
 import {
   auditEvents,
   contributions,
+  deletionTombstones,
   inTransaction,
   enqueueTranscriptionRun,
   journalDays,
@@ -28,7 +29,7 @@ import {
   type ByteRange,
   type StagedChunk,
 } from '@journal/storage';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, eq, gt, or } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 
 const MANIFEST_PAGE_SIZE = 512;
@@ -258,6 +259,34 @@ export class PostgresRecordingService implements RecordingService {
   ): Promise<RecordingMutationResult> {
     return inTransaction(this.database, async (transaction) => {
       const requestHash = hashJson(input);
+      const [tombstone] = await transaction
+        .select({ id: deletionTombstones.id })
+        .from(deletionTombstones)
+        .where(
+          and(
+            eq(deletionTombstones.ownerId, ownerId),
+            or(
+              and(
+                eq(deletionTombstones.entityKind, 'journal_day'),
+                eq(deletionTombstones.entityId, input.proposedJournalDayId),
+              ),
+              and(
+                eq(deletionTombstones.entityKind, 'contribution'),
+                eq(deletionTombstones.entityId, input.contributionId),
+              ),
+              and(
+                eq(deletionTombstones.entityKind, 'recording_audio'),
+                eq(deletionTombstones.entityId, input.recordingId),
+              ),
+            ),
+          ),
+        )
+        .limit(1);
+      if (tombstone !== undefined) {
+        throw new RecordingConflictError(
+          'A permanently deleted stable identity cannot be reused.',
+        );
+      }
       const [exists] = await transaction
         .select({ id: recordings.id })
         .from(recordings)
@@ -847,6 +876,20 @@ export class PostgresRecordingService implements RecordingService {
         recordingId,
         true,
       );
+      if (!deleted) {
+        const [tombstone] = await transaction
+          .select({ id: deletionTombstones.id })
+          .from(deletionTombstones)
+          .where(
+            and(
+              eq(deletionTombstones.ownerId, ownerId),
+              eq(deletionTombstones.entityKind, 'recording_audio'),
+              eq(deletionTombstones.entityId, recordingId),
+            ),
+          )
+          .limit(1);
+        if (tombstone !== undefined) throw new RecordingAudioDeletedError();
+      }
       if (current.recording.persistenceState !== 'durable')
         throw new RecordingNotDurableError();
       const replayed = await recordIdempotency(transaction, {

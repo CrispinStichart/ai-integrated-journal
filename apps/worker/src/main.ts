@@ -10,6 +10,7 @@ import { registerProcessorConsumer } from './processor-runtime.js';
 import { registerNudgeDigestConsumer } from './nudge-engine.js';
 import { registerSearchEmbeddingConsumer } from './search-embedding.js';
 import { registerGroundedAnswerConsumer } from './grounded-answer.js';
+import { registerRetentionConsumer } from './retention.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -87,6 +88,7 @@ const worker = new WorkerRuntime({
           'structured_generation',
         ),
     });
+    await registerRetentionConsumer({ boss: queue, database, blobs });
   },
 });
 await worker.start();

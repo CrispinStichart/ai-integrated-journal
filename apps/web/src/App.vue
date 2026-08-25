@@ -10,7 +10,12 @@ import { useAuthentication } from './auth';
 import { useOfflineJournal } from './journal/offline';
 import { useBrowserCaptureController } from './recording/capture-controller';
 import { useRecordingSyncController } from './recording/sync-controller';
+import {
+  acknowledgeDeletionLedger,
+  drainDeletionLedger,
+} from './retention/api';
 import { useUiStore } from './stores/ui';
+import { browserMetadata } from './storage/indexed-db';
 import AuthenticationView from './views/AuthenticationView.vue';
 
 interface NavigationItem {
@@ -39,12 +44,30 @@ const auth = useAuthentication();
 const offline = useOfflineJournal();
 const capture = useBrowserCaptureController();
 const recordingSync = useRecordingSyncController();
+const TOMBSTONE_GENERATION_KEY = 'retention-tombstone-generation';
 
 async function resumeOfflineWork(): Promise<void> {
   const ownerId = auth.status.value?.ownerId;
   const csrfToken = auth.status.value?.csrfToken;
   if (ownerId === undefined || csrfToken === undefined) return;
   await offline.initialize(ownerId);
+  const initialGeneration =
+    (await browserMetadata.get<number>(TOMBSTONE_GENERATION_KEY)) ?? 0;
+  const { appliedGeneration, latestGeneration } = await drainDeletionLedger(
+    initialGeneration,
+    async (items, pageGeneration) => {
+      await offline.applyDeletionTombstones(items);
+      await browserMetadata.set(TOMBSTONE_GENERATION_KEY, pageGeneration);
+      if (!('caches' in window)) return;
+      await Promise.all((await caches.keys()).map((key) => caches.delete(key)));
+    },
+  );
+  if (
+    latestGeneration > initialGeneration &&
+    appliedGeneration === latestGeneration
+  ) {
+    await acknowledgeDeletionLedger(appliedGeneration, csrfToken);
+  }
   await offline.replay(csrfToken);
   await recordingSync.initialize(ownerId, csrfToken);
   if (offline.unlocked.value) await recordingSync.resume();

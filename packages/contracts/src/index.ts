@@ -17,6 +17,7 @@ export * from './problem-details.js';
 export * from './processor.js';
 export * from './recording.js';
 export * from './reprocessing.js';
+export * from './retention.js';
 export * from './search.js';
 export * from './transcription.js';
 export * from './semantic-value.js';

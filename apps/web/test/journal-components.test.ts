@@ -3,7 +3,7 @@
 import { contributionSchema } from '@journal/contracts';
 import { mount } from '@vue/test-utils';
 import axe from 'axe-core';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ContributionCard from '../src/components/ContributionCard.vue';
 import AudioContributionCard from '../src/components/AudioContributionCard.vue';
@@ -91,6 +91,8 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe('Journal Day contribution UI (DATA-003, DATA-010–DATA-012, DATA-026, RET-005–RET-006)', () => {
   it('retains visible source provenance and emits a new revision without changing the source', async () => {
     const wrapper = mount(ContributionCard, {
@@ -150,6 +152,69 @@ describe('Journal Day contribution UI (DATA-003, DATA-010–DATA-012, DATA-026, 
     expect(deletedWrapper.emitted('restore')).toBeTruthy();
   });
 
+  it('[RET-005][RET-006][RET-007] previews every affected retention facet before enabling irreversible deletion', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              target: { entityKind: 'contribution', entityId: contribution.id },
+              softDeletedAt: '2026-07-01T00:00:00.000Z',
+              eligibleAt: '2026-07-31T00:00:00.000Z',
+              eligible: true,
+              affectedContributionCount: 1,
+              affectedRecordingCount: 0,
+              impacts: [
+                {
+                  facet: 'database',
+                  action: 'delete',
+                  detail: 'Permanently delete database rows.',
+                },
+                {
+                  facet: 'backups',
+                  action: 'invalidate',
+                  detail: 'Invalidate retained backup copies.',
+                },
+              ],
+              warnings: ['This cannot be undone.'],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const wrapper = mount(ContributionCard, {
+      props: {
+        contribution: {
+          ...contribution,
+          deletedAt: '2026-07-01T00:00:00.000Z',
+        },
+        revisions: [],
+        busy: false,
+        csrfToken: 'csrf-token',
+      },
+      attachTo: document.body,
+    });
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text() === 'Delete permanently');
+    await button?.trigger('click');
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Permanently delete database rows.');
+    });
+    expect(wrapper.text()).toContain(
+      'Downloaded exports remain outside this system',
+    );
+    expect(
+      wrapper
+        .findAll('button')
+        .find((item) => item.text() === 'Permanently delete')
+        ?.attributes('disabled'),
+    ).toBeUndefined();
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    wrapper.unmount();
+  });
+
   it('navigates calendar dates without timezone reassignment', () => {
     expect(shiftJournalDate('2026-03-01', -1)).toBe('2026-02-28');
     expect(shiftJournalDate('2024-02-28', 1)).toBe('2024-02-29');
@@ -205,6 +270,71 @@ describe('Journal Day contribution UI (DATA-003, DATA-010–DATA-012, DATA-026, 
     expect(transcriptionFailed.emitted('retryTranscription')).toHaveLength(1);
     expect((await axe.run(transcriptionFailed.element)).violations).toEqual([]);
     transcriptionFailed.unmount();
+  });
+
+  it('[RET-004][RET-005][RET-006] clearly previews irreversible audio-only deletion while retaining the transcript', async () => {
+    const recording = audioContribution.recording;
+    if (recording === undefined) throw new Error('Expected recording fixture.');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              target: {
+                entityKind: 'recording_audio',
+                entityId: recording.id,
+              },
+              softDeletedAt: '2026-07-01T00:00:00.000Z',
+              eligibleAt: '2026-07-31T00:00:00.000Z',
+              eligible: true,
+              affectedContributionCount: 0,
+              affectedRecordingCount: 1,
+              impacts: [
+                {
+                  facet: 'final_blobs',
+                  action: 'delete',
+                  detail: 'Permanently delete final audio.',
+                },
+                {
+                  facet: 'search_text',
+                  action: 'retain',
+                  detail: 'Retain unaffected transcript search text.',
+                },
+              ],
+              warnings: ['This cannot be undone.'],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const wrapper = mount(AudioContributionCard, {
+      props: {
+        contribution: {
+          ...audioContribution,
+          recording: {
+            ...recording,
+            audioDeletedAt: '2026-07-01T00:00:00.000Z',
+          },
+        },
+        csrfToken: 'csrf-token',
+      },
+      attachTo: document.body,
+    });
+
+    const button = wrapper
+      .findAll('button')
+      .find((item) => item.text() === 'Delete audio permanently');
+    await button?.trigger('click');
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('Permanently delete final audio.');
+    });
+    expect(wrapper.text()).toContain('The transcript remains');
+    expect(wrapper.text()).toContain(
+      'audio verification and timestamp playback can never be restored',
+    );
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    wrapper.unmount();
   });
 
   it('[CAP-007][AC-040] offers reassignment while retaining capture provenance', async () => {

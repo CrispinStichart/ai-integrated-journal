@@ -1,4 +1,5 @@
 import { deleteDB, openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type { DeletionTombstone } from '@journal/contracts';
 
 const DATABASE_VERSION = 4;
 const METADATA_STORE = 'shell-metadata';
@@ -247,6 +248,59 @@ export class JournalIndexedDb implements BrowserMetadataStore {
     while (cursor) {
       await cursor.delete();
       cursor = await cursor.continue();
+    }
+    await transaction.done;
+  }
+
+  /**
+   * Applies the server's content-free ledger atomically. Read snapshots are
+   * conservatively cleared because their ciphertext may contain any deleted
+   * revision; targeted recovery records use their stable identities.
+   */
+  async purgeTombstones(
+    ownerId: string,
+    tombstones: readonly DeletionTombstone[],
+  ): Promise<void> {
+    if (tombstones.length === 0) return;
+    const database = await this.#connect();
+    const transaction = database.transaction(
+      [READ_CACHE_STORE, OUTBOX_STORE, RECORDING_STORE, RECORDING_CHUNK_STORE],
+      'readwrite',
+    );
+    let cacheCursor = await transaction
+      .objectStore(READ_CACHE_STORE)
+      .index('by-owner-access')
+      .openCursor(IDBKeyRange.bound([ownerId, ''], [ownerId, '\uffff']));
+    while (cacheCursor) {
+      await cacheCursor.delete();
+      cacheCursor = await cacheCursor.continue();
+    }
+    const ids = new Set(tombstones.map((item) => item.entityId));
+    let outboxCursor = await transaction
+      .objectStore(OUTBOX_STORE)
+      .index('by-owner-created')
+      .openCursor(
+        IDBKeyRange.bound([ownerId, 0], [ownerId, Number.MAX_SAFE_INTEGER]),
+      );
+    while (outboxCursor) {
+      if (ids.has(outboxCursor.value.stableId)) await outboxCursor.delete();
+      outboxCursor = await outboxCursor.continue();
+    }
+    for (const tombstone of tombstones) {
+      if (tombstone.entityKind !== 'recording_audio') continue;
+      await transaction.objectStore(RECORDING_STORE).delete(tombstone.entityId);
+      let chunkCursor = await transaction
+        .objectStore(RECORDING_CHUNK_STORE)
+        .openCursor(
+          IDBKeyRange.bound(
+            [tombstone.entityId, 0],
+            [tombstone.entityId, Number.MAX_SAFE_INTEGER],
+          ),
+        );
+      while (chunkCursor) {
+        await chunkCursor.delete();
+        chunkCursor = await chunkCursor.continue();
+      }
     }
     await transaction.done;
   }

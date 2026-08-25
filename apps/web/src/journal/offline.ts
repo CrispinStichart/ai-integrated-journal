@@ -6,6 +6,7 @@ import {
   type CreateContributionRequest,
   type JournalDayView,
 } from '@journal/contracts';
+import type { DeletionTombstone } from '@journal/contracts';
 import { computed, readonly, ref } from 'vue';
 
 import {
@@ -272,6 +273,15 @@ export class OfflineJournal {
     const ownerId = this.#requireOwner();
     await this.#storage.clearJournalCache(ownerId);
     await this.#refreshUsage();
+  }
+
+  async applyDeletionTombstones(
+    tombstones: readonly DeletionTombstone[],
+  ): Promise<void> {
+    const ownerId = this.#requireOwner();
+    await this.#storage.purgeTombstones(ownerId, tombstones);
+    await this.#refreshUsage();
+    this.pendingCount.value = (await this.#storage.listOutbox(ownerId)).length;
   }
 
   async logout(): Promise<void> {
@@ -667,6 +677,8 @@ export function useOfflineJournal() {
     lock: () => offlineJournal.lock(),
     logout: () => offlineJournal.logout(),
     clearReadCache: () => offlineJournal.clearReadCache(),
+    applyDeletionTombstones: (tombstones: readonly DeletionTombstone[]) =>
+      offlineJournal.applyDeletionTombstones(tombstones),
     enqueueCreate: (input: CreateContributionRequest, idempotencyKey: string) =>
       offlineJournal.enqueueCreate(input, idempotencyKey),
     enqueueEdit: (input: Omit<EditMutation, 'kind'>) =>

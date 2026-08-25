@@ -14,6 +14,7 @@ export * from './nudges.js';
 export * from './processing-lifecycle.js';
 export * from './reconciliation.js';
 export * from './reprocessing.js';
+export * from './retention.js';
 export * from './search.js';
 export * from './grounded-answer.js';
 export * from './revision.js';

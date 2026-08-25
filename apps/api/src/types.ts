@@ -12,6 +12,7 @@ import type { MemoryService } from './memory-service.js';
 import type { NudgeService } from './nudge-service.js';
 import type { SearchService } from './search-service.js';
 import type { GroundedAnswerService } from './grounded-answer-service.js';
+import type { RetentionService } from './retention-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -58,6 +59,7 @@ export interface ApiDependencies {
   readonly recordingService?: RecordingService;
   readonly processorService?: ProcessorService;
   readonly reprocessingService?: ReprocessingService;
+  readonly retentionService?: RetentionService;
   readonly searchService?: SearchService;
   readonly transcriptService?: TranscriptService;
   readonly now?: () => Date;

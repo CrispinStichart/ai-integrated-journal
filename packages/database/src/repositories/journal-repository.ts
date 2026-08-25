@@ -42,6 +42,7 @@ import {
   auditEvents,
   contributionRevisions,
   contributions,
+  deletionTombstones,
   journalDays,
   recordings,
 } from '../schema.js';
@@ -376,6 +377,11 @@ export class JournalWriteRepository {
     readonly elicitingNudgeId?: NudgeId;
     readonly audit: JournalMutationAudit;
   }): Promise<PersistedContribution> {
+    await this.assertNotTombstoned(
+      input.ownerId,
+      'contribution',
+      input.contributionId,
+    );
     const revision = createContributionRevision({
       contributionId: input.contributionId,
       revisionId: input.revisionId,
@@ -618,6 +624,11 @@ export class JournalWriteRepository {
     readonly expectedRevision?: RevisionNumber;
     readonly audit: JournalMutationAudit;
   }): Promise<void> {
+    await this.assertNotTombstoned(
+      input.ownerId,
+      'contribution',
+      input.contributionId,
+    );
     const current = await this.lockContribution(
       input.ownerId,
       input.contributionId,
@@ -654,12 +665,34 @@ export class JournalWriteRepository {
     });
   }
 
+  private async assertNotTombstoned(
+    ownerId: UserId,
+    entityKind: 'contribution' | 'journal_day',
+    entityId: string,
+  ): Promise<void> {
+    const [tombstone] = await this.transaction
+      .select({ id: deletionTombstones.id })
+      .from(deletionTombstones)
+      .where(
+        and(
+          eq(deletionTombstones.ownerId, ownerId),
+          eq(deletionTombstones.entityKind, entityKind),
+          eq(deletionTombstones.entityId, entityId),
+        ),
+      )
+      .limit(1);
+    if (tombstone !== undefined) {
+      throw new DeletedContributionError();
+    }
+  }
+
   private async ensureDay(
     proposedId: JournalDayId,
     ownerId: UserId,
     journalDate: JournalDate,
     createdAt: UtcInstant,
   ): Promise<Readonly<JournalDay>> {
+    await this.assertNotTombstoned(ownerId, 'journal_day', proposedId);
     await this.transaction
       .insert(journalDays)
       .values({

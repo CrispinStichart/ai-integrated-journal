@@ -7,18 +7,25 @@ import { computed, ref, watch } from 'vue';
 
 import AppDialog from './AppDialog.vue';
 import { displayCaptureTime } from '../journal/date';
+import {
+  previewPermanentDeletion,
+  requestPermanentDeletion,
+} from '../retention/api';
+import type { PermanentDeletionPreview } from '@journal/contracts';
 
 const props = defineProps<{
   contribution: ContributionResource;
   revisions: readonly ContributionRevisionResource[] | undefined;
   busy: boolean | undefined;
   localStatus?: 'pending' | 'conflict' | undefined;
+  csrfToken?: string;
 }>();
 const emit = defineEmits<{
   delete: [contribution: ContributionResource];
   edit: [contribution: ContributionResource, text: string, reason: string];
   loadHistory: [contribution: ContributionResource];
   restore: [contribution: ContributionResource];
+  permanentlyDeleted: [contributionId: string];
 }>();
 
 const editing = ref(false);
@@ -26,6 +33,10 @@ const draft = ref('');
 const reason = ref('');
 const historyDialog = ref<InstanceType<typeof AppDialog>>();
 const deleteDialog = ref<InstanceType<typeof AppDialog>>();
+const permanentDialog = ref<InstanceType<typeof AppDialog>>();
+const permanentPreview = ref<PermanentDeletionPreview>();
+const permanentError = ref('');
+const permanentBusy = ref(false);
 const sourceLabel = computed(() =>
   props.contribution.sourceType === 'nudge_response'
     ? 'Nudge response'
@@ -46,6 +57,44 @@ function save(): void {
 function openHistory(): void {
   emit('loadHistory', props.contribution);
   historyDialog.value?.open();
+}
+
+async function openPermanentDeletion(): Promise<void> {
+  if (props.csrfToken === undefined) return;
+  permanentBusy.value = true;
+  permanentError.value = '';
+  permanentDialog.value?.open();
+  try {
+    permanentPreview.value = await previewPermanentDeletion(
+      { entityKind: 'contribution', entityId: props.contribution.id },
+      props.csrfToken,
+    );
+  } catch (error) {
+    permanentError.value =
+      error instanceof Error ? error.message : 'Preview failed.';
+  } finally {
+    permanentBusy.value = false;
+  }
+}
+
+async function permanentlyDelete(): Promise<void> {
+  if (props.csrfToken === undefined || !permanentPreview.value?.eligible)
+    return;
+  permanentBusy.value = true;
+  permanentError.value = '';
+  try {
+    await requestPermanentDeletion(
+      { entityKind: 'contribution', entityId: props.contribution.id },
+      props.csrfToken,
+    );
+    permanentDialog.value?.close();
+    emit('permanentlyDeleted', props.contribution.id);
+  } catch (error) {
+    permanentError.value =
+      error instanceof Error ? error.message : 'Deletion failed.';
+  } finally {
+    permanentBusy.value = false;
+  }
 }
 
 watch(
@@ -146,7 +195,16 @@ watch(
         >
           Restore
         </button>
-        <template v-else-if="localStatus !== 'pending'">
+        <button
+          v-if="contribution.deletedAt && csrfToken"
+          class="btn btn-ghost btn-sm text-error"
+          type="button"
+          :disabled="busy"
+          @click="openPermanentDeletion"
+        >
+          Delete permanently
+        </button>
+        <template v-if="!contribution.deletedAt && localStatus !== 'pending'">
           <button class="btn btn-ghost btn-sm" type="button" @click="beginEdit">
             Edit
           </button>
@@ -190,6 +248,55 @@ watch(
     </ol>
     <template #actions="{ close }">
       <button class="btn" type="button" @click="close">Close</button>
+    </template>
+  </AppDialog>
+
+  <AppDialog
+    :id="`permanent-delete-${contribution.id}`"
+    ref="permanentDialog"
+    title="Permanently delete this contribution?"
+  >
+    <span
+      v-if="permanentBusy && !permanentPreview"
+      class="loading loading-spinner"
+      role="status"
+      aria-label="Loading deletion impact"
+    />
+    <div
+      v-else-if="permanentError"
+      role="alert"
+      class="alert alert-error alert-soft"
+    >
+      <span>{{ permanentError }}</span>
+    </div>
+    <template v-else-if="permanentPreview">
+      <div role="alert" class="alert alert-warning alert-soft">
+        <span>
+          This cannot be undone. Database history, derived search data, audio,
+          staging chunks, server caches, and hosted exports are removed or
+          invalidated. Downloaded exports remain outside this system.
+        </span>
+      </div>
+      <p class="mt-4 text-sm">
+        Eligible after
+        {{ new Date(permanentPreview.eligibleAt).toLocaleString() }}.
+      </p>
+      <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-base-content/70">
+        <li v-for="impact in permanentPreview.impacts" :key="impact.facet">
+          {{ impact.detail }}
+        </li>
+      </ul>
+    </template>
+    <template #actions="{ close }">
+      <button class="btn btn-ghost" type="button" @click="close">Cancel</button>
+      <button
+        class="btn btn-error"
+        type="button"
+        :disabled="permanentBusy || !permanentPreview?.eligible"
+        @click="permanentlyDelete"
+      >
+        Permanently delete
+      </button>
     </template>
   </AppDialog>
 

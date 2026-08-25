@@ -21,6 +21,18 @@ async function authenticateShell(page: Page) {
           ),
         );
       }
+      if (url.includes('/api/v1/retention/tombstones')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [],
+              latestGeneration: 0,
+              hasMore: false,
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
       return originalFetch(input, init);
     };
   });
@@ -379,6 +391,10 @@ test('[DATA-001–DATA-004][DATA-010–DATA-012][DATA-026][TIME-001–TIME-003][
         sessionExpiresAt: '2026-08-17T12:00:00.000Z',
         passkeyCount: 1,
       });
+      return;
+    }
+    if (url.pathname === '/api/v1/retention/tombstones') {
+      await respond({ items: [], latestGeneration: 0, hasMore: false });
       return;
     }
     if (url.pathname === '/api/v1/journal-days') {

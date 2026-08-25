@@ -1,21 +1,31 @@
 <script setup lang="ts">
-import type { ContributionResource } from '@journal/contracts';
+import type {
+  ContributionResource,
+  PermanentDeletionPreview,
+} from '@journal/contracts';
 import { computed, ref, watch } from 'vue';
 
-import { recordingAudioUrl } from '../recording/api';
+import { recordingAudioUrl, setRecordingAudioDeleted } from '../recording/api';
+import {
+  previewPermanentDeletion,
+  requestPermanentDeletion,
+} from '../retention/api';
 import type { LocalRecordingRecord } from '../storage/indexed-db';
 import { displayCaptureTime } from '../journal/date';
 import TranscriptInspector from './TranscriptInspector.vue';
+import AppDialog from './AppDialog.vue';
 
 const props = defineProps<{
   contribution?: ContributionResource | undefined;
   local?: LocalRecordingRecord | undefined;
   busy?: boolean | undefined;
+  csrfToken?: string;
 }>();
 const emit = defineEmits<{
   move: [journalDate: string];
   retry: [];
   retryTranscription: [];
+  audioChanged: [];
 }>();
 
 const recording = computed(() => props.contribution?.recording);
@@ -33,6 +43,11 @@ const journalDate = computed(
 );
 const assignedDate = ref(journalDate.value);
 const audioPlayer = ref<HTMLAudioElement>();
+const deleteAudioDialog = ref<InstanceType<typeof AppDialog>>();
+const permanentAudioDialog = ref<InstanceType<typeof AppDialog>>();
+const permanentPreview = ref<PermanentDeletionPreview>();
+const deletionError = ref('');
+const deletionBusy = ref(false);
 const persistenceState = computed(
   () =>
     props.local?.serverPersistenceState ?? recording.value?.persistenceState,
@@ -89,6 +104,60 @@ async function seekAudio(startMilliseconds: number): Promise<void> {
   player.currentTime = startMilliseconds / 1000;
   player.focus();
   await player.play().catch(() => undefined);
+}
+
+async function changeAudioDeletion(deleted: boolean): Promise<void> {
+  if (props.csrfToken === undefined) return;
+  deletionBusy.value = true;
+  deletionError.value = '';
+  try {
+    await setRecordingAudioDeleted(recordingId.value, deleted, props.csrfToken);
+    deleteAudioDialog.value?.close();
+    emit('audioChanged');
+  } catch (error) {
+    deletionError.value =
+      error instanceof Error ? error.message : 'Audio deletion failed.';
+  } finally {
+    deletionBusy.value = false;
+  }
+}
+
+async function openPermanentAudioDeletion(): Promise<void> {
+  if (props.csrfToken === undefined) return;
+  deletionBusy.value = true;
+  deletionError.value = '';
+  permanentAudioDialog.value?.open();
+  try {
+    permanentPreview.value = await previewPermanentDeletion(
+      { entityKind: 'recording_audio', entityId: recordingId.value },
+      props.csrfToken,
+    );
+  } catch (error) {
+    deletionError.value =
+      error instanceof Error ? error.message : 'Deletion preview failed.';
+  } finally {
+    deletionBusy.value = false;
+  }
+}
+
+async function permanentlyDeleteAudio(): Promise<void> {
+  if (props.csrfToken === undefined || !permanentPreview.value?.eligible)
+    return;
+  deletionBusy.value = true;
+  deletionError.value = '';
+  try {
+    await requestPermanentDeletion(
+      { entityKind: 'recording_audio', entityId: recordingId.value },
+      props.csrfToken,
+    );
+    permanentAudioDialog.value?.close();
+    emit('audioChanged');
+  } catch (error) {
+    deletionError.value =
+      error instanceof Error ? error.message : 'Audio deletion failed.';
+  } finally {
+    deletionBusy.value = false;
+  }
 }
 </script>
 
@@ -221,6 +290,40 @@ async function seekAudio(startMilliseconds: number): Promise<void> {
         @seek="seekAudio"
       />
 
+      <div
+        v-if="isDurable && csrfToken"
+        class="card-actions justify-end"
+        aria-label="Audio retention actions"
+      >
+        <button
+          v-if="!recording?.audioDeletedAt"
+          class="btn btn-ghost btn-sm text-error"
+          type="button"
+          :disabled="busy || deletionBusy"
+          @click="deleteAudioDialog?.open()"
+        >
+          Delete audio
+        </button>
+        <template v-else>
+          <button
+            class="btn btn-sm"
+            type="button"
+            :disabled="busy || deletionBusy"
+            @click="changeAudioDeletion(false)"
+          >
+            Restore audio
+          </button>
+          <button
+            class="btn btn-ghost btn-sm text-error"
+            type="button"
+            :disabled="busy || deletionBusy"
+            @click="openPermanentAudioDeletion"
+          >
+            Delete audio permanently
+          </button>
+        </template>
+      </div>
+
       <form
         class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end"
         aria-label="Assign audio to a different Journal Day"
@@ -245,4 +348,78 @@ async function seekAudio(startMilliseconds: number): Promise<void> {
       </form>
     </div>
   </article>
+
+  <AppDialog
+    :id="`delete-audio-${recordingId}`"
+    ref="deleteAudioDialog"
+    title="Delete the original audio?"
+  >
+    <div role="alert" class="alert alert-warning alert-soft">
+      <span>
+        The transcript remains available, but audio verification and timestamp
+        playback stop immediately. Audio remains recoverable during the grace
+        period.
+      </span>
+    </div>
+    <div v-if="deletionError" role="alert" class="alert alert-error mt-3">
+      <span>{{ deletionError }}</span>
+    </div>
+    <template #actions="{ close }">
+      <button class="btn btn-ghost" type="button" @click="close">Cancel</button>
+      <button
+        class="btn btn-error"
+        type="button"
+        :disabled="deletionBusy"
+        @click="changeAudioDeletion(true)"
+      >
+        Delete audio
+      </button>
+    </template>
+  </AppDialog>
+
+  <AppDialog
+    :id="`permanent-delete-audio-${recordingId}`"
+    ref="permanentAudioDialog"
+    title="Permanently delete the original audio?"
+  >
+    <span
+      v-if="deletionBusy && !permanentPreview"
+      class="loading loading-spinner"
+      role="status"
+      aria-label="Loading audio deletion impact"
+    />
+    <div v-else-if="deletionError" role="alert" class="alert alert-error">
+      <span>{{ deletionError }}</span>
+    </div>
+    <template v-else-if="permanentPreview">
+      <div role="alert" class="alert alert-warning alert-soft">
+        <span>
+          The original blob and local recovery chunks are permanently removed.
+          The transcript remains, but audio verification and timestamp playback
+          can never be restored. Historical backups may retain encrypted bytes
+          until expiry, and downloaded exports are outside system control.
+        </span>
+      </div>
+      <p class="mt-4 text-sm">
+        Eligible after
+        {{ new Date(permanentPreview.eligibleAt).toLocaleString() }}.
+      </p>
+      <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-base-content/70">
+        <li v-for="impact in permanentPreview.impacts" :key="impact.facet">
+          {{ impact.detail }}
+        </li>
+      </ul>
+    </template>
+    <template #actions="{ close }">
+      <button class="btn btn-ghost" type="button" @click="close">Cancel</button>
+      <button
+        class="btn btn-error"
+        type="button"
+        :disabled="deletionBusy || !permanentPreview?.eligible"
+        @click="permanentlyDeleteAudio"
+      >
+        Permanently delete audio
+      </button>
+    </template>
+  </AppDialog>
 </template>

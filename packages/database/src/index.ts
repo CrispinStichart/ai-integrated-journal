@@ -22,6 +22,7 @@ export {
   authenticators,
   contributionRevisions,
   contributions,
+  deletionTombstones,
   feedback,
   groundedAnswerCitations,
   groundedAnswers,
@@ -36,6 +37,7 @@ export {
   nudgeItems,
   nudgePreferences,
   passwordCredentials,
+  permanentDeletionRequests,
   processorApiIdempotency,
   processorArtifacts,
   processorArtifactCandidates,
@@ -70,8 +72,16 @@ export {
   reprocessingApiIdempotency,
   reprocessingBatchItems,
   reprocessingBatches,
+  retentionBlobCleanupItems,
+  retentionPolicies,
   requirementEvaluations,
 } from './schema.js';
+export {
+  RetentionConflictError,
+  RetentionNotFoundError,
+  RetentionRepository,
+  type RetentionPreviewRecord,
+} from './retention-repository.js';
 export {
   DeletedContributionError,
   JournalReadRepository,

@@ -1,4 +1,5 @@
 import {
+  audioDeletionResponseSchema,
   createRecordingRequestSchema,
   finalizeRecordingRequestSchema,
   problemDetailsSchema,
@@ -148,6 +149,31 @@ export async function retryRecordingTranscription(
       })
     ).json(),
   );
+  return result.recording;
+}
+
+export async function setRecordingAudioDeleted(
+  recordingId: string,
+  deleted: boolean,
+  csrfToken: string,
+): Promise<RecordingResource> {
+  const result = deleted
+    ? audioDeletionResponseSchema.parse(
+        await (
+          await request(`/api/v1/recordings/${recordingId}/audio`, {
+            method: 'DELETE',
+            headers: mutationHeaders(csrfToken, `delete-audio-${recordingId}`),
+          })
+        ).json(),
+      )
+    : recordingMutationResponseSchema.parse(
+        await (
+          await request(`/api/v1/recordings/${recordingId}/audio/restore`, {
+            method: 'POST',
+            headers: mutationHeaders(csrfToken, `restore-audio-${recordingId}`),
+          })
+        ).json(),
+      );
   return result.recording;
 }
 

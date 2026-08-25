@@ -120,4 +120,106 @@ describe('IndexedDB abstraction', () => {
       store.listRecordingChunks(recording.ownerId, recording.recordingId),
     ).resolves.toHaveLength(1);
   });
+
+  it('[RET-006][RET-007][SEARCH-006] atomically purges cached reads, matching outbox recovery, and recording chunks from tombstones', async () => {
+    const store = createStore();
+    const ownerId = '018f0000-0000-7000-8000-000000000005';
+    const contributionId = '018f0000-0000-7000-8000-000000000002';
+    const recordingId = '018f0000-0000-7000-8000-000000000001';
+    await store.putJournalCache({
+      key: `${ownerId}:2026-08-22`,
+      ownerId,
+      stableId: '2026-08-22',
+      schemaVersion: 1,
+      refreshedAt: '2026-08-22T12:00:00.000Z',
+      lastAccessedAt: '2026-08-22T12:00:00.000Z',
+      byteSize: 20,
+      nonce: 'cache-nonce',
+      ciphertext: 'private-ciphertext',
+    });
+    await store.putOutbox({
+      id: 'matching-outbox',
+      ownerId,
+      kind: 'edit',
+      stableId: contributionId,
+      schemaVersion: 1,
+      createdAt: '2026-08-22T12:00:00.000Z',
+      sequence: 1,
+      nonce: 'outbox-nonce',
+      ciphertext: 'private-ciphertext',
+      state: 'pending',
+    });
+    await store.putOutbox({
+      id: 'unrelated-outbox',
+      ownerId,
+      kind: 'edit',
+      stableId: '018f0000-0000-7000-8000-000000000099',
+      schemaVersion: 1,
+      createdAt: '2026-08-22T12:01:00.000Z',
+      sequence: 2,
+      nonce: 'outbox-nonce-2',
+      ciphertext: 'unrelated-ciphertext',
+      state: 'pending',
+    });
+    const recording: LocalRecordingRecord = {
+      recordingId,
+      contributionId,
+      uploadId: '018f0000-0000-7000-8000-000000000003',
+      proposedJournalDayId: '018f0000-0000-7000-8000-000000000004',
+      ownerId,
+      schemaVersion: 1,
+      mimeType: 'audio/webm',
+      capturedAt: '2026-08-22T12:00:00.000Z',
+      capturedTimezone: 'UTC',
+      journalTimezone: 'UTC',
+      journalDate: '2026-08-22',
+      journalDateAssignment: 'default',
+      state: 'recording',
+      nextChunkIndex: 0,
+      totalBytes: '0',
+      createdAt: '2026-08-22T12:00:00.000Z',
+      updatedAt: '2026-08-22T12:00:00.000Z',
+    };
+    await store.putRecording(recording);
+    await store.commitRecordingChunk(
+      recordingId,
+      {
+        recordingId,
+        index: 0,
+        ownerId,
+        schemaVersion: 1,
+        byteSize: 1,
+        sha256: 'a'.repeat(64),
+        mimeType: 'audio/webm',
+        capturedAt: '2026-08-22T12:00:01.000Z',
+        nonce: 'chunk-nonce',
+        ciphertext: Uint8Array.from([1]).buffer,
+      },
+      '2026-08-22T12:00:01.000Z',
+    );
+
+    await store.purgeTombstones(ownerId, [
+      {
+        entityKind: 'contribution',
+        entityId: contributionId,
+        deletedAt: '2026-08-25T00:00:00.000Z',
+        generation: 1,
+      },
+      {
+        entityKind: 'recording_audio',
+        entityId: recordingId,
+        deletedAt: '2026-08-25T00:00:00.000Z',
+        generation: 2,
+      },
+    ]);
+
+    await expect(store.listJournalCache(ownerId)).resolves.toEqual([]);
+    await expect(store.listOutbox(ownerId)).resolves.toMatchObject([
+      { id: 'unrelated-outbox' },
+    ]);
+    await expect(store.getRecording(recordingId)).resolves.toBeUndefined();
+    await expect(
+      store.listRecordingChunks(ownerId, recordingId),
+    ).resolves.toEqual([]);
+  });
 });

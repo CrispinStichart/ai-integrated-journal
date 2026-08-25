@@ -396,7 +396,7 @@ Add optional embeddings, compatible provider/model/dimension cohorts, reciprocal
 
 Generate only from retrieved fragments. Validate returned citation IDs, link to precise evidence, distinguish quoted or retrieved sources from synthesis, and report insufficient support instead of inventing an answer.
 
-### 47. Retention and permanent deletion
+### 47. Retention and permanent deletion - FINISHED
 
 Implement the complete retention matrix across:
 

@@ -3,11 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import type {
   ContributionResource,
   ContributionRevisionResource,
+  PermanentDeletionPreview,
 } from '@journal/contracts';
 import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import AudioContributionCard from '../components/AudioContributionCard.vue';
+import AppDialog from '../components/AppDialog.vue';
 import ArtifactReviewPanel from '../components/ArtifactReviewPanel.vue';
 import ContributionCard from '../components/ContributionCard.vue';
 import NudgeDigestCard from '../components/NudgeDigestCard.vue';
@@ -31,6 +33,10 @@ import {
   retryRecordingTranscription,
 } from '../recording/api';
 import { useRecordingSyncController } from '../recording/sync-controller';
+import {
+  previewPermanentDeletion,
+  requestPermanentDeletion,
+} from '../retention/api';
 import type { LocalRecordingRecord } from '../storage/indexed-db';
 
 const props = defineProps<{ date?: string }>();
@@ -56,6 +62,10 @@ const localStorageError = ref('');
 const selectedDate = ref(journalDate.value);
 const submitting = ref(false);
 const errorMessage = ref('');
+const dayDeletionDialog = ref<InstanceType<typeof AppDialog>>();
+const dayDeletionPreview = ref<PermanentDeletionPreview>();
+const dayDeletionError = ref('');
+const dayDeletionBusy = ref(false);
 const revisions = reactive<
   Record<string, readonly ContributionRevisionResource[] | undefined>
 >({});
@@ -502,6 +512,46 @@ async function selectDate(): Promise<void> {
   await router.push(`/journal/${selectedDate.value}`);
 }
 
+async function openDayDeletion(): Promise<void> {
+  const dayId = dayQuery.data.value?.id;
+  if (dayId === undefined) return;
+  dayDeletionBusy.value = true;
+  dayDeletionError.value = '';
+  dayDeletionDialog.value?.open();
+  try {
+    dayDeletionPreview.value = await previewPermanentDeletion(
+      { entityKind: 'journal_day', entityId: dayId },
+      csrfToken(),
+    );
+  } catch (error) {
+    dayDeletionError.value =
+      error instanceof Error ? error.message : 'Deletion preview failed.';
+  } finally {
+    dayDeletionBusy.value = false;
+  }
+}
+
+async function permanentlyDeleteDay(): Promise<void> {
+  const dayId = dayQuery.data.value?.id;
+  if (dayId === undefined || !dayDeletionPreview.value?.eligible) return;
+  dayDeletionBusy.value = true;
+  dayDeletionError.value = '';
+  try {
+    await requestPermanentDeletion(
+      { entityKind: 'journal_day', entityId: dayId },
+      csrfToken(),
+    );
+    dayDeletionDialog.value?.close();
+    ui.announce('Permanent Journal Day deletion queued');
+    await refresh();
+  } catch (error) {
+    dayDeletionError.value =
+      error instanceof Error ? error.message : 'Deletion failed.';
+  } finally {
+    dayDeletionBusy.value = false;
+  }
+}
+
 await loadPending();
 </script>
 
@@ -525,6 +575,19 @@ await loadPending();
           {{ activeCount }} active
           {{ activeCount === 1 ? 'contribution' : 'contributions' }}
         </p>
+        <button
+          v-if="
+            dayQuery.data.value?.id &&
+            contributions.length > 0 &&
+            activeCount === 0 &&
+            auth.status.value?.csrfToken
+          "
+          class="btn btn-ghost btn-sm mt-2 text-error"
+          type="button"
+          @click="openDayDeletion"
+        >
+          Delete Journal Day permanently
+        </button>
       </div>
 
       <form
@@ -868,9 +931,15 @@ await loadPending();
             :contribution="item.contribution"
             :local="item.local"
             :busy="submitting"
+            v-bind="
+              auth.status.value?.csrfToken === undefined
+                ? {}
+                : { csrfToken: auth.status.value.csrfToken }
+            "
             @move="moveAudio(item, $event)"
             @retry="retryAudio(item)"
             @retry-transcription="retryTranscription(item)"
+            @audio-changed="refresh"
           />
           <ContributionCard
             v-else
@@ -878,10 +947,16 @@ await loadPending();
             :revisions="revisions[item.contribution.id]"
             :busy="submitting"
             :local-status="localStatus(item.contribution.id)"
+            v-bind="
+              auth.status.value?.csrfToken === undefined
+                ? {}
+                : { csrfToken: auth.status.value.csrfToken }
+            "
             @edit="saveEdit"
             @delete="changeDeletion($event, true)"
             @restore="changeDeletion($event, false)"
             @load-history="loadHistory"
+            @permanently-deleted="refresh"
           />
         </div>
         <hr v-if="index < timelineItems.length - 1" class="bg-base-300" />
@@ -891,5 +966,55 @@ await loadPending();
       v-if="dayQuery.data.value?.id"
       :journal-day-id="dayQuery.data.value.id"
     />
+
+    <AppDialog
+      id="permanent-delete-journal-day"
+      ref="dayDeletionDialog"
+      title="Permanently delete this Journal Day?"
+    >
+      <span
+        v-if="dayDeletionBusy && !dayDeletionPreview"
+        class="loading loading-spinner"
+        role="status"
+        aria-label="Loading Journal Day deletion impact"
+      />
+      <div v-else-if="dayDeletionError" role="alert" class="alert alert-error">
+        <span>{{ dayDeletionError }}</span>
+      </div>
+      <template v-else-if="dayDeletionPreview">
+        <div role="alert" class="alert alert-warning alert-soft">
+          <span>
+            Every contribution, revision, recording, derived artifact, search
+            entry, local cache, and hosted export for this day is removed or
+            invalidated. Downloaded exports remain outside system control, and
+            historical backups expire separately.
+          </span>
+        </div>
+        <p class="mt-4 text-sm">
+          {{ dayDeletionPreview.affectedContributionCount }} contributions and
+          {{ dayDeletionPreview.affectedRecordingCount }} recordings are
+          affected. Eligible after
+          {{ new Date(dayDeletionPreview.eligibleAt).toLocaleString() }}.
+        </p>
+        <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-base-content/70">
+          <li v-for="impact in dayDeletionPreview.impacts" :key="impact.facet">
+            {{ impact.detail }}
+          </li>
+        </ul>
+      </template>
+      <template #actions="{ close }">
+        <button class="btn btn-ghost" type="button" @click="close">
+          Cancel
+        </button>
+        <button
+          class="btn btn-error"
+          type="button"
+          :disabled="dayDeletionBusy || !dayDeletionPreview?.eligible"
+          @click="permanentlyDeleteDay"
+        >
+          Permanently delete Journal Day
+        </button>
+      </template>
+    </AppDialog>
   </section>
 </template>

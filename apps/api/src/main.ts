@@ -27,6 +27,7 @@ import { PostgresArtifactService } from './artifact-service.js';
 import { PostgresMemoryService } from './memory-service.js';
 import { PostgresSearchService } from './search-service.js';
 import { PostgresGroundedAnswerService } from './grounded-answer-service.js';
+import { PostgresRetentionService } from './retention-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -135,6 +136,7 @@ const app = createApiApp({
   ),
   processorService: new PostgresProcessorService(database.database),
   reprocessingService: new PostgresReprocessingService(database.database, boss),
+  retentionService: new PostgresRetentionService(database.database, boss),
   searchService,
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
