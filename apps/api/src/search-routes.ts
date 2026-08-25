@@ -47,9 +47,10 @@ export function registerSearchRoutes(
         return;
       }
       response.set('cache-control', 'private, no-store');
-      const result = await service.lexical(owner.ownerId, parsed.data);
+      const result = await service.search(owner.ownerId, parsed.data);
       sendValidated(response, lexicalSearchPageSchema, {
         items: [...result.items],
+        retrieval: result.retrieval,
         page: {
           hasMore: result.nextCursor !== undefined,
           ...(result.nextCursor === undefined

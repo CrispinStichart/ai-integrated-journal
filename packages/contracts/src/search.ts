@@ -16,6 +16,12 @@ export const searchLayerSchema = z.enum([
   'memory',
 ]);
 export const searchAuthoritySchema = z.enum(['manual', 'generated']);
+export const searchModeSchema = z.enum(['lexical', 'semantic', 'hybrid']);
+export const searchFallbackReasonSchema = z.enum([
+  'provider_unavailable',
+  'provider_failed',
+  'semantic_index_unavailable',
+]);
 export const searchSourceKindSchema = z.enum([
   'contribution_revision',
   'transcript_revision',
@@ -32,6 +38,7 @@ export const searchContributionTypeSchema = z.enum([
 export const lexicalSearchRequestSchema = z
   .strictObject({
     q: z.string().trim().min(1).max(200),
+    mode: searchModeSchema.optional(),
     limit: z.coerce.number().int().min(1).max(50).default(20),
     cursor: cursorSchema.optional(),
     layers: z
@@ -81,12 +88,32 @@ export const lexicalSearchResultSchema = z.strictObject({
   resultType: z.string().min(1).optional(),
   authority: searchAuthoritySchema,
   score: z.number().nonnegative(),
+  retrievalSignals: z
+    .strictObject({
+      lexicalRank: z.number().int().positive().max(200).optional(),
+      semanticRank: z.number().int().positive().max(200).optional(),
+    })
+    .optional(),
   snippet: z.array(searchSnippetSegmentSchema).min(1),
   href: z.string().min(1),
 });
 
 export const lexicalSearchPageSchema = z.strictObject({
   items: z.array(lexicalSearchResultSchema).max(50),
+  retrieval: z.strictObject({
+    requestedMode: searchModeSchema,
+    effectiveMode: searchModeSchema,
+    fallbackReason: searchFallbackReasonSchema.optional(),
+    cohort: z
+      .strictObject({
+        providerId: z.string().min(1).max(120),
+        modelId: z.string().min(1).max(120),
+        modelVersion: z.string().min(1).max(120).optional(),
+        dimension: z.number().int().min(1).max(4096),
+        configurationFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+      })
+      .optional(),
+  }),
   page: z.strictObject({
     hasMore: z.boolean(),
     nextCursor: cursorSchema.optional(),
@@ -96,3 +123,8 @@ export const lexicalSearchPageSchema = z.strictObject({
 export type LexicalSearchRequest = z.infer<typeof lexicalSearchRequestSchema>;
 export type LexicalSearchResult = z.infer<typeof lexicalSearchResultSchema>;
 export type SearchLayer = z.infer<typeof searchLayerSchema>;
+export type SearchMode = z.infer<typeof searchModeSchema>;
+export type SearchFallbackReason = z.infer<typeof searchFallbackReasonSchema>;
+export type SearchRetrievalMetadata = z.infer<
+  typeof lexicalSearchPageSchema.shape.retrieval
+>;

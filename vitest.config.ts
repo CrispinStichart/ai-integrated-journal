@@ -38,6 +38,10 @@ export default defineConfig({
     ]),
   },
   test: {
+    // Leave capacity for jsdom, axe, and property-test work performed inside
+    // each worker so full coverage runs do not turn valid 5-second tests into
+    // CPU-contention timeouts on highly parallel hosts.
+    maxWorkers: '50%',
     coverage: {
       exclude: [
         '**/*.d.ts',
@@ -88,6 +92,11 @@ export default defineConfig({
         // real PostgreSQL constraints and are exercised in the separately
         // gated nudge integration suite.
         'packages/database/src/nudge-repository.ts',
+        // Semantic indexing dispatches pg-boss jobs transactionally and stores
+        // variable-dimension pgvector chunks. Its real queue, cohort, owner,
+        // continuation, and lifecycle behavior is covered by the separately
+        // gated search embedding integration suites.
+        'packages/database/src/search-embedding-repository.ts',
       ],
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',

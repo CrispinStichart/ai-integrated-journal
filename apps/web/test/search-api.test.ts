@@ -20,6 +20,7 @@ const response = {
       href: '/journal/2026-08-25?revision=exact',
     },
   ],
+  retrieval: { requestedMode: 'hybrid', effectiveMode: 'hybrid' },
   page: { hasMore: true, nextCursor: 'next_cursor' },
 };
 
@@ -38,6 +39,7 @@ describe('search API client', () => {
       lexicalSearch(
         {
           q: 'morning',
+          mode: 'hybrid',
           layers: ['typed_text', 'corrected'],
           dateFrom: '2026-08-01',
           contributionTypes: ['typed_text', 'recording'],
@@ -51,5 +53,6 @@ describe('search API client', () => {
     expect(url).toContain('layers=typed_text%2Ccorrected');
     expect(url).toContain('contributionTypes=typed_text%2Crecording');
     expect(url).toContain('cursor=next_cursor');
+    expect(url).toContain('mode=hybrid');
   });
 });

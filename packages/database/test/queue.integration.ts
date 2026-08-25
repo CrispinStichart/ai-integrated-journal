@@ -84,6 +84,7 @@ describe('WORKER pg-boss foundation', () => {
     expect(schedules.map(({ key }) => key).sort()).toEqual([
       'nudges.digest',
       'retention.daily',
+      'search.embeddings.dispatch',
     ]);
   });
 

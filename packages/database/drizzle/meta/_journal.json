@@ -162,6 +162,20 @@
       "when": 1787627647376,
       "tag": "20260825031407_charming_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787629671279,
+      "tag": "20260825034751_light_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787629697586,
+      "tag": "20260825034817_perpetual_fenris",
+      "breakpoints": true
     }
   ]
 }

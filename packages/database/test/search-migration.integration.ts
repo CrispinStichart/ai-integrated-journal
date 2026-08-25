@@ -131,4 +131,39 @@ describe('lexical search forward migration', () => {
       }),
     ).toHaveLength(0);
   });
+
+  it('[SEARCH-002][SEARCH-006] installs pgvector cohort indexes and backfills lifecycle reindex requests without content-bearing jobs', async () => {
+    const extension = await client.pool.query<{ installed: boolean }>(
+      "select exists(select 1 from pg_extension where extname = 'vector') as installed",
+    );
+    expect(extension.rows[0]?.installed).toBe(true);
+    const indexes = await client.pool.query<{ indexname: string }>(
+      `select indexname from pg_indexes
+       where schemaname = 'journal'
+         and indexname like 'search_fragment_embedding_vector_%_hnsw_idx'
+       order by indexname`,
+    );
+    expect(indexes.rows.map(({ indexname }) => indexname)).toEqual([
+      'search_fragment_embedding_vector_1024_hnsw_idx',
+      'search_fragment_embedding_vector_1536_hnsw_idx',
+      'search_fragment_embedding_vector_3072_hnsw_idx',
+      'search_fragment_embedding_vector_384_hnsw_idx',
+      'search_fragment_embedding_vector_4_hnsw_idx',
+      'search_fragment_embedding_vector_768_hnsw_idx',
+    ]);
+    const requests = await client.pool.query<{
+      fragment_id: string;
+      status: string;
+    }>(
+      `select fragment_id::text, status
+       from journal.search_embedding_request
+       order by fragment_id`,
+    );
+    expect(requests.rows).toEqual([
+      {
+        fragment_id: '019c5b90-0000-7000-8000-000000000505',
+        status: 'pending',
+      },
+    ]);
+  });
 });

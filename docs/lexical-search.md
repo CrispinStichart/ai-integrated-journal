@@ -20,3 +20,6 @@ the old fragment in the same transaction. Soft deletion, transcript staleness,
 artifact supersession/staleness, manual authority changes, and memory
 disable/delete transitions also take effect transactionally. See ADR-0011 for
 the persistence and ranking decision.
+
+Optional semantic and hybrid modes build on the same exact-revision lifecycle
+authority; see `semantic-and-hybrid-search.md` and ADR-0012.

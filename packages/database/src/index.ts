@@ -45,6 +45,9 @@ export {
   recordings,
   recordingUploads,
   sessions,
+  searchEmbeddingCohorts,
+  searchEmbeddingRequests,
+  searchFragmentEmbeddings,
   searchFragments,
   transcriptCleanupRuns,
   transcriptEvidenceSpans,
@@ -98,7 +101,21 @@ export {
   type LexicalSearchCursor,
   type LexicalSearchFilters,
   type LexicalSearchRow,
+  type SemanticSearchCohort,
+  type SemanticSearchRow,
 } from './search-repository.js';
+export {
+  EMBEDDING_CHUNK_CHARACTERS,
+  EMBEDDING_CHUNKS_PER_JOB,
+  EMBEDDING_DISPATCH_BATCH,
+  SEARCH_EMBEDDING_DISPATCH_OPERATION,
+  SEARCH_EMBEDDING_DISPATCH_SCHEDULE_KEY,
+  SEARCH_EMBEDDING_OPERATION,
+  SearchEmbeddingRepository,
+  type EmbeddingChunkRecord,
+  type PersistedEmbeddingCohort,
+  type SearchEmbeddingRequestRecord,
+} from './search-embedding-repository.js';
 export {
   assembleApprovedTranscriptionContext,
   MAX_STT_MEMORY_CONTEXT_ITEMS,

@@ -24,6 +24,7 @@ const result = {
   contributionType: 'typed_text' as const,
   authority: 'manual' as const,
   score: 0.5,
+  retrievalSignals: { lexicalRank: 2, semanticRank: 1 },
   snippet: [
     { text: 'Safe before ', highlighted: false },
     { text: '<img src=x onerror=alert(1)>', highlighted: true },
@@ -57,6 +58,17 @@ describe('lexical search UI', () => {
     mocks.processors.mockResolvedValue([]);
     mocks.search.mockResolvedValue({
       items: [result],
+      retrieval: {
+        requestedMode: 'hybrid',
+        effectiveMode: 'hybrid',
+        cohort: {
+          providerId: 'fixture',
+          modelId: 'semantic-v1',
+          modelVersion: '1',
+          dimension: 4,
+          configurationFingerprint: 'a'.repeat(64),
+        },
+      },
       page: { hasMore: false },
     });
   });
@@ -70,18 +82,48 @@ describe('lexical search UI', () => {
     expect(mocks.search).toHaveBeenCalledWith(
       expect.objectContaining({
         q: 'morning',
+        mode: 'hybrid',
         dateFrom: '2026-08-01',
         layers: expect.arrayContaining(['typed_text', 'corrected']),
       }),
       undefined,
     );
     expect(wrapper.text()).toContain('Retrieved sources and results');
+    expect(wrapper.text()).toContain('Meaning match');
+    expect(wrapper.text()).toContain('Word match');
+    expect(wrapper.text()).toContain('fixture / semantic-v1');
     expect(wrapper.text()).toContain('<img src=x onerror=alert(1)>');
     expect(wrapper.find('blockquote img').exists()).toBe(false);
     expect(wrapper.get('mark').text()).toBe('<img src=x onerror=alert(1)>');
     expect(wrapper.get('a.link').attributes('href')).toContain(
       'revision=019c5b90-0000-7000-8000-000000000041',
     );
+    expect((await axe.run(wrapper.element)).violations).toEqual([]);
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[ARCH-005][SEARCH-002] explains provider fallback while preserving lexical results', async () => {
+    mocks.search.mockResolvedValueOnce({
+      items: [result],
+      retrieval: {
+        requestedMode: 'semantic',
+        effectiveMode: 'lexical',
+        fallbackReason: 'provider_unavailable',
+      },
+      page: { hasMore: false },
+    });
+    const { wrapper, queryClient } = await mountView();
+    await wrapper
+      .get('select[aria-label="Search method"]')
+      .setValue('semantic');
+    await wrapper.get('input[type="search"]').setValue('morning');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'Semantic retrieval is not configured',
+    );
+    expect(wrapper.text()).toContain('Safe before');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();

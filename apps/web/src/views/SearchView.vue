@@ -27,6 +27,7 @@ const selectedLayers = ref<SearchLayer[]>([
 ]);
 const form = reactive({
   q: '',
+  mode: 'hybrid' as 'lexical' | 'semantic' | 'hybrid',
   dateFrom: '',
   dateTo: '',
   contributionType: '',
@@ -56,6 +57,15 @@ const searchQuery = useInfiniteQuery({
 const results = computed(
   () => searchQuery.data.value?.pages.flatMap((page) => page.items) ?? [],
 );
+const fallbackMessage = computed(() => {
+  const retrieval = searchQuery.data.value?.pages[0]?.retrieval;
+  if (retrieval?.fallbackReason === undefined) return '';
+  if (retrieval.fallbackReason === 'provider_unavailable')
+    return 'Semantic retrieval is not configured. Showing local lexical matches.';
+  if (retrieval.fallbackReason === 'semantic_index_unavailable')
+    return 'Semantic indexing is not ready for this model. Showing local lexical matches.';
+  return 'Semantic retrieval failed. Showing local lexical matches; your journal was not changed.';
+});
 
 function submit(): void {
   const q = form.q.trim();
@@ -70,6 +80,7 @@ function submit(): void {
   validationMessage.value = '';
   submitted.value = {
     q,
+    mode: form.mode,
     layers: [...selectedLayers.value],
     ...(form.dateFrom ? { dateFrom: form.dateFrom } : {}),
     ...(form.dateTo ? { dateTo: form.dateTo } : {}),
@@ -104,16 +115,19 @@ function label(value: string): string {
       Search
     </h1>
     <p class="mt-3 max-w-3xl text-base-content/70">
-      Search current journal sources and selected derived layers. Put a phrase
-      in quotes for phrase matching; unquoted words support prefix matching.
+      Search current journal sources and selected derived layers. Hybrid search
+      combines local word matching with optional semantic similarity without
+      mixing incompatible embedding models.
     </p>
 
     <form
       class="mt-6 space-y-5"
-      aria-label="Lexical search"
+      aria-label="Journal retrieval"
       @submit.prevent="submit"
     >
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div
+        class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end"
+      >
         <fieldset class="fieldset min-w-0 flex-1">
           <legend class="fieldset-legend">Words or quoted phrase</legend>
           <input
@@ -124,6 +138,14 @@ function label(value: string): string {
             maxlength="200"
             placeholder='For example, "morning walk"'
           />
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend class="fieldset-legend">Search method</legend>
+          <select v-model="form.mode" class="select" aria-label="Search method">
+            <option value="hybrid">Hybrid</option>
+            <option value="semantic">Meaning</option>
+            <option value="lexical">Words & phrases</option>
+          </select>
         </fieldset>
         <button class="btn" type="submit">Search journal</button>
       </div>
@@ -235,6 +257,14 @@ function label(value: string): string {
       {{ validationMessage }}
     </div>
     <div
+      v-if="fallbackMessage"
+      class="alert alert-info mt-5"
+      role="status"
+      aria-live="polite"
+    >
+      {{ fallbackMessage }}
+    </div>
+    <div
       v-if="searchQuery.isPending.value && submitted"
       class="mt-8 flex justify-center"
       role="status"
@@ -271,7 +301,17 @@ function label(value: string): string {
       <p class="mt-1 text-sm text-base-content/60">
         Quotes below are retrieved text, never AI-generated synthesis.
       </p>
-      <ul class="list mt-4 gap-3" aria-label="Lexical search results">
+      <p
+        v-if="searchQuery.data.value?.pages[0]?.retrieval.cohort"
+        class="mt-1 text-xs text-base-content/60"
+      >
+        Semantic cohort:
+        {{ searchQuery.data.value.pages[0].retrieval.cohort.providerId }} /
+        {{ searchQuery.data.value.pages[0].retrieval.cohort.modelId }} ·
+        {{ searchQuery.data.value.pages[0].retrieval.cohort.dimension }}
+        dimensions
+      </p>
+      <ul class="list mt-4 gap-3" aria-label="Search results">
         <li
           v-for="result in results"
           :key="result.fragmentId"
@@ -289,6 +329,18 @@ function label(value: string): string {
               </span>
               <span v-if="result.processorName" class="badge badge-ghost">
                 {{ result.processorName }}
+              </span>
+              <span
+                v-if="result.retrievalSignals?.semanticRank"
+                class="badge badge-ghost"
+              >
+                Meaning match
+              </span>
+              <span
+                v-if="result.retrievalSignals?.lexicalRank"
+                class="badge badge-ghost"
+              >
+                Word match
               </span>
             </div>
             <blockquote class="mt-3 border-l-4 border-base-300 pl-4">

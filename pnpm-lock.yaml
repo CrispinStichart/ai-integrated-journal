@@ -62,6 +62,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@journal/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@journal/config':
         specifier: workspace:*
         version: link:../../packages/config

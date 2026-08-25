@@ -96,6 +96,19 @@ const scheduleSeeds: (typeof schedules.$inferInsert)[] = [
     }),
     enabled: true,
   },
+  {
+    key: 'search.embeddings.dispatch',
+    queueName: queueNames.search,
+    cronExpression: '* * * * *',
+    timeZone: 'UTC',
+    payloadSchemaVersion: 1,
+    payload: createQueueJobPayload({
+      identifiers: { scheduleKey: 'search.embeddings.dispatch' },
+      operation: 'search_embedding_dispatch',
+      queueName: queueNames.search,
+    }),
+    enabled: true,
+  },
 ];
 
 const processorSeeds: (typeof processorInstallations.$inferInsert)[] = [

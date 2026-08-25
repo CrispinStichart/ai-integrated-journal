@@ -10,6 +10,7 @@ describe('lexical search contracts', () => {
     expect(
       lexicalSearchRequestSchema.parse({
         q: ' morning walk ',
+        mode: 'hybrid',
         layers: 'typed_text,corrected,observation',
         contributionTypes: 'typed_text,recording',
         dateFrom: '2026-08-01',
@@ -18,6 +19,7 @@ describe('lexical search contracts', () => {
       }),
     ).toMatchObject({
       q: 'morning walk',
+      mode: 'hybrid',
       layers: ['typed_text', 'corrected', 'observation'],
       contributionTypes: ['typed_text', 'recording'],
       limit: 20,
@@ -53,6 +55,16 @@ describe('lexical search contracts', () => {
             href: '/journal/2026-08-25?revision=exact',
           },
         ],
+        retrieval: {
+          requestedMode: 'hybrid',
+          effectiveMode: 'hybrid',
+          cohort: {
+            providerId: 'fixture',
+            modelId: 'semantic-v1',
+            dimension: 4,
+            configurationFingerprint: 'a'.repeat(64),
+          },
+        },
         page: { hasMore: false },
       }).items[0]?.snippet[0]?.text,
     ).toBe('<img src=x onerror=alert(1)>');

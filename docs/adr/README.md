@@ -26,3 +26,4 @@ Changing an accepted decision requires a new ADR that identifies the record it s
 | [0009](0009-privacy-evidence-and-retention-defaults.md) | Accepted | Privacy, evidence, retention, and local backup defaults           |
 | [0010](0010-recording-resource-policy.md)               | Accepted | Bounded resources per operation, not per recording                |
 | [0011](0011-transactional-lexical-search-index.md)      | Accepted | Transactional current-revision PostgreSQL lexical index           |
+| [0012](0012-compatible-embedding-cohorts-and-hybrid-ranking.md) | Accepted | Exact embedding cohorts and reciprocal-rank hybrid retrieval |

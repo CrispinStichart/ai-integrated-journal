@@ -24,6 +24,13 @@ const tsvector = customType<{ data: string }>({
   dataType: () => 'tsvector',
 });
 
+const vector = customType<{ data: readonly number[]; driverData: string }>({
+  dataType: () => 'vector',
+  toDriver: (value) => `[${value.join(',')}]`,
+  fromDriver: (value) =>
+    value.slice(1, -1).split(',').filter(Boolean).map(Number),
+});
+
 export const authChallengePurpose = pgEnum('auth_challenge_purpose', [
   'passkey_registration',
   'passkey_authentication',
@@ -2520,6 +2527,7 @@ export const searchFragments = journalSchema.table(
       table.sourceKind,
       table.sourceRevisionId,
     ),
+    uniqueIndex('search_fragment_id_owner_unique').on(table.id, table.ownerId),
     index('search_fragment_vector_idx').using('gin', table.searchVector),
     index('search_fragment_owner_rank_idx').on(
       table.ownerId,
@@ -2551,6 +2559,174 @@ export const searchFragments = journalSchema.table(
     check(
       'search_fragment_location_consistent',
       sql`(${table.memoryId} is not null and ${table.journalDayId} is null and ${table.journalDate} is null) or (${table.memoryId} is null and ${table.journalDayId} is not null and ${table.journalDate} is not null)`,
+    ),
+  ],
+);
+
+/** Owner-scoped embedding identity; vectors from different cohorts never mix. */
+export const searchEmbeddingCohorts = journalSchema.table(
+  'search_embedding_cohort',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    providerDisplayName: text('provider_display_name').notNull(),
+    providerAdapterVersion: text('provider_adapter_version'),
+    modelId: text('model_id').notNull(),
+    modelDisplayName: text('model_display_name'),
+    modelVersion: text('model_version').notNull().default(''),
+    dimension: integer('dimension').notNull(),
+    configuration: jsonb('configuration')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+    configurationFingerprint: text('configuration_fingerprint').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('search_embedding_cohort_identity_unique').on(
+      table.ownerId,
+      table.providerId,
+      table.modelId,
+      table.modelVersion,
+      table.dimension,
+      table.configurationFingerprint,
+    ),
+    uniqueIndex('search_embedding_cohort_id_owner_unique').on(
+      table.id,
+      table.ownerId,
+    ),
+    index('search_embedding_cohort_owner_idx').on(table.ownerId, table.id),
+    check(
+      'search_embedding_cohort_dimension_bounded',
+      sql`${table.dimension} between 1 and 4096`,
+    ),
+    check(
+      'search_embedding_cohort_provider_not_blank',
+      sql`length(btrim(${table.providerId})) > 0`,
+    ),
+    check(
+      'search_embedding_cohort_model_not_blank',
+      sql`length(btrim(${table.modelId})) > 0`,
+    ),
+    check(
+      'search_embedding_cohort_configuration_sha256',
+      sql`${table.configurationFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+/** Chunk vectors for one exact source revision and one compatible cohort. */
+export const searchFragmentEmbeddings = journalSchema.table(
+  'search_fragment_embedding',
+  {
+    fragmentId: uuid('fragment_id')
+      .notNull()
+      .references(() => searchFragments.id, { onDelete: 'cascade' }),
+    cohortId: uuid('cohort_id')
+      .notNull()
+      .references(() => searchEmbeddingCohorts.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    chunkIndex: integer('chunk_index').notNull(),
+    startCharacter: integer('start_character').notNull(),
+    endCharacter: integer('end_character').notNull(),
+    embedding: vector('embedding').notNull(),
+    indexedAt: timestamp('indexed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'search_fragment_embedding_pk',
+      columns: [table.fragmentId, table.cohortId, table.chunkIndex],
+    }),
+    foreignKey({
+      name: 'search_fragment_embedding_fragment_owner_fk',
+      columns: [table.fragmentId, table.ownerId],
+      foreignColumns: [searchFragments.id, searchFragments.ownerId],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'search_fragment_embedding_cohort_owner_fk',
+      columns: [table.cohortId, table.ownerId],
+      foreignColumns: [
+        searchEmbeddingCohorts.id,
+        searchEmbeddingCohorts.ownerId,
+      ],
+    }).onDelete('cascade'),
+    index('search_fragment_embedding_owner_cohort_idx').on(
+      table.ownerId,
+      table.cohortId,
+      table.fragmentId,
+    ),
+    check(
+      'search_fragment_embedding_chunk_nonnegative',
+      sql`${table.chunkIndex} >= 0`,
+    ),
+    check(
+      'search_fragment_embedding_range_valid',
+      sql`${table.startCharacter} >= 1 and ${table.endCharacter} >= ${table.startCharacter}`,
+    ),
+  ],
+);
+
+/** Transactional lifecycle request dispatched as identifier-only queue work. */
+export const searchEmbeddingRequests = journalSchema.table(
+  'search_embedding_request',
+  {
+    fragmentId: uuid('fragment_id')
+      .primaryKey()
+      .references(() => searchFragments.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    generation: integer('generation').notNull().default(1),
+    status: text('status').notNull().default('pending'),
+    jobId: uuid('job_id'),
+    cohortId: uuid('cohort_id').references(() => searchEmbeddingCohorts.id, {
+      onDelete: 'set null',
+    }),
+    nextChunkIndex: integer('next_chunk_index').notNull().default(0),
+    nextCharacter: integer('next_character').notNull().default(1),
+    lastErrorCode: text('last_error_code'),
+    requestedAt: timestamp('requested_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('search_embedding_request_dispatch_idx').on(
+      table.status,
+      table.requestedAt,
+      table.fragmentId,
+    ),
+    foreignKey({
+      name: 'search_embedding_request_fragment_owner_fk',
+      columns: [table.fragmentId, table.ownerId],
+      foreignColumns: [searchFragments.id, searchFragments.ownerId],
+    }).onDelete('cascade'),
+    check(
+      'search_embedding_request_generation_positive',
+      sql`${table.generation} > 0`,
+    ),
+    check(
+      'search_embedding_request_progress_valid',
+      sql`${table.nextChunkIndex} >= 0 and ${table.nextCharacter} >= 1`,
+    ),
+    check(
+      'search_embedding_request_status_valid',
+      sql`${table.status} in ('pending', 'dispatched', 'running', 'succeeded', 'unavailable', 'failed')`,
+    ),
+    check(
+      'search_embedding_request_job_consistent',
+      sql`(${table.status} in ('dispatched', 'running', 'failed') and ${table.jobId} is not null) or (${table.status} not in ('dispatched', 'running', 'failed'))`,
     ),
   ],
 );
@@ -2992,6 +3168,9 @@ export const databaseSchema = {
   recordings,
   recordingUploads,
   schedules,
+  searchEmbeddingCohorts,
+  searchEmbeddingRequests,
+  searchFragmentEmbeddings,
   searchFragments,
   sessions,
   transcriptCleanupRuns,

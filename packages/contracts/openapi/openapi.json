@@ -2175,11 +2175,25 @@
               "pattern": "^[A-Za-z0-9_-]+$",
               "description": "Opaque, server-issued deterministic pagination cursor."
             }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "lexical",
+                "semantic",
+                "hybrid"
+              ],
+              "default": "lexical"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Deterministically ranked exact-revision lexical results",
+            "description": "Deterministically ranked exact-revision lexical, semantic, or hybrid results with explicit fallback metadata",
             "content": {
               "application/json": {
                 "schema": {
@@ -6665,6 +6679,22 @@
                   "type": "number",
                   "minimum": 0
                 },
+                "retrievalSignals": {
+                  "type": "object",
+                  "properties": {
+                    "lexicalRank": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 200
+                    },
+                    "semanticRank": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 200
+                    }
+                  },
+                  "additionalProperties": false
+                },
                 "snippet": {
                   "minItems": 1,
                   "type": "array",
@@ -6705,6 +6735,76 @@
               "additionalProperties": false
             }
           },
+          "retrieval": {
+            "type": "object",
+            "properties": {
+              "requestedMode": {
+                "type": "string",
+                "enum": [
+                  "lexical",
+                  "semantic",
+                  "hybrid"
+                ]
+              },
+              "effectiveMode": {
+                "type": "string",
+                "enum": [
+                  "lexical",
+                  "semantic",
+                  "hybrid"
+                ]
+              },
+              "fallbackReason": {
+                "type": "string",
+                "enum": [
+                  "provider_unavailable",
+                  "provider_failed",
+                  "semantic_index_unavailable"
+                ]
+              },
+              "cohort": {
+                "type": "object",
+                "properties": {
+                  "providerId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "modelId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "modelVersion": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "dimension": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4096
+                  },
+                  "configurationFingerprint": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "providerId",
+                  "modelId",
+                  "dimension",
+                  "configurationFingerprint"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "requestedMode",
+              "effectiveMode"
+            ],
+            "additionalProperties": false
+          },
           "page": {
             "type": "object",
             "properties": {
@@ -6727,6 +6827,7 @@
         },
         "required": [
           "items",
+          "retrieval",
           "page"
         ],
         "additionalProperties": false
@@ -6738,6 +6839,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "lexical",
+              "semantic",
+              "hybrid"
+            ]
           },
           "limit": {
             "default": 20,
@@ -6932,6 +7041,22 @@
           "score": {
             "type": "number",
             "minimum": 0
+          },
+          "retrievalSignals": {
+            "type": "object",
+            "properties": {
+              "lexicalRank": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 200
+              },
+              "semanticRank": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 200
+              }
+            },
+            "additionalProperties": false
           },
           "snippet": {
             "minItems": 1,

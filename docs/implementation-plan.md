@@ -388,7 +388,7 @@ Nudges are generated only after successful-enough processing, consolidated into 
 
 Build revision-aware PostgreSQL full-text indexing, deterministic ranking, filters, snippets, layer selection, and immediate exclusion of stale or deleted data.
 
-### 45. Semantic and hybrid retrieval
+### 45. Semantic and hybrid retrieval - FINISHED
 
 Add optional embeddings, compatible provider/model/dimension cohorts, reciprocal-rank fusion, and lifecycle-aware reindexing.
 

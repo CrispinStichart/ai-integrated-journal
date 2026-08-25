@@ -47,15 +47,19 @@ function app(service: SearchService) {
 describe('lexical search API', () => {
   it('[SEARCH-001][SEARCH-003][SEARCH-005][SEC-001] validates and owner-scopes complete lexical filters', async () => {
     const service: SearchService = {
-      lexical: vi.fn(async () => ({
+      search: vi.fn(async () => ({
         items: [result],
+        retrieval: {
+          requestedMode: 'lexical' as const,
+          effectiveMode: 'lexical' as const,
+        },
         nextCursor: 'next_cursor',
       })),
     };
     await request(app(service)).get('/api/v1/search?q=walk').expect(401);
     const response = await request(app(service))
       .get(
-        `/api/v1/search?q=walk&layers=typed_text,corrected&dateFrom=2026-08-01&dateTo=2026-08-25&contributionTypes=typed_text&authority=manual&entity=Nicolette`,
+        `/api/v1/search?q=walk&mode=hybrid&layers=typed_text,corrected&dateFrom=2026-08-01&dateTo=2026-08-25&contributionTypes=typed_text&authority=manual&entity=Nicolette`,
       )
       .set('authorization', 'Bearer valid')
       .expect('cache-control', 'private, no-store')
@@ -64,10 +68,11 @@ describe('lexical search API', () => {
       sourceRevisionId: REVISION_ID,
       authority: 'manual',
     });
-    expect(service.lexical).toHaveBeenCalledWith(
+    expect(service.search).toHaveBeenCalledWith(
       OWNER_ID,
       expect.objectContaining({
         layers: ['typed_text', 'corrected'],
+        mode: 'hybrid',
         entity: 'Nicolette',
       }),
     );
@@ -75,7 +80,7 @@ describe('lexical search API', () => {
 
   it('[SEARCH-001][SEARCH-006] rejects malformed filters and stale cursors without running retrieval', async () => {
     const service: SearchService = {
-      lexical: vi.fn(async () => {
+      search: vi.fn(async () => {
         throw new SearchCursorError();
       }),
     };
@@ -83,7 +88,7 @@ describe('lexical search API', () => {
       .get('/api/v1/search?q=walk&dateFrom=2026-09-01&dateTo=2026-08-01')
       .set('authorization', 'Bearer valid')
       .expect(400);
-    expect(service.lexical).not.toHaveBeenCalled();
+    expect(service.search).not.toHaveBeenCalled();
     await request(app(service))
       .get('/api/v1/search?q=walk&cursor=valid_shape')
       .set('authorization', 'Bearer valid')

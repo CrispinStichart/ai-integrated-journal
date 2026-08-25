@@ -63,7 +63,7 @@ describe('WORKER queue contracts', () => {
   });
 
   it('[STATE-003][STATE-004] shares bounded retry, heartbeat, concurrency, and dead-letter policy', () => {
-    expect(allQueueDefinitions).toHaveLength(7);
+    expect(allQueueDefinitions).toHaveLength(8);
     expect(
       allQueueDefinitions.every(
         ({ queueOptions }) => queueOptions.heartbeatSeconds === 60,

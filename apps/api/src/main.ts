@@ -9,6 +9,7 @@ import {
 } from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
 import { LocalBlobStore } from '@journal/storage';
+import { AiProviderFactoryRegistry } from '@journal/ai';
 
 import { createApiApp } from './app.js';
 import { AuthenticationService } from './auth.js';
@@ -33,6 +34,7 @@ const logger = createContentSafeLogger({
 });
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const boss = createQueueClient(config.databaseUrl);
+const providers = new AiProviderFactoryRegistry();
 boss.on('error', (error: Error) => {
   logger.error({ errorType: error.name }, 'Queue runtime error');
 });
@@ -118,7 +120,12 @@ const app = createApiApp({
   ),
   processorService: new PostgresProcessorService(database.database),
   reprocessingService: new PostgresReprocessingService(database.database, boss),
-  searchService: new PostgresSearchService(database.database),
+  searchService: new PostgresSearchService(database.database, undefined, () =>
+    providers.resolve(
+      { providerId: 'unconfigured', enabled: false, settings: {} },
+      'embeddings',
+    ),
+  ),
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

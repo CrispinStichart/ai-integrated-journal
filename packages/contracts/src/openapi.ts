@@ -845,10 +845,20 @@ export function createOpenApiDocument(): Record<string, unknown> {
                 cursorPaginationRequestSchema.shape.cursor,
               ),
             },
+            {
+              in: 'query',
+              name: 'mode',
+              required: false,
+              schema: {
+                type: 'string',
+                enum: ['lexical', 'semantic', 'hybrid'],
+                default: 'lexical',
+              },
+            },
           ],
           responses: {
             '200': schemaResponse(
-              'Deterministically ranked exact-revision lexical results',
+              'Deterministically ranked exact-revision lexical, semantic, or hybrid results with explicit fallback metadata',
               'LexicalSearchPage',
             ),
             '400': problemResponse('Invalid query, filters, or cursor'),

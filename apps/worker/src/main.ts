@@ -8,6 +8,7 @@ import { registerTranscriptionConsumer } from './transcription-pipeline.js';
 import { registerTranscriptCleanupConsumer } from './transcript-cleanup-pipeline.js';
 import { registerProcessorConsumer } from './processor-runtime.js';
 import { registerNudgeDigestConsumer } from './nudge-engine.js';
+import { registerSearchEmbeddingConsumer } from './search-embedding.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -59,6 +60,15 @@ const worker = new WorkerRuntime({
         ),
     });
     await registerNudgeDigestConsumer({ boss: queue, database });
+    await registerSearchEmbeddingConsumer({
+      boss: queue,
+      database,
+      resolveProvider: () =>
+        providers.resolve(
+          { providerId: 'unconfigured', enabled: false, settings: {} },
+          'embeddings',
+        ),
+    });
   },
 });
 await worker.start();

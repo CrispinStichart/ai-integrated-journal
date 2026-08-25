@@ -22,6 +22,9 @@ import {
   processorRuns,
   processorVersions,
   recordings,
+  searchEmbeddingCohorts,
+  searchEmbeddingRequests,
+  searchFragmentEmbeddings,
   transcriptRevisions,
   transcriptionRuns,
   transcripts,
@@ -149,6 +152,131 @@ describe('revision-aware lexical search', () => {
       },
     });
     expect(secondPage[0]?.sourceRevisionId).toBe(older.revisionId);
+  });
+
+  it('[SEARCH-002][SEARCH-005][SEARCH-006][MODEL-003] searches only complete owner-scoped compatible embedding cohorts', async () => {
+    const source = await typed(
+      newerDayId,
+      'A quiet quasarfield visit with an unexpectedly clear sky.',
+    );
+    const cohortId = id();
+    await client.database.insert(searchEmbeddingCohorts).values({
+      id: cohortId,
+      ownerId,
+      providerId: 'fixture-provider',
+      providerDisplayName: 'Fixture provider',
+      modelId: 'semantic-fixture',
+      modelVersion: '1',
+      dimension: 4,
+      configuration: { purpose: 'semantic_search' },
+      configurationFingerprint: hash('semantic-configuration'),
+    });
+    await client.database
+      .update(searchEmbeddingRequests)
+      .set({
+        status: 'succeeded',
+        cohortId,
+        completedAt: now,
+      })
+      .where(eq(searchEmbeddingRequests.fragmentId, source.revisionId));
+    await client.database.insert(searchFragmentEmbeddings).values({
+      fragmentId: source.revisionId,
+      cohortId,
+      ownerId,
+      chunkIndex: 0,
+      startCharacter: 1,
+      endCharacter: 59,
+      embedding: [1, 0, 0, 0],
+    });
+    const cohort = {
+      providerId: 'fixture-provider',
+      modelId: 'semantic-fixture',
+      modelVersion: '1',
+      dimension: 4,
+      configurationFingerprint: hash('semantic-configuration'),
+    };
+    await expect(repository.hasSearchableCohort(ownerId, cohort)).resolves.toBe(
+      true,
+    );
+    const semantic = await repository.semantic({
+      ownerId,
+      vector: [0.99, 0.01, 0, 0],
+      cohort,
+      filters: { layers: ['typed_text'], authority: 'manual' },
+      limit: 10,
+    });
+    expect(semantic).toEqual([
+      expect.objectContaining({
+        sourceRevisionId: source.revisionId,
+        chunkIndex: 0,
+        headline: expect.stringContaining('quasarfield'),
+      }),
+    ]);
+    await expect(
+      repository.semantic({
+        ownerId,
+        vector: [1, 0, 0, 0],
+        cohort: { ...cohort, modelVersion: '2' },
+        filters: {},
+        limit: 10,
+      }),
+    ).resolves.toHaveLength(0);
+    await expect(
+      repository.semantic({
+        ownerId: otherOwnerId,
+        vector: [1, 0, 0, 0],
+        cohort,
+        filters: {},
+        limit: 10,
+      }),
+    ).resolves.toHaveLength(0);
+  });
+
+  it('[SEARCH-002][SEARCH-006][RET-007] transactionally requests reindexing and cascades vectors when a revision is replaced or deleted', async () => {
+    const source = await typed(newerDayId, 'Lifecycle semantic source');
+    await expect(
+      client.database
+        .select({ status: searchEmbeddingRequests.status })
+        .from(searchEmbeddingRequests)
+        .where(eq(searchEmbeddingRequests.fragmentId, source.revisionId)),
+    ).resolves.toEqual([{ status: 'pending' }]);
+
+    const nextRevisionId = id();
+    await client.database.insert(contributionRevisions).values({
+      id: nextRevisionId,
+      contributionId: source.contributionId,
+      revision: 2,
+      text: 'Replacement semantic source',
+      authority: 'manual',
+      authorId: ownerId,
+      contentHash: hash('Replacement semantic source'),
+    });
+    await client.database
+      .update(contributions)
+      .set({ currentRevisionId: nextRevisionId, currentRevision: 2 })
+      .where(eq(contributions.id, source.contributionId));
+    expect(
+      await client.database
+        .select({ fragmentId: searchEmbeddingRequests.fragmentId })
+        .from(searchEmbeddingRequests)
+        .where(eq(searchEmbeddingRequests.fragmentId, source.revisionId)),
+    ).toHaveLength(0);
+    expect(
+      await client.database
+        .select({ status: searchEmbeddingRequests.status })
+        .from(searchEmbeddingRequests)
+        .where(eq(searchEmbeddingRequests.fragmentId, nextRevisionId)),
+    ).toEqual([{ status: 'pending' }]);
+    await client.database
+      .update(contributions)
+      .set({ deletedAt: now, deletedBy: ownerId })
+      .where(eq(contributions.id, source.contributionId));
+    expect(
+      await client.database
+        .select({ fragmentId: searchEmbeddingRequests.fragmentId })
+        .from(searchEmbeddingRequests)
+        .where(eq(searchEmbeddingRequests.fragmentId, nextRevisionId)),
+    ).toHaveLength(0);
   });
 
   it('[SEARCH-001][SEARCH-006][RET-007] immediately excludes old, stale, deleted, and other-owner source material', async () => {

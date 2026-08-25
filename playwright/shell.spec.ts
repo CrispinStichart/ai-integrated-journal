@@ -141,6 +141,11 @@ test('[SEARCH-001][SEARCH-003–SEARCH-006] searches selected layers with safe e
             href: '/journal/2026-08-25?source=contribution_revision&revision=019c5b90-0000-7000-8000-000000000041',
           },
         ],
+        retrieval: {
+          requestedMode: 'hybrid',
+          effectiveMode: 'lexical',
+          fallbackReason: 'provider_unavailable',
+        },
         page: { hasMore: false },
       }),
     });
@@ -152,12 +157,16 @@ test('[SEARCH-001][SEARCH-003–SEARCH-006] searches selected layers with safe e
     .fill('morning');
   await page.getByRole('button', { name: 'Search journal' }).click();
   await expect(page.getByText('Retrieved sources and results')).toBeVisible();
+  await expect(
+    page.getByText('Semantic retrieval is not configured.'),
+  ).toBeVisible();
   await expect(page.locator('mark')).toContainText('<img src=x onerror=');
   await expect(page.locator('blockquote img')).toHaveCount(0);
   expect(
     await page.evaluate(() => Reflect.get(window, 'searchXss')),
   ).toBeUndefined();
   expect(requestedSearch?.searchParams.get('layers')).toContain('typed_text');
+  expect(requestedSearch?.searchParams.get('mode')).toBe('hybrid');
   await expect(
     page.getByRole('link', { name: 'Open supporting Journal Day' }),
   ).toHaveAttribute(

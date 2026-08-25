@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@journal/ai": "workspace:*",
     "@journal/config": "workspace:*",
     "@journal/contracts": "workspace:*",
     "@journal/database": "workspace:*",

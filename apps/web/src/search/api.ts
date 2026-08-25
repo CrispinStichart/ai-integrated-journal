@@ -8,6 +8,7 @@ export type SearchInput = Omit<LexicalSearchRequest, 'limit' | 'cursor'>;
 
 export async function lexicalSearch(input: SearchInput, cursor?: string) {
   const query = new URLSearchParams({ q: input.q, limit: '20' });
+  if (input.mode !== undefined) query.set('mode', input.mode);
   if (cursor !== undefined) query.set('cursor', cursor);
   if (input.layers !== undefined) query.set('layers', input.layers.join(','));
   if (input.dateFrom !== undefined) query.set('dateFrom', input.dateFrom);

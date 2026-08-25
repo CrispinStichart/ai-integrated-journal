@@ -12,6 +12,7 @@ export const queueNames = {
   maintenance: 'journal.maintenance',
   notifications: 'journal.notifications',
   processing: 'journal.processing',
+  search: 'journal.search',
   transcription: 'journal.transcription',
 } as const;
 
@@ -117,6 +118,19 @@ export const queueDefinitions: Readonly<Record<QueueName, QueueDefinition>> =
         retryBackoff: true,
         retryDelay: 60,
         retryLimit: 3,
+      },
+      2,
+    ),
+    [queueNames.search]: queueDefinition(
+      queueNames.search,
+      {
+        deadLetter: queueNames.deadLetter,
+        deleteAfterSeconds: 14 * 24 * 60 * 60,
+        expireInSeconds: 30 * 60,
+        retentionSeconds: 14 * 24 * 60 * 60,
+        retryBackoff: true,
+        retryDelay: 30,
+        retryLimit: 5,
       },
       2,
     ),
