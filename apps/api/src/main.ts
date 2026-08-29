@@ -28,6 +28,7 @@ import { PostgresMemoryService } from './memory-service.js';
 import { PostgresSearchService } from './search-service.js';
 import { PostgresGroundedAnswerService } from './grounded-answer-service.js';
 import { PostgresRetentionService } from './retention-service.js';
+import { PostgresExportService } from './export-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -113,6 +114,11 @@ const app = createApiApp({
   authenticator: authenticationService,
   authenticationService,
   eventFeed,
+  exportService: new PostgresExportService(
+    database.database,
+    boss,
+    new LocalBlobStore(config.blobDataDirectory),
+  ),
   healthProbes,
   groundedAnswerService: new PostgresGroundedAnswerService(
     database.database,

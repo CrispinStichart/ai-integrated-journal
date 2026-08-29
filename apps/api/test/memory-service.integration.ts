@@ -4,6 +4,8 @@ import {
   assembleApprovedTranscriptionContext,
   auditEvents,
   createDatabaseClient,
+  exportRequests,
+  exportSnapshotItems,
   journalDays,
   migrateDatabase,
   processorInstallations,
@@ -41,6 +43,7 @@ describe('feedback and memory persistence', () => {
   const runId = createUuidV7<'run'>({ timestamp: 805_000 });
   const resultId = createUuidV7<'result'>({ timestamp: 806_000 });
   const correlationId = createUuidV7<'correlation'>({ timestamp: 807_000 });
+  const exportId = createUuidV7<'export'>({ timestamp: 808_000 });
   const now = new Date('2026-08-23T19:30:00.000Z');
   const definition = {
     semanticVersion: '1.0.0',
@@ -239,7 +242,7 @@ describe('feedback and memory persistence', () => {
     ]);
   });
 
-  it('[MEM-004][MEM-005][AC-031] searches, revisions, disables, and soft-deletes an explicitly approved memory', async () => {
+  it('[MEM-004][MEM-005][RET-007][PORT-004][AC-031] searches, revisions, disables, and soft-deletes an explicitly approved memory while invalidating its export', async () => {
     const created = await service.createFeedback(
       ownerId,
       {
@@ -296,6 +299,24 @@ describe('feedback and memory persistence', () => {
         await service.list(ownerId, { limit: 25, includeDisabled: true })
       ).items.map(({ id }) => id),
     ).toContain(disabled.memory.id);
+    await client.database.insert(exportRequests).values({
+      id: exportId,
+      ownerId,
+      idempotencyKey: 'memory-soft-delete-export',
+      status: 'completed',
+      snapshotAt: now,
+      expiresAt: new Date('2026-08-24T19:30:00.000Z'),
+      archiveBlobKey: `exports/${exportId}.zip`,
+      archiveByteSize: 1n,
+      archiveSha256: 'a'.repeat(64),
+    });
+    await client.database.insert(exportSnapshotItems).values({
+      exportId,
+      entityType: 'memory',
+      stableId: disabled.memory.id,
+      versionId: disabled.memory.currentRevision.id,
+      payload: { id: disabled.memory.id },
+    });
     const deleted = await service.mutate(
       ownerId,
       disabled.memory.id,
@@ -305,6 +326,12 @@ describe('feedback and memory persistence', () => {
       correlationId,
     );
     expect(deleted.memory.currentRevision.deletedAt).toBe(now.toISOString());
+    expect(
+      await client.database
+        .select({ status: exportRequests.status })
+        .from(exportRequests)
+        .where(eq(exportRequests.id, exportId)),
+    ).toEqual([{ status: 'invalidated' }]);
     expect(
       (
         await service.list(ownerId, { limit: 25, includeDisabled: true })

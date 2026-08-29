@@ -4,6 +4,7 @@ export const contractsPackageName = '@journal/contracts' as const;
 export * from './auth.js';
 export * from './artifact.js';
 export * from './events.js';
+export * from './export.js';
 export * from './http-metadata.js';
 export * from './journal.js';
 export * from './memory.js';

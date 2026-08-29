@@ -55,6 +55,82 @@ test('[ARCH-005][STATE-006] renders an accessible, navigable application shell',
   await expect(page.locator('#main-content')).toBeFocused();
 });
 
+test('[PORT-003–PORT-008][AC-050] creates and downloads a privacy-explicit portable export', async ({
+  page,
+}) => {
+  await authenticateShell(page);
+  const exportId = '019d2b3c-4000-7000-8000-000000000002';
+  const completed = {
+    id: exportId,
+    status: 'completed',
+    manifestSchemaVersion: 1,
+    snapshotAt: '2040-01-01T00:00:00.000Z',
+    createdAt: '2040-01-01T00:00:00.000Z',
+    expiresAt: '2040-01-02T00:00:00.000Z',
+    includeAudio: true,
+    includeProviderRawResponses: false,
+    entityCount: 25,
+    fileCount: 8,
+    archiveByteSize: '4096',
+    archiveSha256: 'a'.repeat(64),
+    completedAt: '2040-01-01T00:01:00.000Z',
+    downloadAvailable: true,
+  };
+  let submitted:
+    { readonly body: unknown; readonly idempotencyKey?: string } | undefined;
+  await page.route('**/api/v1/exports', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [completed] }),
+      });
+      return;
+    }
+    submitted = {
+      body: route.request().postDataJSON(),
+      idempotencyKey: route.request().headers()['idempotency-key'],
+    };
+    const idempotencyKey = submitted.idempotencyKey;
+    if (idempotencyKey === undefined)
+      throw new Error('Export idempotency key is missing.');
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        export: {
+          ...completed,
+          status: 'queued',
+          includeAudio: false,
+          archiveByteSize: undefined,
+          archiveSha256: undefined,
+          completedAt: undefined,
+          downloadAvailable: false,
+        },
+        idempotency: { key: idempotencyKey, replayed: false },
+      }),
+    });
+  });
+
+  await page.goto('/exports');
+
+  await expect(page.getByRole('heading', { name: 'Exports' })).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: /provider raw responses/i }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByRole('link', { name: 'Download ZIP' }),
+  ).toHaveAttribute('href', `/api/v1/exports/${exportId}/download`);
+  await page.getByRole('button', { name: 'Create export' }).click();
+  await expect.poll(() => submitted).toBeDefined();
+  expect(submitted?.body).toEqual({
+    includeAudio: false,
+    includeProviderRawResponses: false,
+  });
+  expect(submitted?.idempotencyKey).toMatch(/^export-/);
+  await expect(page.getByText('Point-in-time export started.')).toBeVisible();
+});
+
 test('[DATA-001][DATA-002] distinguishes a missing Journal Day from a load failure', async ({
   page,
 }) => {

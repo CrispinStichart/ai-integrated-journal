@@ -13,6 +13,7 @@ import type { NudgeService } from './nudge-service.js';
 import type { SearchService } from './search-service.js';
 import type { GroundedAnswerService } from './grounded-answer-service.js';
 import type { RetentionService } from './retention-service.js';
+import type { ExportService } from './export-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -50,6 +51,7 @@ export interface ApiDependencies {
   readonly authenticator: RequestAuthenticator;
   readonly authenticationService?: AuthenticationService;
   readonly eventFeed: EventFeed;
+  readonly exportService?: ExportService;
   readonly healthProbes: readonly HealthProbe[];
   readonly groundedAnswerService?: GroundedAnswerService;
   readonly logger: ContentSafeLogger;

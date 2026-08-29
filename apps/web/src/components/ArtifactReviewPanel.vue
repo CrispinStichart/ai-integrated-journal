@@ -1133,6 +1133,43 @@ async function saveBullet(): Promise<void> {
                       {{ artifact.provenance.processorVersionId }}
                     </dd>
                   </div>
+                  <div>
+                    <dt class="inline font-medium">Processing run ID:</dt>
+                    <dd class="inline break-all">
+                      {{ artifact.provenance.runId }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Instruction SHA-256:</dt>
+                    <dd class="inline break-all">
+                      {{ artifact.provenance.instructionHash }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="inline font-medium">Prompt template SHA-256:</dt>
+                    <dd class="inline break-all">
+                      {{ artifact.provenance.promptTemplateHash }}
+                    </dd>
+                  </div>
+                  <div
+                    v-if="
+                      artifact.provenance.processingTimeMilliseconds !==
+                      undefined
+                    "
+                  >
+                    <dt class="inline font-medium">Processing time:</dt>
+                    <dd class="inline">
+                      {{ artifact.provenance.processingTimeMilliseconds }} ms
+                    </dd>
+                  </div>
+                  <div v-if="artifact.provenance.completedAt">
+                    <dt class="inline font-medium">Completed:</dt>
+                    <dd class="inline">
+                      <time :datetime="artifact.provenance.completedAt">
+                        {{ artifact.provenance.completedAt }}
+                      </time>
+                    </dd>
+                  </div>
                 </dl>
               </div>
             </details>

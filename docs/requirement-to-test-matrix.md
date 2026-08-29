@@ -190,9 +190,9 @@ Acceptance criteria receive individual rows because they are release evidence, e
 | AC-041 | `packages/processors/test/sleep-and-temporal.test.ts` and its property suite verify that tomorrow retains the original phrase, contextual basis, timezone, and date resolved from the contribution's effective Journal Day. | 40 | AI journal | Verified |
 | AC-042 | `packages/database/test/nudges.integration.ts` and `apps/web/test/nudge-digest-card.test.ts`: three missing requirements form one digest and day dismissal prevents repeat default prompts. | 43, 51 | Complete local release | Complete |
 | AC-043 | `packages/domain/test/nudges.test.ts`, `packages/database/test/nudges.integration.ts`, and `apps/web/test/nudge-digest-card.test.ts`: technical failure renders failed state and never insufficient-information copy/nudge. | 43, 51 | Complete local release | Complete |
-| AC-050 | `PORTABILITY`: restore/standalone inspection resolves audio, layers, evidence, results, versions, and memories by stable IDs. | 48, 51 | Complete local release | Planned |
-| AC-051 | `PROCESSOR`, `PORTABILITY`, `RELEASE-E2E`: inspector exposes sources/evidence/definition/instruction/provider/model/time. | 33, 48, 51 | Complete local release | Planned |
-| AC-052 | `packages/ai/test/index.test.ts` covers side-by-side fake provider selection; `TRANSCRIPT` and `PORTABILITY` still cover retained prior results in UI/export. | 26, 48, 51 | Complete local release | Partial |
+| AC-050 | Export database/worker/API/UI tests materialize every relevant immutable layer with stable IDs, stream selected audio/raw bodies, extract the standalone ZIP, and verify its versioned manifest and every file checksum. | 48, 51 | Complete local release | Verified |
+| AC-051 | `apps/web/test/artifact-review-panel.test.ts` exposes exact source revisions/evidence, processor definition/version, instruction and prompt hashes, provider/model, run ID, completion, and processing duration; export worker tests preserve the same provenance records. | 33, 48, 51 | Complete local release | Verified |
+| AC-052 | Provider tests cover side-by-side selection, while export JSONL/selected-blob tests prove historical source/result/provider provenance remains independently readable after configured-provider changes. | 26, 48, 51 | Complete local release | Verified |
 
 ## Maintenance rules
 

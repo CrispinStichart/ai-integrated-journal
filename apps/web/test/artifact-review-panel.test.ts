@@ -170,6 +170,7 @@ function foodArtifact(): ArtifactResource {
       provider: { id: 'fixture', displayName: 'Fixture provider' },
       model: { id: 'fixture-model' },
       processingTimeMilliseconds: 12,
+      completedAt: '2026-08-25T12:00:00.000Z',
     },
   };
 }
@@ -646,7 +647,7 @@ describe('artifact review UI', () => {
     wrapper.unmount();
   });
 
-  it('[FOOD-003][PROV-001][PROV-004][AC-021] presents one readable food card with exact evidence and processor lineage', async () => {
+  it('[FOOD-003][PROV-001][PROV-004][AC-021][AC-051] presents one readable food card with exact evidence and complete processor lineage', async () => {
     const { wrapper, queryClient } = mountPanel([foodArtifact()]);
     await flushPromises();
     expect(wrapper.text()).toContain('pepperoni pizza');
@@ -658,6 +659,12 @@ describe('artifact review UI', () => {
     expect(wrapper.text()).toContain('Audio 1200–4400 ms');
     expect(wrapper.text()).toContain('Food and drink version 2.0.0');
     expect(wrapper.text()).toContain('Fixture provider / fixture-model');
+    expect(wrapper.text()).toContain(`Instruction SHA-256:${'a'.repeat(64)}`);
+    expect(wrapper.text()).toContain(
+      `Prompt template SHA-256:${'b'.repeat(64)}`,
+    );
+    expect(wrapper.text()).toContain('Processing time:12 ms');
+    expect(wrapper.text()).toContain('Completed:2026-08-25T12:00:00.000Z');
     expect((await axe.run(wrapper.element)).violations).toEqual([]);
     queryClient.clear();
     wrapper.unmount();

@@ -11,6 +11,7 @@ import {
   contributions,
   feedback,
   inTransaction,
+  invalidateExportsForEntity,
   journalDays,
   memories,
   memoryApiIdempotency,
@@ -576,6 +577,14 @@ export class PostgresMemoryService implements MemoryService {
           updatedAt: now,
         })
         .where(eq(memories.id, memoryId));
+      if (input.operation === 'delete') {
+        await invalidateExportsForEntity(transaction, {
+          ownerId,
+          entityId: memoryId,
+          now,
+          errorCode: 'memory_soft_deleted',
+        });
+      }
       await transaction.insert(memoryApiIdempotency).values({
         ownerId,
         operation,

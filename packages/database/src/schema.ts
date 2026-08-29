@@ -171,6 +171,20 @@ export const retentionCleanupStatus = pgEnum('retention_cleanup_status', [
   'failed',
 ]);
 
+export const exportStatus = pgEnum('export_status', [
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'invalidated',
+  'expired',
+]);
+
+export const exportBlobKind = pgEnum('export_blob_kind', [
+  'audio',
+  'provider_raw_response',
+]);
+
 export const users = journalSchema.table(
   'user',
   {
@@ -3507,6 +3521,151 @@ export const retentionBlobCleanupItems = journalSchema.table(
   ],
 );
 
+export const exportRequests = journalSchema.table(
+  'export_request',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    status: exportStatus('status').notNull().default('queued'),
+    manifestSchemaVersion: integer('manifest_schema_version')
+      .notNull()
+      .default(1),
+    includeAudio: boolean('include_audio').notNull().default(false),
+    includeProviderRawResponses: boolean('include_provider_raw_responses')
+      .notNull()
+      .default(false),
+    snapshotAt: timestamp('snapshot_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    entityCount: integer('entity_count').notNull().default(0),
+    fileCount: integer('file_count').notNull().default(0),
+    archiveBlobKey: text('archive_blob_key'),
+    archiveByteSize: bigint('archive_byte_size', { mode: 'bigint' }),
+    archiveSha256: text('archive_sha256'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    invalidatedAt: timestamp('invalidated_at', { withTimezone: true }),
+    errorCode: text('error_code'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('export_request_owner_created_idx').on(
+      table.ownerId,
+      table.createdAt,
+      table.id,
+    ),
+    index('export_request_expiry_idx').on(table.status, table.expiresAt),
+    uniqueIndex('export_request_owner_idempotency_unique').on(
+      table.ownerId,
+      table.idempotencyKey,
+    ),
+    check(
+      'export_request_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'export_request_manifest_version_valid',
+      sql`${table.manifestSchemaVersion} = 1`,
+    ),
+    check('export_request_entity_count_valid', sql`${table.entityCount} >= 0`),
+    check('export_request_file_count_valid', sql`${table.fileCount} >= 0`),
+    check(
+      'export_request_archive_sha256_valid',
+      sql`${table.archiveSha256} is null or ${table.archiveSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+/** Immutable point-in-time JSON records materialized under REPEATABLE READ. */
+export const exportSnapshotItems = journalSchema.table(
+  'export_snapshot_item',
+  {
+    sequence: bigint('sequence', { mode: 'number' })
+      .primaryKey()
+      .generatedByDefaultAsIdentity(),
+    exportId: uuid('export_id')
+      .notNull()
+      .references(() => exportRequests.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    stableId: text('stable_id').notNull(),
+    versionId: text('version_id'),
+    journalDate: date('journal_date', { mode: 'string' }),
+    payload: jsonb('payload')
+      .$type<Readonly<Record<string, unknown>>>()
+      .notNull(),
+  },
+  (table) => [
+    index('export_snapshot_item_stream_idx').on(
+      table.exportId,
+      table.entityType,
+      table.sequence,
+    ),
+    index('export_snapshot_item_relationship_idx').on(
+      table.exportId,
+      table.entityType,
+      table.stableId,
+    ),
+    index('export_snapshot_item_markdown_idx').on(
+      table.exportId,
+      table.journalDate,
+      table.sequence,
+    ),
+    check(
+      'export_snapshot_item_type_not_blank',
+      sql`length(${table.entityType}) > 0`,
+    ),
+    check(
+      'export_snapshot_item_stable_id_not_blank',
+      sql`length(${table.stableId}) > 0`,
+    ),
+  ],
+);
+
+/** Prevents selected immutable blobs from expiring while an archive is built. */
+export const exportBlobLeases = journalSchema.table(
+  'export_blob_lease',
+  {
+    exportId: uuid('export_id')
+      .notNull()
+      .references(() => exportRequests.id, { onDelete: 'cascade' }),
+    entityId: uuid('entity_id').notNull(),
+    blobKind: exportBlobKind('blob_kind').notNull(),
+    blobKey: text('blob_key').notNull(),
+    archivePath: text('archive_path').notNull(),
+    mediaType: text('media_type').notNull(),
+    byteSize: bigint('byte_size', { mode: 'bigint' }).notNull(),
+    sha256: text('sha256').notNull(),
+    leaseExpiresAt: timestamp('lease_expires_at', {
+      withTimezone: true,
+    }).notNull(),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({
+      name: 'export_blob_lease_pk',
+      columns: [table.exportId, table.blobKey],
+    }),
+    index('export_blob_lease_entity_idx').on(table.entityId, table.releasedAt),
+    check('export_blob_lease_key_not_blank', sql`length(${table.blobKey}) > 0`),
+    check(
+      'export_blob_lease_archive_path_not_blank',
+      sql`length(${table.archivePath}) > 0`,
+    ),
+    check('export_blob_lease_byte_size_valid', sql`${table.byteSize} >= 0`),
+    check(
+      'export_blob_lease_sha256_valid',
+      sql`${table.sha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
 export const databaseSchema = {
   artifactApiIdempotency,
   authChallenges,
@@ -3517,6 +3676,9 @@ export const databaseSchema = {
   contributions,
   developmentFixtures,
   feedback,
+  exportBlobLeases,
+  exportRequests,
+  exportSnapshotItems,
   groundedAnswerCitations,
   groundedAnswers,
   journalDays,

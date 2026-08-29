@@ -410,7 +410,7 @@ Implement the complete retention matrix across:
 
 Verify that restores cannot resurrect permanently deleted content.
 
-### 48. Export
+### 48. Export - FINISHED
 
 Produce a point-in-time streamed ZIP containing:
 

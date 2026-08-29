@@ -181,6 +181,7 @@ export class RetentionRepository {
         .returning();
       if (deletion === undefined) throw new RetentionConflictError();
       await captureBlobKeys(transaction, deletion);
+      await invalidateExports(transaction, deletion, input.requestedAt);
       await transaction.insert(auditEvents).values({
         id: input.correlationId,
         action: 'retention.permanent_deletion_requested',
@@ -759,6 +760,45 @@ async function captureBlobKeys(
       .insert(retentionBlobCleanupItems)
       .values([...new Map(items.map((item) => [item.blobKey, item])).values()]);
   }
+}
+
+async function invalidateExports(
+  transaction: JournalTransaction,
+  deletion: DeletionRow,
+  now: Date,
+): Promise<void> {
+  await transaction.execute(sql`
+    with invalidated as (
+      update journal.export_request export
+      set status = 'invalidated', invalidated_at = ${now}, updated_at = ${now},
+          error_code = 'source_permanently_deleted'
+      where export.owner_id = ${deletion.ownerId}::uuid
+        and export.status in ('queued', 'running', 'completed')
+        and (
+          exists (
+            select 1 from journal.export_snapshot_item item
+            where item.export_id = export.id
+              and item.stable_id = ${deletion.entityId}
+          )
+          or exists (
+            select 1 from journal.export_blob_lease lease
+            where lease.export_id = export.id
+              and lease.entity_id = ${deletion.entityId}::uuid
+          )
+        )
+      returning id, archive_blob_key
+    ), cleanup as (
+      insert into journal.retention_blob_cleanup_item
+        (request_id, blob_key, blob_kind)
+      select ${deletion.id}::uuid, invalidated.archive_blob_key, 'export_archive'
+      from invalidated where invalidated.archive_blob_key is not null
+      on conflict do nothing
+    )
+    update journal.export_blob_lease lease
+    set released_at = ${now}
+    where lease.export_id in (select id from invalidated)
+      and lease.released_at is null
+  `);
 }
 
 export const retentionImpactDetails = Object.freeze(

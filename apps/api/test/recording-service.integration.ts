@@ -9,6 +9,8 @@ import type {
 } from '@journal/contracts';
 import {
   createDatabaseClient,
+  exportBlobLeases,
+  exportRequests,
   migrateDatabase,
   recordingChunks,
   users,
@@ -17,6 +19,7 @@ import {
 import { createUuidV7 } from '@journal/domain';
 import { LocalBlobStore } from '@journal/storage';
 import { createPostgresTestContainer } from '@journal/test-support';
+import { eq } from 'drizzle-orm';
 import type { PgBoss } from 'pg-boss';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -55,6 +58,7 @@ describe('recording persistence and recoverable finalization', () => {
   const dayId = createUuidV7<'journal-day'>({ timestamp: 104_000 });
   const correlationId = createUuidV7<'correlation'>({ timestamp: 105_000 });
   const priorDayId = createUuidV7<'journal-day'>({ timestamp: 106_000 });
+  const exportId = createUuidV7<'export'>({ timestamp: 107_000 });
   const now = new Date('2026-08-22T12:00:00.000Z');
   const createInput: CreateRecordingRequest = {
     recordingId,
@@ -285,7 +289,29 @@ describe('recording persistence and recoverable finalization', () => {
     expect(await read(opened.stream)).toBe('audio');
   });
 
-  it('[RET-004][RET-006][SEC-008] deletes audio recoverably without deleting the recording contribution', async () => {
+  it('[RET-004][RET-006][RET-007][PORT-004][SEC-008] deletes audio recoverably, invalidates its export, and retains the recording contribution', async () => {
+    await client.database.insert(exportRequests).values({
+      id: exportId,
+      ownerId,
+      idempotencyKey: 'recording-soft-delete-export',
+      status: 'completed',
+      snapshotAt: now,
+      expiresAt: new Date('2026-08-23T12:00:00.000Z'),
+      archiveBlobKey: `exports/${exportId}.zip`,
+      archiveByteSize: 11n,
+      archiveSha256: sha256('hello audio'),
+    });
+    await client.database.insert(exportBlobLeases).values({
+      exportId,
+      entityId: recordingId,
+      blobKind: 'audio',
+      blobKey: `recordings/${recordingId}/original`,
+      archivePath: `audio/${recordingId}/original`,
+      mediaType: 'audio/webm;codecs=opus',
+      byteSize: 11n,
+      sha256: sha256('hello audio'),
+      leaseExpiresAt: new Date('2026-08-23T12:00:00.000Z'),
+    });
     const deleted = await service.deleteAudio(
       ownerId,
       recordingId,
@@ -293,6 +319,12 @@ describe('recording persistence and recoverable finalization', () => {
       correlationId,
     );
     expect(deleted.recording.audioDeletedAt).toBe(now.toISOString());
+    expect(
+      await client.database
+        .select({ status: exportRequests.status })
+        .from(exportRequests)
+        .where(eq(exportRequests.id, exportId)),
+    ).toEqual([{ status: 'invalidated' }]);
     await expect(
       service.openAudio(ownerId, recordingId, { start: 0n, endExclusive: 1n }),
     ).rejects.toBeInstanceOf(RecordingAudioDeletedError);

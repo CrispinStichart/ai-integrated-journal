@@ -11,6 +11,7 @@ import { registerNudgeDigestConsumer } from './nudge-engine.js';
 import { registerSearchEmbeddingConsumer } from './search-embedding.js';
 import { registerGroundedAnswerConsumer } from './grounded-answer.js';
 import { registerRetentionConsumer } from './retention.js';
+import { registerExportConsumer } from './export.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -89,6 +90,7 @@ const worker = new WorkerRuntime({
         ),
     });
     await registerRetentionConsumer({ boss: queue, database, blobs });
+    await registerExportConsumer({ boss: queue, database, blobs });
   },
 });
 await worker.start();

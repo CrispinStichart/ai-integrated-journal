@@ -1,4 +1,5 @@
 import {
+  ExportRepository,
   QueueJobError,
   RetentionRepository,
   queueNames,
@@ -24,6 +25,7 @@ type RetentionWork = Readonly<{ requestId?: string }>;
  */
 export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
   readonly #repository: RetentionRepository;
+  readonly #exports: ExportRepository;
 
   public constructor(
     database: DatabaseClient,
@@ -31,6 +33,7 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
     private readonly now: () => Date = () => new Date(),
   ) {
     this.#repository = new RetentionRepository(database.database);
+    this.#exports = new ExportRepository(database.database);
   }
 
   public async load(
@@ -62,6 +65,7 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
   ): Promise<void> {
     const now = this.now();
     if (work.requestId === undefined) {
+      await this.expireExports(now, signal);
       for (const target of await this.#repository.expiredRawResponses(now)) {
         await this.#repository.request({
           id: createUuidV7<'permanent-deletion'>(),
@@ -79,6 +83,28 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
       if (request === undefined) return;
       await this.purge(request.id, signal);
       if (work.requestId !== undefined) return;
+    }
+  }
+
+  private async expireExports(now: Date, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      signal.throwIfAborted();
+      const due = await this.#exports.expireDue(now);
+      if (due.length === 0) return;
+      for (const item of due) {
+        signal.throwIfAborted();
+        if (item.archiveBlobKey === null) continue;
+        try {
+          await this.blobs.delete(item.archiveBlobKey);
+        } catch (error) {
+          if (!(error instanceof BlobNotFoundError)) throw error;
+        }
+        await this.#exports.markHostedArchiveDeleted(
+          item.id,
+          item.archiveBlobKey,
+          this.now(),
+        );
+      }
     }
   }
 

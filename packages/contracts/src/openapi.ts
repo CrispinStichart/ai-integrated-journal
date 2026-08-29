@@ -20,6 +20,12 @@ import {
 } from './auth.js';
 import { lastEventIdSchema, sseEventEnvelopeSchema } from './events.js';
 import {
+  createExportRequestSchema,
+  exportListResponseSchema,
+  exportMutationResponseSchema,
+  exportResourceSchema,
+} from './export.js';
+import {
   conditionalMutationHeadersSchema,
   editableResponseHeadersSchema,
   idempotencyResponseMetadataSchema,
@@ -1167,6 +1173,66 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/exports': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Point-in-time export history',
+              'ExportListResponse',
+            ),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+        post: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('CreateExportRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Existing export returned for an idempotent replay',
+              'ExportMutationResponse',
+            ),
+            '202': schemaResponse(
+              'Export snapshot accepted',
+              'ExportMutationResponse',
+            ),
+            '400': problemResponse('Invalid export request or headers'),
+            '401': problemResponse('Authentication required'),
+            '403': problemResponse('CSRF validation failed'),
+            '409': problemResponse('Idempotency key conflict'),
+            '428': problemResponse('Idempotency-Key header required'),
+          },
+        },
+      },
+      '/api/v1/exports/{id}': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse('Export state', 'ExportResource'),
+            '404': problemResponse('Export not found'),
+          },
+        },
+      },
+      '/api/v1/exports/{id}/download': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': {
+              description: 'Streamed portable ZIP archive',
+              content: {
+                'application/zip': {
+                  schema: { type: 'string', contentEncoding: 'binary' },
+                },
+              },
+            },
+            '409': problemResponse(
+              'Archive incomplete, expired, or invalidated',
+            ),
+          },
+        },
+      },
     },
     components: {
       securitySchemes: {
@@ -1211,12 +1277,16 @@ export function createOpenApiDocument(): Record<string, unknown> {
           createContributionRequestSchema,
         ),
         CreateFeedbackRequest: componentSchema(createFeedbackRequestSchema),
+        CreateExportRequest: componentSchema(createExportRequestSchema),
         CreateRecordingRequest: componentSchema(createRecordingRequestSchema),
         CursorPageMetadata: componentSchema(cursorPageMetadataSchema),
         CursorPaginationRequest: componentSchema(cursorPaginationRequestSchema),
         EditableResponseHeaders: componentSchema(editableResponseHeadersSchema),
         EventPollRequest: componentSchema(eventPollRequestSchema),
         EventPollResponse: componentSchema(eventPollResponseSchema),
+        ExportListResponse: componentSchema(exportListResponseSchema),
+        ExportMutationResponse: componentSchema(exportMutationResponseSchema),
+        ExportResource: componentSchema(exportResourceSchema),
         EditContributionRequest: componentSchema(editContributionRequestSchema),
         EditCorrectedTranscriptRequest: componentSchema(
           editCorrectedTranscriptRequestSchema,

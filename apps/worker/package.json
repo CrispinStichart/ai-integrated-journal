@@ -17,11 +17,13 @@
     "@journal/observability": "workspace:*",
     "@journal/processors": "workspace:*",
     "@journal/storage": "workspace:*",
+    "archiver": "7.0.1",
     "drizzle-orm": "0.45.2",
     "pg-boss": "12.26.3"
   },
   "devDependencies": {
     "@journal/contracts": "workspace:*",
-    "@journal/test-support": "workspace:*"
+    "@journal/test-support": "workspace:*",
+    "@types/archiver": "7.0.0"
   }
 }

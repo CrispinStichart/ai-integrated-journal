@@ -1,0 +1,3 @@
+ALTER TABLE "journal"."export_request" ADD COLUMN "idempotency_key" text NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "export_request_owner_idempotency_unique" ON "journal"."export_request" USING btree ("owner_id","idempotency_key");--> statement-breakpoint
+ALTER TABLE "journal"."export_request" ADD CONSTRAINT "export_request_idempotency_key_not_blank" CHECK (length("journal"."export_request"."idempotency_key") > 0);

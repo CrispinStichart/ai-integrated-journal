@@ -11,6 +11,7 @@ import {
   contributions,
   deletionTombstones,
   inTransaction,
+  invalidateExportsForEntity,
   enqueueTranscriptionRun,
   journalDays,
   recordingApiIdempotency,
@@ -930,6 +931,14 @@ export class PostgresRecordingService implements RecordingService {
         .where(eq(recordings.id, recordingId))
         .returning();
       if (updated === undefined) throw new RecordingNotFoundError();
+      if (deleted) {
+        await invalidateExportsForEntity(transaction, {
+          ownerId,
+          entityId: recordingId,
+          now: instant,
+          errorCode: 'audio_soft_deleted',
+        });
+      }
       await transaction.insert(auditEvents).values({
         id: createUuidV7<'audit-event'>(),
         action: deleted

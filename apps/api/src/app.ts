@@ -66,6 +66,7 @@ import {
   registerRetentionRoutes,
   sendRetentionError,
 } from './retention-routes.js';
+import { registerExportRoutes } from './export-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -482,6 +483,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
   registerNudgeRoutes(app, dependencies);
   registerSearchRoutes(app, dependencies);
   registerRetentionRoutes(app, dependencies);
+  registerExportRoutes(app, dependencies);
 
   app.use((request, response) => {
     sendProblem(request, response, {

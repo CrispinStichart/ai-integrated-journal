@@ -38,6 +38,7 @@ import {
 } from 'drizzle-orm';
 
 import type { JournalTransaction, RepositoryContext } from '../client.js';
+import { invalidateExportsForEntity } from '../export-repository.js';
 import {
   auditEvents,
   contributionRevisions,
@@ -608,6 +609,12 @@ export class JournalWriteRepository {
         updatedAt: toDate(input.audit.occurredAt),
       })
       .where(eq(contributions.id, input.contributionId));
+    await invalidateExportsForEntity(this.transaction, {
+      ownerId: input.ownerId,
+      entityId: input.contributionId,
+      now: toDate(input.audit.occurredAt),
+      errorCode: 'source_soft_deleted',
+    });
     await this.audit({
       ...input.audit,
       action: 'contribution.deleted',

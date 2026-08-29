@@ -31,7 +31,7 @@ const navigationItems: NavigationItem[] = [
   { icon: 'activity', label: 'Activity', to: '/activity' },
   { icon: 'processors', label: 'Processors', to: '/processors' },
   { icon: 'memories', label: 'Memories & rules', to: '/memories' },
-  { icon: 'exports', label: 'Exports & backups', to: '/exports' },
+  { icon: 'exports', label: 'Exports', to: '/exports' },
   { icon: 'settings', label: 'Settings', to: '/settings' },
 ];
 

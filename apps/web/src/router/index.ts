@@ -51,12 +51,8 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/exports',
     name: 'exports',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description: 'Create portable exports and manage local backups.',
-      title: 'Exports & backups',
-    },
-    meta: { title: 'Exports & backups' },
+    component: () => import('../views/ExportsView.vue'),
+    meta: { title: 'Exports' },
   },
   {
     path: '/settings',

@@ -6,6 +6,7 @@ export * from './artifact-editing.js';
 export * from './authority.js';
 export * from './deletion.js';
 export * from './evidence.js';
+export * from './export.js';
 export * from './errors.js';
 export * from './identity.js';
 export * from './journal.js';

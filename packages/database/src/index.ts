@@ -24,6 +24,9 @@ export {
   contributions,
   deletionTombstones,
   feedback,
+  exportBlobLeases,
+  exportRequests,
+  exportSnapshotItems,
   groundedAnswerCitations,
   groundedAnswers,
   journalDays,
@@ -100,6 +103,15 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  ExportConflictError,
+  ExportNotFoundError,
+  ExportRepository,
+  ExportUnavailableError,
+  invalidateExportsForEntity,
+  type ExportBlobLeaseRow,
+  type ExportRow,
+} from './export-repository.js';
 export {
   GROUNDED_ANSWER_CONFIGURATION,
   GROUNDED_ANSWER_OPERATION,

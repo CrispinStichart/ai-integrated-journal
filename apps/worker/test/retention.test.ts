@@ -13,11 +13,20 @@ const repository = {
   complete: vi.fn(),
   markFailed: vi.fn(),
 };
+const exportRepository = {
+  expireDue: vi.fn<
+    () => Promise<Array<{ id: string; archiveBlobKey: string | null }>>
+  >(async () => []),
+  markHostedArchiveDeleted: vi.fn(),
+};
 
 vi.mock('@journal/database', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@journal/database')>()),
   RetentionRepository: function RetentionRepository() {
     return repository;
+  },
+  ExportRepository: function ExportRepository() {
+    return exportRepository;
   },
 }));
 
@@ -32,6 +41,7 @@ describe('retention worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     repository.expiredRawResponses.mockResolvedValue([]);
+    exportRepository.expireDue.mockResolvedValue([]);
   });
 
   it('[RET-006][RET-007] accepts only identifier-only scheduled or request work', async () => {
@@ -144,5 +154,33 @@ describe('retention worker', () => {
       }),
     );
     expect(repository.claim).toHaveBeenCalledWith(now, undefined);
+  });
+
+  it('[RET-007] expires hosted export archives and retries missing-object cleanup safely', async () => {
+    const now = new Date('2026-08-25T00:00:00.000Z');
+    exportRepository.expireDue
+      .mockResolvedValueOnce([
+        { id: REQUEST_ID, archiveBlobKey: 'exports/expired.zip' },
+      ])
+      .mockResolvedValueOnce([]);
+    repository.claim.mockResolvedValueOnce(undefined);
+    const blobs = {
+      delete: vi.fn(async () => {
+        throw new BlobNotFoundError();
+      }),
+    } as unknown as BlobStore;
+    const handler = new RetentionJobHandler(
+      {} as DatabaseClient,
+      blobs,
+      () => now,
+    );
+
+    await handler.execute({}, new AbortController().signal);
+
+    expect(exportRepository.markHostedArchiveDeleted).toHaveBeenCalledWith(
+      REQUEST_ID,
+      'exports/expired.zip',
+      now,
+    );
   });
 });
