@@ -434,7 +434,7 @@ Add settings for provider disclosure and enablement, configured models, credenti
 
 ## 11. Phase 8: Hardening and release
 
-### 51. Complete acceptance suite
+### 51. Complete acceptance suite - FINISHED
 
 Implement every AC-001–052 scenario and the product specification’s edge-case table as automated tests or explicitly documented manual checks.
 

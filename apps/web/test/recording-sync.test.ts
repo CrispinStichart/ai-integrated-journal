@@ -193,6 +193,77 @@ describe('recording synchronization', () => {
     });
   });
 
+  it('[CAP-002][CAP-003][CAP-004][AC-002] reopens an interrupted upload and completes the same durable recording without duplication', async () => {
+    const interrupted = harness({
+      upload: vi.fn().mockRejectedValue(new TypeError('connection closed')),
+    });
+    await populate(interrupted.store);
+    await interrupted.controller.initialize(OWNER_ID, 'csrf-token');
+    await interrupted.controller.resume();
+
+    await expect(
+      interrupted.store.getRecording(RECORDING_ID),
+    ).resolves.toMatchObject({
+      recordingId: RECORDING_ID,
+      contributionId: CONTRIBUTION_ID,
+      serverCreated: true,
+      state: 'failed',
+      retrySafe: true,
+      syncErrorCode: 'network_unavailable',
+    });
+    expect(
+      await interrupted.store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toHaveLength(2);
+
+    const createAfterReopen = vi.fn();
+    const uploadAfterReopen = vi.fn().mockResolvedValue(undefined);
+    const finalizeAfterReopen = vi.fn().mockResolvedValue(remote('durable'));
+    const reopened = new RecordingSyncController({
+      ...interrupted.dependencies,
+      create: createAfterReopen,
+      status: vi.fn().mockResolvedValue({
+        recording: remote('uploading'),
+        acceptedIndexes: [0],
+      }),
+      upload: uploadAfterReopen,
+      finalize: finalizeAfterReopen,
+    });
+    await reopened.initialize(OWNER_ID, 'new-csrf-token');
+    expect(reopened.recordings.value).toMatchObject([
+      {
+        recordingId: RECORDING_ID,
+        state: 'failed',
+        retrySafe: true,
+      },
+    ]);
+    await reopened.resume();
+
+    expect(createAfterReopen).not.toHaveBeenCalled();
+    expect(uploadAfterReopen).toHaveBeenCalledOnce();
+    expect(uploadAfterReopen).toHaveBeenCalledWith(
+      RECORDING_ID,
+      1,
+      hex(encoder.encode('two')),
+      expect.anything(),
+      'new-csrf-token',
+    );
+    expect(
+      (uploadAfterReopen.mock.calls[0]?.[3] as ArrayBuffer).byteLength,
+    ).toBe(3);
+    expect(finalizeAfterReopen).toHaveBeenCalledOnce();
+    await expect(
+      interrupted.store.getRecording(RECORDING_ID),
+    ).resolves.toMatchObject({
+      recordingId: RECORDING_ID,
+      contributionId: CONTRIBUTION_ID,
+      state: 'transcription_pending',
+      serverPersistenceState: 'durable',
+    });
+    expect(
+      await interrupted.store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toEqual([]);
+  });
+
   it('[CAP-003][CAP-006] preserves checkpoints and suppresses unsafe retry after a checksum conflict', async () => {
     const upload = vi
       .fn()

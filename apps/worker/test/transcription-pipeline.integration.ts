@@ -130,7 +130,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       await rm(blobRoot, { recursive: true, force: true });
   });
 
-  it('[STT-001][DATA-022][DATA-023][DATA-024][DATA-025][DATA-026][DATA-027][PROV-003][EDIT-001][ARCH-004][AC-011][AC-012][MODEL-002] preserves exact evidence and targeted transcript lineage', async () => {
+  it('[STT-001][DATA-022][DATA-023][DATA-024][DATA-025][DATA-026][DATA-027][PROV-003][EDIT-001][ARCH-004][AC-011][AC-012][AC-032][MODEL-002] preserves exact evidence and targeted transcript lineage', async () => {
     const context = [
       { text: 'Nicolette', purpose: 'approved vocabulary', version: '3' },
     ] as const;

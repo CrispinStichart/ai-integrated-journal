@@ -136,6 +136,56 @@ describe('deterministic AI provider fixtures', () => {
     ]);
   });
 
+  it('[MODEL-003][MODEL-005][AC-052] switches providers without changing the captured source or earlier result', async () => {
+    const sourceBytes = new TextEncoder().encode('immutable fake audio');
+    const registry = new AiProviderFactoryRegistry([
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-a',
+        displayName: 'Fixture A',
+        speech: { text: 'earlier transcript', timestamps: true },
+      }),
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-b',
+        displayName: 'Fixture B',
+        speech: { text: 'later transcript', timestamps: false },
+      }),
+    ]);
+    const transcribeWith = async (providerId: string) => {
+      const resolved = await registry.resolve(
+        { providerId, enabled: true, settings: {} },
+        'speech_to_text',
+      );
+      if (resolved.status !== 'available')
+        throw new Error(`Provider ${providerId} is unavailable.`);
+      return resolved.port.transcribe({
+        audio: {
+          body: (async function* immutableSource() {
+            yield sourceBytes.slice();
+          })(),
+          mediaType: 'audio/webm',
+          byteLength: BigInt(sourceBytes.byteLength),
+        },
+        context: [],
+        configuration: {},
+      });
+    };
+
+    const earlier = await transcribeWith('fixture-a');
+    const earlierSnapshot = structuredClone(earlier);
+    const later = await transcribeWith('fixture-b');
+
+    expect(later).toMatchObject({
+      text: 'later transcript',
+      operation: { provider: { id: 'fixture-b' } },
+    });
+    expect(earlier).toEqual(earlierSnapshot);
+    expect(earlier).toMatchObject({
+      text: 'earlier transcript',
+      operation: { provider: { id: 'fixture-a' } },
+    });
+    expect(new TextDecoder().decode(sourceBytes)).toBe('immutable fake audio');
+  });
+
   it('MODEL-002 validates structured output and snapshots its schema and prompt', async () => {
     const output = { mood: 'neutral', score: 0 } as const;
     const registry = new AiProviderFactoryRegistry([

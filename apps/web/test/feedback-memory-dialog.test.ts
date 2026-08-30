@@ -42,7 +42,7 @@ describe('universal feedback scope UI', () => {
     expect(wrapper.text()).toContain('No persistent rule is created');
     await wrapper
       .get('input[data-feedback-message]')
-      .setValue('Only this occurrence is wrong.');
+      .setValue('Change Monday to Tuesday only in this occurrence.');
     await wrapper
       .findAll('button')
       .find((button) => button.text() === 'Save feedback')
@@ -53,7 +53,7 @@ describe('universal feedback scope UI', () => {
         feedback: {
           mode: 'occurrence_only',
           target: { kind: 'transcript_revision', id: TARGET_ID },
-          message: 'Only this occurrence is wrong.',
+          message: 'Change Monday to Tuesday only in this occurrence.',
         },
       }),
     );

@@ -24,6 +24,8 @@ import {
   recordingUploads,
   recordings,
   searchFragments,
+  transcriptRevisions,
+  transcripts,
   transcriptionRuns,
   users,
   type DatabaseClient,
@@ -58,6 +60,10 @@ describe('permanent retention enforcement', () => {
     timestamp: timestamp++,
   });
   const transcriptionRunId = createUuidV7<'transcription-run'>({
+    timestamp: timestamp++,
+  });
+  const transcriptId = createUuidV7<'transcript'>({ timestamp: timestamp++ });
+  const transcriptRevisionId = createUuidV7<'transcript-revision'>({
     timestamp: timestamp++,
   });
 
@@ -147,6 +153,32 @@ describe('permanent retention enforcement', () => {
       rawResponseExpiresAt: deletedDate,
       completedAt: deletedDate,
     });
+    await client.database.insert(transcripts).values({
+      id: transcriptId,
+      recordingId,
+      layer: 'raw_stt',
+    });
+    await client.database.insert(transcriptRevisions).values({
+      id: transcriptRevisionId,
+      transcriptId,
+      sourceRunId: transcriptionRunId,
+      revision: 1,
+      text: 'Transcript retained independently from original audio.',
+      evidenceText: 'Transcript retained independently from original audio.',
+      segments: [],
+      language: { state: 'unknown' },
+      timingAvailability: { segments: 'unknown' },
+      authority: 'generated',
+      contentHash: 'e'.repeat(64),
+      createdAt: deletedDate,
+    });
+    await client.database
+      .update(transcripts)
+      .set({
+        currentRevisionId: transcriptRevisionId,
+        currentRevision: 1,
+      })
+      .where(eq(transcripts.id, transcriptId));
   }, 120_000);
 
   afterAll(async () => {
@@ -259,7 +291,7 @@ describe('permanent retention enforcement', () => {
     ).rejects.toBeInstanceOf(DeletedContributionError);
   });
 
-  it('[RET-002][RET-004][RET-006][RET-007] deletes audio objects and staging rows while preserving non-playable recording metadata', async () => {
+  it('[RET-002][RET-004][RET-006][RET-007] deletes audio objects and staging rows while preserving the transcript and non-playable recording metadata', async () => {
     const repository = new RetentionRepository(client.database);
     const requested = await repository.request({
       id: id(),
@@ -312,6 +344,14 @@ describe('permanent retention enforcement', () => {
         finalSha256: 'a'.repeat(64),
         persistenceState: 'durable',
       },
+    ]);
+    await expect(
+      client.database
+        .select({ text: transcriptRevisions.text })
+        .from(transcriptRevisions)
+        .where(eq(transcriptRevisions.id, transcriptRevisionId)),
+    ).resolves.toEqual([
+      { text: 'Transcript retained independently from original audio.' },
     ]);
   });
 

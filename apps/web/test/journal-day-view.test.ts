@@ -77,6 +77,13 @@ vi.mock('vue-router', async (importOriginal) => ({
 }));
 
 import JournalDayView from '../src/views/JournalDayView.vue';
+import AudioContributionCard from '../src/components/AudioContributionCard.vue';
+import ContributionCard from '../src/components/ContributionCard.vue';
+
+const JournalDayHost = defineComponent({
+  components: { JournalDayView },
+  template: '<Suspense><JournalDayView date="2026-08-16" /></Suspense>',
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -174,11 +181,7 @@ describe('Journal Day optimistic creation (AC-003)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const Host = defineComponent({
-      components: { JournalDayView },
-      template: '<Suspense><JournalDayView date="2026-08-16" /></Suspense>',
-    });
-    const wrapper = mount(Host, {
+    const wrapper = mount(JournalDayHost, {
       global: {
         plugins: [[VueQueryPlugin, { queryClient }]],
         stubs: { RouterLink: { template: '<a><slot /></a>' } },
@@ -203,6 +206,119 @@ describe('Journal Day optimistic creation (AC-003)', () => {
     await submitted;
     await flushPromises();
     expect(wrapper.text()).toContain('A note that should not flash');
+
+    queryClient.clear();
+    wrapper.unmount();
+  });
+
+  it('[CAP-001][STATE-002][STATE-003][AC-001][AC-003] displays two recordings and one editable typed note as distinct contributions when transcription fails', async () => {
+    const authorId = '018f0000-0000-7000-8000-000000000001';
+    const dayId = '018f0000-0000-7000-8000-000000000010';
+    const typedId = '018f0000-0000-7000-8000-000000000011';
+    const firstRecordingId = '018f0000-0000-7000-8000-000000000012';
+    const secondRecordingId = '018f0000-0000-7000-8000-000000000013';
+    const common = {
+      journalDayId: dayId,
+      journalDate: '2026-08-16',
+      authorId,
+      capturedTimezone: 'America/Chicago',
+      journalTimezone: 'America/Chicago',
+      journalDateAssignment: 'default' as const,
+    };
+    const day: JournalDayResource = {
+      id: dayId,
+      journalDate: '2026-08-16',
+      createdAt: '2026-08-16T13:00:00.000Z',
+      contributions: [
+        {
+          ...common,
+          id: firstRecordingId,
+          sourceType: 'recording',
+          capturedAt: '2026-08-16T13:00:00.000Z',
+          recording: {
+            id: '018f0000-0000-7000-8000-000000000021',
+            mimeType: 'audio/webm;codecs=opus',
+            persistenceState: 'durable',
+            transcription: {
+              state: 'failed',
+              runId: '018f0000-0000-7000-8000-000000000031',
+            },
+            byteSize: '1024',
+            createdAt: '2026-08-16T13:00:00.000Z',
+            updatedAt: '2026-08-16T13:05:00.000Z',
+          },
+        },
+        {
+          ...common,
+          id: typedId,
+          sourceType: 'typed_text',
+          capturedAt: '2026-08-16T14:00:00.000Z',
+          currentRevision: {
+            id: '018f0000-0000-7000-8000-000000000041',
+            contributionId: typedId,
+            revision: 1,
+            text: 'The typed source remains available.',
+            authority: 'manual',
+            authorId,
+            createdAt: '2026-08-16T14:00:00.000Z',
+          },
+        },
+        {
+          ...common,
+          id: secondRecordingId,
+          sourceType: 'recording',
+          capturedAt: '2026-08-16T15:00:00.000Z',
+          recording: {
+            id: '018f0000-0000-7000-8000-000000000022',
+            mimeType: 'audio/webm;codecs=opus',
+            persistenceState: 'durable',
+            transcription: {
+              state: 'queued',
+              runId: '018f0000-0000-7000-8000-000000000032',
+            },
+            byteSize: '2048',
+            createdAt: '2026-08-16T15:00:00.000Z',
+            updatedAt: '2026-08-16T15:05:00.000Z',
+          },
+        },
+      ],
+    };
+    mocks.offline.readDay.mockReset().mockResolvedValue(day);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = mount(JournalDayHost, {
+      global: {
+        plugins: [[VueQueryPlugin, { queryClient }]],
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('3 active contributions');
+    expect(wrapper.findAllComponents(AudioContributionCard)).toHaveLength(2);
+    expect(wrapper.findAllComponents(ContributionCard)).toHaveLength(1);
+    expect(
+      wrapper
+        .findAllComponents(AudioContributionCard)
+        .map((card) => card.props('contribution').id),
+    ).toEqual([firstRecordingId, secondRecordingId]);
+    expect(wrapper.text()).toContain('Transcription failed');
+    expect(wrapper.text()).toContain(
+      'the original audio remains safely stored and playable',
+    );
+    expect(wrapper.findAll('audio')).toHaveLength(2);
+    expect(wrapper.text()).toContain('The typed source remains available.');
+
+    const typedCard = wrapper.getComponent(ContributionCard);
+    await typedCard
+      .findAll('button')
+      .find((button) => button.text() === 'Edit')
+      ?.trigger('click');
+    expect(typedCard.get('textarea').element.value).toBe(
+      'The typed source remains available.',
+    );
 
     queryClient.clear();
     wrapper.unmount();
