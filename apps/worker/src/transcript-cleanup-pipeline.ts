@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
+  AiProviderOperationError,
   type CapabilityResolution,
   type JsonObject,
   type RawResponseRetention,
@@ -105,6 +106,9 @@ function jsonRecord(value: object): Readonly<Record<string, unknown>> {
 
 function classify(error: unknown): CleanupPipelineFailure {
   if (error instanceof CleanupPipelineFailure) return error;
+  if (error instanceof AiProviderOperationError) {
+    return new CleanupPipelineFailure(error.code, error.retryable);
+  }
   if (error instanceof BlobConflictError) {
     return new CleanupPipelineFailure('raw_response_conflict', false);
   }

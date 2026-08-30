@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  AiProviderOperationError,
   AiProviderFactoryRegistry,
   DuplicateAiProviderError,
   aiPackageName,
@@ -132,5 +133,30 @@ describe('@journal/ai provider-neutral ports', () => {
     await expect(
       registry.resolve(enabledSelection, 'speech_to_text'),
     ).rejects.toThrow('adapter with a different ID');
+  });
+
+  it('[STATE-003][SEC-007] represents retry policy with content-free provider failure metadata', () => {
+    const rateLimit = new AiProviderOperationError({
+      code: 'provider_rate_limited',
+      retryable: true,
+      retryAfterMilliseconds: 2_500,
+    });
+
+    expect(rateLimit).toMatchObject({
+      name: 'AiProviderOperationError',
+      message: 'AI provider operation failed.',
+      code: 'provider_rate_limited',
+      retryable: true,
+      retryAfterMilliseconds: 2_500,
+    });
+    expect(JSON.stringify(rateLimit)).not.toContain('journal');
+    expect(
+      () =>
+        new AiProviderOperationError({
+          code: 'provider_timeout',
+          retryable: true,
+          retryAfterMilliseconds: -1,
+        }),
+    ).toThrow(RangeError);
   });
 });

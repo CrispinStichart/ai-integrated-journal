@@ -8,6 +8,7 @@ import type {
   StructuredGenerationProvider,
   StructuredOutputSchema,
 } from '@journal/ai';
+import { AiProviderOperationError } from '@journal/ai';
 import {
   GROUNDED_ANSWER_CONFIGURATION,
   GROUNDED_ANSWER_OPERATION,
@@ -221,10 +222,16 @@ export class GroundedAnswerJobHandler implements CanonicalJobHandler<CanonicalGr
       });
     } catch (error) {
       const permanent =
-        error instanceof TypeError || error instanceof RangeError;
+        error instanceof AiProviderOperationError
+          ? !error.retryable
+          : error instanceof TypeError || error instanceof RangeError;
       await this.#repository.markFailed(
         answer.id,
-        error instanceof Error ? error.name : 'UnknownError',
+        error instanceof AiProviderOperationError
+          ? error.code
+          : error instanceof Error
+            ? error.name
+            : 'UnknownError',
         this.now(),
       );
       throw new QueueJobError(

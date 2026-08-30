@@ -8,7 +8,7 @@ import {
   type DatabaseClient,
   type SearchEmbeddingRequestRecord,
 } from '@journal/database';
-import type { EmbeddingRequest } from '@journal/ai';
+import { AiProviderOperationError, type EmbeddingRequest } from '@journal/ai';
 import type { PgBoss } from 'pg-boss';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -230,5 +230,40 @@ describe('search embedding identifier-only worker', () => {
       JOB_ID,
       'RangeError',
     );
+  });
+
+  it('[STATE-002][STATE-003][SEARCH-002] retries a rate-limited provider without misclassifying the canonical fragment', async () => {
+    const repo = repository();
+    const handler = new SearchEmbeddingJobHandler(
+      {} as DatabaseClient,
+      {} as PgBoss,
+      async () => ({
+        status: 'available',
+        port: {
+          embed: async () => {
+            throw new AiProviderOperationError({
+              code: 'provider_rate_limited',
+              retryable: true,
+              retryAfterMilliseconds: 5_000,
+            });
+          },
+        },
+      }),
+      repo,
+    );
+    const loaded = await handler.load(payload());
+    if (loaded.input === undefined) throw new Error('embedding input missing');
+
+    await expect(
+      handler.execute(loaded.input, new AbortController().signal),
+    ).rejects.toMatchObject({ disposition: 'transient' });
+    expect(repo.markFailed).toHaveBeenCalledWith(
+      FRAGMENT_ID,
+      2,
+      JOB_ID,
+      'provider_rate_limited',
+    );
+    expect(repo.markUnavailable).not.toHaveBeenCalled();
+    expect(repo.markSucceeded).not.toHaveBeenCalled();
   });
 });

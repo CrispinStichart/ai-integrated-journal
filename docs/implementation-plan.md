@@ -438,7 +438,7 @@ Add settings for provider disclosure and enablement, configured models, credenti
 
 Implement every AC-001–052 scenario and the product specification’s edge-case table as automated tests or explicitly documented manual checks.
 
-### 52. Reliability and fault testing
+### 52. Reliability and fault testing - FINISHED
 
 Exercise:
 

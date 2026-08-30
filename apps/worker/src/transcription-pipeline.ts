@@ -1,4 +1,5 @@
 import {
+  AiProviderOperationError,
   type CapabilityResolution,
   type JsonObject,
   type RawResponseRetention,
@@ -56,6 +57,9 @@ function jsonRecord(value: object): Readonly<Record<string, unknown>> {
 
 function classify(error: unknown): PipelineFailure {
   if (error instanceof PipelineFailure) return error;
+  if (error instanceof AiProviderOperationError) {
+    return new PipelineFailure(error.code, error.retryable);
+  }
   if (error instanceof BlobConflictError) {
     return new PipelineFailure('raw_response_conflict', false);
   }

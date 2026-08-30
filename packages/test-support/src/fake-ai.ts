@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 
 import {
+  AiProviderOperationError,
   RawResponseConflictError,
   RawResponseNotAvailableError,
+  type AiCapability,
   type AiOperationSnapshot,
   type AiProviderAdapter,
   type AiProviderDescriptor,
@@ -294,6 +296,71 @@ export function createDeterministicAiProviderFactory(
                 provider,
                 options.embeddingDimension,
               ),
+            }),
+      });
+    },
+  });
+}
+
+export type DeterministicProviderFaultScript = Partial<
+  Readonly<
+    Record<AiCapability, readonly (AiProviderOperationError | undefined)[]>
+  >
+>;
+
+/** Adds repeatable invocation-ordered failures without exposing provider input. */
+export function createFaultInjectingAiProviderFactory(
+  delegate: AiProviderFactory,
+  script: DeterministicProviderFaultScript,
+): AiProviderFactory {
+  const invocations = new Map<AiCapability, number>();
+  const checkpoint = (capability: AiCapability): void => {
+    const invocation = invocations.get(capability) ?? 0;
+    invocations.set(capability, invocation + 1);
+    const fault = script[capability]?.[invocation];
+    if (fault !== undefined) throw fault;
+  };
+
+  return Object.freeze({
+    descriptor: delegate.descriptor,
+    async create(settings: JsonObject): Promise<AiProviderAdapter> {
+      const adapter = await delegate.create(settings);
+      const speech = adapter.speech_to_text;
+      const structured = adapter.structured_generation;
+      const embeddings = adapter.embeddings;
+      return Object.freeze({
+        descriptor: adapter.descriptor,
+        ...(speech === undefined
+          ? {}
+          : {
+              speech_to_text: {
+                transcribe: async (request: SpeechToTextRequest) => {
+                  checkpoint('speech_to_text');
+                  return speech.transcribe(request);
+                },
+              },
+            }),
+        ...(structured === undefined
+          ? {}
+          : {
+              structured_generation: {
+                generate: async <T extends JsonValue>(
+                  request: StructuredGenerationRequest<T>,
+                ) => {
+                  checkpoint('structured_generation');
+                  return structured.generate(request);
+                },
+              },
+            }),
+        ...(embeddings === undefined
+          ? {}
+          : {
+              embeddings: {
+                embed: async (request: EmbeddingRequest) => {
+                  checkpoint('embeddings');
+                  return embeddings.embed(request);
+                },
+              },
             }),
       });
     },

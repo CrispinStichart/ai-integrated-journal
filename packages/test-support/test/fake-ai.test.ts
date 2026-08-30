@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  AiProviderOperationError,
   AiProviderFactoryRegistry,
   RawResponseConflictError,
   RawResponseNotAvailableError,
@@ -12,6 +13,7 @@ import {
   DeterministicEmbeddingProvider,
   InMemoryRawResponseStore,
   createDeterministicAiProviderFactory,
+  createFaultInjectingAiProviderFactory,
 } from '../src/index.js';
 
 async function* audio(value: string): AsyncGenerator<Uint8Array> {
@@ -263,6 +265,78 @@ describe('deterministic AI provider fixtures', () => {
           0,
         ),
     ).toThrow(RangeError);
+  });
+
+  it('[STATE-003][SEC-007] injects invocation-ordered outages and rate limits without retaining provider input', async () => {
+    const factory = createFaultInjectingAiProviderFactory(
+      createDeterministicAiProviderFactory({
+        providerId: 'fixture-a',
+        speech: { text: 'recovered transcript', timestamps: false },
+        structuredOutput: { recovered: true },
+        embeddingDimension: 2,
+      }),
+      {
+        speech_to_text: [
+          new AiProviderOperationError({
+            code: 'provider_rate_limited',
+            retryable: true,
+            retryAfterMilliseconds: 1_000,
+          }),
+        ],
+        structured_generation: [
+          new AiProviderOperationError({
+            code: 'provider_unavailable',
+            retryable: true,
+          }),
+        ],
+      },
+    );
+    const adapter = await factory.create({});
+    const speech = adapter.speech_to_text;
+    const structured = adapter.structured_generation;
+    if (speech === undefined || structured === undefined)
+      throw new Error('Fault fixture capabilities are unavailable.');
+    const privateSpeech = 'private synthetic provider input';
+    const speechRequest = {
+      audio: { body: audio(privateSpeech), mediaType: 'audio/webm' },
+      context: [],
+      configuration: {},
+    } as const;
+
+    await expect(speech.transcribe(speechRequest)).rejects.toMatchObject({
+      code: 'provider_rate_limited',
+      retryable: true,
+      retryAfterMilliseconds: 1_000,
+    });
+    await expect(
+      speech.transcribe({
+        ...speechRequest,
+        audio: { ...speechRequest.audio, body: audio(privateSpeech) },
+      }),
+    ).resolves.toMatchObject({ text: 'recovered transcript' });
+
+    const structuredRequest = {
+      messages: [{ role: 'user' as const, content: privateSpeech }],
+      outputSchema: {
+        id: 'fault-fixture',
+        version: '1',
+        jsonSchema: { type: 'object' },
+        parse: (value: unknown) => value as JsonValue,
+      },
+      prompt: { id: 'fault-fixture', version: '1', templateHash: 'hash' },
+      configuration: {},
+    };
+    let failure: unknown;
+    try {
+      await structured.generate(structuredRequest);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ code: 'provider_unavailable' });
+    expect(String(failure)).not.toContain(privateSpeech);
+    await expect(structured.generate(structuredRequest)).resolves.toMatchObject(
+      { data: { recovered: true } },
+    );
   });
 });
 

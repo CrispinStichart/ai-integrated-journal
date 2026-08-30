@@ -1,5 +1,8 @@
 import type { CapabilityResolution, EmbeddingProvider } from '@journal/ai';
-import { SEMANTIC_SEARCH_EMBEDDING_CONFIGURATION } from '@journal/ai';
+import {
+  AiProviderOperationError,
+  SEMANTIC_SEARCH_EMBEDDING_CONFIGURATION,
+} from '@journal/ai';
 import {
   EMBEDDING_CHUNKS_PER_JOB,
   QueueJobError,
@@ -209,13 +212,21 @@ export class SearchEmbeddingJobHandler implements CanonicalJobHandler<SearchEmbe
         request.fragmentId,
         request.generation,
         jobId,
-        error instanceof Error ? error.name : 'UnknownError',
+        error instanceof AiProviderOperationError
+          ? error.code
+          : error instanceof Error
+            ? error.name
+            : 'UnknownError',
       );
       throw new QueueJobError(
-        error instanceof InvalidEmbeddingResultError ||
-          error instanceof RangeError
-          ? 'permanent'
-          : 'transient',
+        error instanceof AiProviderOperationError
+          ? error.retryable
+            ? 'transient'
+            : 'permanent'
+          : error instanceof InvalidEmbeddingResultError ||
+              error instanceof RangeError
+            ? 'permanent'
+            : 'transient',
         'Search embedding operation failed.',
       );
     }

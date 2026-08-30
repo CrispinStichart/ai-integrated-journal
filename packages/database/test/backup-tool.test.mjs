@@ -301,7 +301,7 @@ describe('local encrypted backup tooling', () => {
     expect(pool.end).toHaveBeenCalledOnce();
   });
 
-  it('[PORT-001][PORT-002][RET-006][SEARCH-006] restores only after integrity checks, then reapplies tombstones, rebuilds search, and reconciles work', async () => {
+  it('[PORT-001][PORT-002][RET-006][RET-007][SEARCH-006] applies a newer permanent-deletion checkpoint before restoring blobs, rebuilding search, or resuming work', async () => {
     const root = await temporaryDirectory('journal-backup-success-');
     const paths = privatePaths(root);
     await mkdir(paths.repositoryDirectory, { recursive: true });
@@ -311,11 +311,12 @@ describe('local encrypted backup tooling', () => {
     );
     await mkdir(path.dirname(paths.passwordFile), { recursive: true });
     await writeFile(paths.passwordFile, 'a'.repeat(64));
-    const fixture = path.join(root, 'fixture');
-    await mkdir(fixture, { recursive: true });
-    await writeFile(path.join(fixture, 'database.dump'), 'database');
+    const selectedFixture = path.join(root, 'selected-fixture');
+    const latestFixture = path.join(root, 'latest-fixture');
+    await mkdir(selectedFixture, { recursive: true });
+    await writeFile(path.join(selectedFixture, 'database.dump'), 'database');
     await writeFile(
-      path.join(fixture, 'manifest.json'),
+      path.join(selectedFixture, 'manifest.json'),
       JSON.stringify({
         formatVersion: BACKUP_FORMAT_VERSION,
         databaseDump: 'database.dump',
@@ -324,20 +325,30 @@ describe('local encrypted backup tooling', () => {
         tombstoneCheckpoint: 'tombstones.jsonl',
       }),
     );
-    await writeFile(path.join(fixture, 'tombstones.jsonl'), '');
-    const checksumLines = [];
-    for (const file of ['database.dump', 'manifest.json', 'tombstones.jsonl']) {
-      const digest = await sha256File(path.join(fixture, file));
-      checksumLines.push(`${digest.sha256}  ${file}`);
-    }
+    await writeFile(path.join(selectedFixture, 'tombstones.jsonl'), '');
+    await writeFixtureChecksums(selectedFixture);
+    await copyDirectory(selectedFixture, latestFixture);
+    const tombstone = {
+      id: '019c5b90-0000-7000-8000-000000000811',
+      owner_id: '019c5b90-0000-7000-8000-000000000812',
+      entity_kind: 'contribution',
+      entity_id: '019c5b90-0000-7000-8000-000000000813',
+      deleted_at: '2026-08-30T00:00:00.000Z',
+      generation: 8,
+      correlation_id: '019c5b90-0000-7000-8000-000000000814',
+      created_at: '2026-08-30T00:00:00.000Z',
+    };
     await writeFile(
-      path.join(fixture, 'checksums.sha256'),
-      `${checksumLines.join('\n')}\n`,
+      path.join(latestFixture, 'tombstones.jsonl'),
+      `${JSON.stringify(tombstone)}\n`,
     );
+    await writeFixtureChecksums(latestFixture);
     const queries = [];
+    const queryCalls = [];
     const pool = {
-      query: vi.fn(async (text) => {
+      query: vi.fn(async (text, values) => {
         queries.push(String(text));
+        queryCalls.push({ text: String(text), values });
         if (String(text).includes('from pgboss.version')) {
           return {
             rows: [{ version: EXPECTED_PG_BOSS_SCHEMA_VERSION }],
@@ -360,7 +371,10 @@ describe('local encrypted backup tooling', () => {
       commands.push([command, arguments_]);
       if (command === 'restic' && arguments_[0] === 'restore') {
         const target = arguments_[arguments_.indexOf('--target') + 1];
-        await copyDirectory(fixture, target);
+        await copyDirectory(
+          arguments_[1] === 'latest' ? latestFixture : selectedFixture,
+          target,
+        );
       }
       return { stdout: '[]', stderr: '' };
     });
@@ -381,11 +395,15 @@ describe('local encrypted backup tooling', () => {
       ),
     ).resolves.toEqual({
       restoredBlobCount: 0,
-      tombstoneCount: 0,
+      tombstoneCount: 1,
       canceledJobCount: 2,
       resumedJobCount: 1,
     });
     expect(commands.map(([command]) => command)).toContain('pg_restore');
+    const purge = queryCalls.find(({ text }) =>
+      text.includes('journal.purge_contribution'),
+    );
+    expect(purge?.values).toEqual([tombstone.owner_id, tombstone.entity_id]);
     expect(
       queries.findIndex((query) =>
         query.includes('delete from journal.search_fragment'),
@@ -436,4 +454,16 @@ async function copyDirectory(source, destination) {
   for (const name of await readdir(source)) {
     await copyFile(path.join(source, name), path.join(destination, name));
   }
+}
+
+async function writeFixtureChecksums(directory) {
+  const checksumLines = [];
+  for (const file of ['database.dump', 'manifest.json', 'tombstones.jsonl']) {
+    const digest = await sha256File(path.join(directory, file));
+    checksumLines.push(`${digest.sha256}  ${file}`);
+  }
+  await writeFile(
+    path.join(directory, 'checksums.sha256'),
+    `${checksumLines.join('\n')}\n`,
+  );
 }

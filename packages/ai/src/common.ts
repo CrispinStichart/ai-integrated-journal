@@ -7,6 +7,41 @@ export type JsonObject = Readonly<Record<string, JsonValue>>;
 export type AiCapability =
   'embeddings' | 'speech_to_text' | 'structured_generation';
 
+export type AiProviderFailureCode =
+  | 'provider_authentication_failed'
+  | 'provider_invalid_request'
+  | 'provider_rate_limited'
+  | 'provider_timeout'
+  | 'provider_unavailable';
+
+/** Content-free provider failure metadata shared by every capability port. */
+export class AiProviderOperationError extends Error {
+  public readonly code: AiProviderFailureCode;
+  public readonly retryable: boolean;
+  public readonly retryAfterMilliseconds: number | undefined;
+
+  public constructor(input: {
+    readonly code: AiProviderFailureCode;
+    readonly retryable: boolean;
+    readonly retryAfterMilliseconds?: number;
+  }) {
+    super('AI provider operation failed.');
+    this.name = 'AiProviderOperationError';
+    if (
+      input.retryAfterMilliseconds !== undefined &&
+      (!Number.isSafeInteger(input.retryAfterMilliseconds) ||
+        input.retryAfterMilliseconds < 0)
+    ) {
+      throw new RangeError(
+        'Provider retry delay must be a non-negative safe integer.',
+      );
+    }
+    this.code = input.code;
+    this.retryable = input.retryable;
+    this.retryAfterMilliseconds = input.retryAfterMilliseconds;
+  }
+}
+
 export type KnownOrUnknown<T> =
   Readonly<{ status: 'known'; value: T }> | Readonly<{ status: 'unknown' }>;
 

@@ -3,7 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { AiProviderFactoryRegistry } from '@journal/ai';
+import {
+  AiProviderFactoryRegistry,
+  AiProviderOperationError,
+} from '@journal/ai';
 import {
   appendCorrectedTranscriptRevision,
   contributions,
@@ -663,7 +666,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     ]);
   });
 
-  it('[STT-002][ARCH-005][DATA-025][DATA-028][MODEL-003] isolates STT and cleanup failures and retries each stage', async () => {
+  it('[STT-002][ARCH-005][DATA-025][DATA-028][MODEL-003][STATE-002][STATE-003] preserves source data through STT rate limits and cleanup outages, then retries each stage', async () => {
     const failedRecordingId = createUuidV7<'recording'>({ timestamp: 204_000 });
     const failedContributionId = createUuidV7<'contribution'>({
       timestamp: 205_000,
@@ -704,24 +707,30 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       }),
     );
     if (queuedPayload === undefined) throw new Error('Expected queued work.');
-    const unavailable = new TranscriptionJobHandler(
+    const rateLimited = new TranscriptionJobHandler(
       client,
       boss,
       blobs,
       async () => ({
-        status: 'unavailable',
-        providerId: 'missing',
-        capability: 'speech_to_text',
-        reason: 'provider_not_registered',
+        status: 'available',
+        port: {
+          transcribe: async () => {
+            throw new AiProviderOperationError({
+              code: 'provider_rate_limited',
+              retryable: true,
+              retryAfterMilliseconds: 1_000,
+            });
+          },
+        },
       }),
       () => now,
     );
-    const canonical = await unavailable.load(queuedPayload);
+    const canonical = await rateLimited.load(queuedPayload);
     if (canonical.input === undefined)
       throw new Error('Expected runnable work.');
     await expect(
-      unavailable.execute(canonical.input, new AbortController().signal),
-    ).rejects.toMatchObject({ disposition: 'permanent' });
+      rateLimited.execute(canonical.input, new AbortController().signal),
+    ).rejects.toMatchObject({ disposition: 'transient' });
 
     const [failed] = await client.database
       .select()
@@ -730,8 +739,8 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     const original = await blobs.stat(failedAudioKey);
     expect(failed).toMatchObject({
       status: 'failed',
-      errorCode: 'provider_not_registered',
-      errorRetryable: false,
+      errorCode: 'provider_rate_limited',
+      errorRetryable: true,
     });
     expect(original.sha256).toBe(sha256(audio));
 
@@ -807,7 +816,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     });
     expect(preservedFailure).toMatchObject({
       status: 'failed',
-      errorCode: 'provider_not_registered',
+      errorCode: 'provider_rate_limited',
     });
 
     if (queuedPayload === undefined) throw new Error('Expected cleanup work.');
@@ -815,10 +824,15 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       client,
       blobs,
       async () => ({
-        status: 'unavailable',
-        providerId: 'missing',
-        capability: 'structured_generation',
-        reason: 'provider_not_registered',
+        status: 'available',
+        port: {
+          generate: async () => {
+            throw new AiProviderOperationError({
+              code: 'provider_unavailable',
+              retryable: true,
+            });
+          },
+        },
       }),
       () => now,
     );
@@ -829,7 +843,7 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
     const cleanupInput = cleanupCanonical.input;
     await expect(
       unavailableCleanup.execute(cleanupInput, new AbortController().signal),
-    ).rejects.toMatchObject({ disposition: 'permanent' });
+    ).rejects.toMatchObject({ disposition: 'transient' });
 
     const [failedCleanup] = await client.database
       .select()
@@ -842,7 +856,8 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       );
     expect(failedCleanup).toMatchObject({
       status: 'failed',
-      errorCode: 'provider_not_registered',
+      errorCode: 'provider_unavailable',
+      errorRetryable: true,
       outputCleanedRevisionId: null,
     });
     const retryCleanup = await inTransaction(client.database, (transaction) =>

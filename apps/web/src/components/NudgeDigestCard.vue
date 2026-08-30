@@ -24,6 +24,9 @@ const error = ref('');
 const query = useQuery({
   queryKey: computed(() => ['nudges', props.journalDate]),
   queryFn: () => getNudgeDay(props.journalDate),
+  // SSE is only a low-latency hint. Polling is the correctness path when an
+  // event is missed, replay history is unavailable, or EventSource is absent.
+  refetchInterval: 15_000,
 });
 const eventData =
   typeof globalThis.EventSource === 'undefined'

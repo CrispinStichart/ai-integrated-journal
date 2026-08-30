@@ -3,7 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { AiProviderFactoryRegistry } from '@journal/ai';
+import {
+  AiProviderFactoryRegistry,
+  AiProviderOperationError,
+} from '@journal/ai';
 import type { ProcessorDefinitionDraft } from '@journal/contracts';
 import {
   contributionRevisions,
@@ -71,6 +74,9 @@ describe('WORKER generic processor runtime', () => {
   });
   const invalidReconciliationVersionId = createUuidV7<'processor-version'>({
     timestamp: 305_300,
+  });
+  const providerFaultVersionId = createUuidV7<'processor-version'>({
+    timestamp: 305_400,
   });
   const now = new Date('2026-08-23T04:00:00.000Z');
   const text = 'Synthetic breakfast note.';
@@ -599,6 +605,112 @@ describe('WORKER generic processor runtime', () => {
     expect(JSON.stringify(queued)).not.toContain('replacement observation');
   });
 
+  it('[ARCH-003][STATE-004] transitively and idempotently invalidates a long exact-input chain', async () => {
+    const chainLength = 32;
+    const resultIds: string[] = [];
+    for (let index = 0; index < chainLength; index += 1) {
+      const runId = createUuidV7<'processor-run'>({
+        timestamp: 900_000 + index * 3,
+      });
+      const resultId = createUuidV7<'processor-result'>({
+        timestamp: 901_000 + index * 3,
+      });
+      await client.database.insert(processorRuns).values({
+        id: runId,
+        processorId,
+        processorVersionId: versionId,
+        targetScope: 'journal_day',
+        targetJournalDayId: dayId,
+        attempt: 100 + index,
+        status: 'running',
+        inputCompleteness: 'complete',
+        inputFingerprint: hash({ runId }),
+        promptAssemblyVersion: 'processor-runtime-v1',
+        promptTemplateHash: hash({ runId, prompt: 'long-chain' }),
+        queuedAt: now,
+        startedAt: now,
+        updatedAt: now,
+      });
+      const parentResultId = resultIds.at(-1);
+      const boundContent =
+        parentResultId === undefined
+          ? text
+          : JSON.stringify([`chain-${String(index - 1)}`]);
+      await client.database.insert(processorRunInputs).values({
+        runId,
+        ordinal: 0,
+        label: `chain-${String(index)}`,
+        inputKind:
+          parentResultId === undefined ? 'typed_text' : 'processor_result',
+        ...(parentResultId === undefined
+          ? { contributionRevisionId: revisionId }
+          : { processorResultId: parentResultId, outputSelector: '/items' }),
+        includedStartUtf16: 0,
+        includedEndUtf16: boundContent.length,
+        fullLengthUtf16: boundContent.length,
+        contentHash: hash(boundContent),
+        temporalContext: {
+          capturedAt: now.toISOString(),
+          capturedTimezone: 'Pacific/Auckland',
+          journalDate: '2026-08-22',
+          journalTimezone: 'America/Los_Angeles',
+          journalDateAssignment: 'user_override',
+        },
+        createdAt: now,
+      });
+      await client.database.insert(processorResults).values({
+        id: resultId,
+        runId,
+        processorId,
+        processorVersionId: versionId,
+        targetJournalDayId: dayId,
+        kind: 'interpretation',
+        completeness: 'complete',
+        payload: { items: [`chain-${String(index)}`] },
+        createdAt: now,
+        updatedAt: now,
+      });
+      await client.database
+        .update(processorRuns)
+        .set({
+          status: 'succeeded',
+          outputResultId: resultId,
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(processorRuns.id, runId));
+      resultIds.push(resultId);
+    }
+
+    const first = await inTransaction(client.database, (transaction) =>
+      invalidateProcessorDependents({
+        transaction,
+        changedInput: { kind: 'contribution_revision', id: revisionId },
+        enqueueReplacements: false,
+        now,
+      }),
+    );
+    expect(first.staleResultIds).toEqual(expect.arrayContaining(resultIds));
+    expect(first.staleResultIds).toHaveLength(chainLength);
+    const second = await inTransaction(client.database, (transaction) =>
+      invalidateProcessorDependents({
+        transaction,
+        changedInput: { kind: 'contribution_revision', id: revisionId },
+        enqueueReplacements: false,
+        now,
+      }),
+    );
+    expect(second.staleResultIds).toEqual([]);
+    expect(
+      (
+        await client.database
+          .select()
+          .from(processorResults)
+          .where(eq(processorResults.staleReason, 'input_revision_superseded'))
+      ).filter(({ id }) => resultIds.includes(id)),
+    ).toHaveLength(chainLength);
+  });
+
   it('[PROC-001][PROC-007][STATE-001] invokes a registered deterministic processor without an external provider or raw response', async () => {
     const deterministicDefinition: ProcessorDefinitionDraft = {
       ...definition,
@@ -812,6 +924,75 @@ describe('WORKER generic processor runtime', () => {
         .select()
         .from(processorReconciliations)
         .where(eq(processorReconciliations.runId, run.id)),
+    ).toEqual([]);
+  });
+
+  it('[STATE-002][STATE-003][PROC-007] persists a rate-limited provider attempt as retryable without producing a result', async () => {
+    const faultDefinition: ProcessorDefinitionDraft = {
+      ...definition,
+      semanticVersion: '1.4.0',
+    };
+    await client.database.insert(processorVersions).values({
+      id: providerFaultVersionId,
+      processorId,
+      revision: 5,
+      semanticVersion: faultDefinition.semanticVersion,
+      definition: faultDefinition,
+      instructionHash: hash(faultDefinition.instructions),
+      outputSchemaHash: hash(faultDefinition.outputSchema),
+      promptTemplateHash: hash({ prompt: 'provider-fault' }),
+      createdBy: ownerId,
+    });
+    const run = await inTransaction(client.database, (transaction) =>
+      enqueueProcessorRun({
+        boss,
+        transaction,
+        processorVersionId: providerFaultVersionId,
+        target: { scope: 'journal_day', journalDayId: dayId },
+        now,
+      }),
+    );
+    if (queued === undefined) throw new Error('Expected provider fault work.');
+    const handler = new ProcessorJobHandler(
+      client,
+      blobs,
+      async () => ({
+        status: 'available',
+        port: {
+          generate: async () => {
+            throw new AiProviderOperationError({
+              code: 'provider_rate_limited',
+              retryable: true,
+              retryAfterMilliseconds: 1_000,
+            });
+          },
+        },
+      }),
+      () => undefined,
+      () => now,
+    );
+    const canonical = await handler.load(queued);
+    if (canonical.input === undefined)
+      throw new Error('Expected runnable provider fault work.');
+
+    await expect(
+      handler.execute(canonical.input, new AbortController().signal),
+    ).rejects.toMatchObject({ disposition: 'transient' });
+    const [persisted] = await client.database
+      .select()
+      .from(processorRuns)
+      .where(eq(processorRuns.id, run.id));
+    expect(persisted).toMatchObject({
+      status: 'failed',
+      errorCode: 'provider_rate_limited',
+      errorRetryable: true,
+      outputResultId: null,
+    });
+    expect(
+      await client.database
+        .select()
+        .from(processorResults)
+        .where(eq(processorResults.runId, run.id)),
     ).toEqual([]);
   });
 });

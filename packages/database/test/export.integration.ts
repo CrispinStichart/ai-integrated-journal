@@ -133,7 +133,7 @@ describe('point-in-time export snapshot persistence', () => {
     await container?.stop();
   });
 
-  it('[PORT-003][PORT-004][PORT-005][PORT-007][MODEL-006][STATE-004][AC-050] materializes exact owner rows, lossless blob leases, and its identifier-only job atomically', async () => {
+  it('[PORT-003][PORT-004][PORT-005][PORT-007][MODEL-006][STATE-004][AC-050] freezes an atomic point-in-time snapshot while a later edit creates a new revision', async () => {
     const repository = new ExportRepository(client.database);
     const created = await repository.createSnapshot({
       id: exportId,
@@ -428,7 +428,7 @@ describe('point-in-time export snapshot persistence', () => {
     );
   });
 
-  it('[RET-006][RET-007] makes soft and permanent deletion win over queued and completed export delivery', async () => {
+  it('[RET-006][RET-007] makes concurrent soft or permanent deletion invalidate queued and completed export delivery', async () => {
     const deletedAt = new Date('2026-07-01T00:00:00.000Z');
     await client.database
       .update(exportRequests)

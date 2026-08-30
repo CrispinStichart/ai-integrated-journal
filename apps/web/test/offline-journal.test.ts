@@ -203,6 +203,47 @@ describe('offline text outbox and cached reads (SEC-001–SEC-003, AC-003)', () 
     ).toEqual(['create-before-restart', 'create-after-restart']);
   });
 
+  it('[STATE-003][STATE-004][AC-003] reloads after a failed synchronization and replays the original mutation identity exactly once', async () => {
+    const storage = createStore();
+    const first = new OfflineJournal(storage, 1);
+    await first.initialize(OWNER_ID);
+    await first.setup('local-only secret');
+    await first.enqueueCreate(createInput(), 'create-reload-recovery');
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Synthetic network outage'))
+      .mockResolvedValueOnce(
+        json({
+          contribution: contribution(),
+          idempotency: { key: 'create-reload-recovery', replayed: false },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await first.replay('csrf-token');
+    expect(first.pendingCount.value).toBe(1);
+    first.lock();
+
+    const restarted = new OfflineJournal(storage, 1);
+    await restarted.initialize(OWNER_ID);
+    await restarted.unlock('local-only secret');
+    await restarted.replay('csrf-token');
+
+    expect(restarted.pendingCount.value).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]?.headers).toEqual(
+        expect.objectContaining({
+          'idempotency-key': 'create-reload-recovery',
+        }),
+      );
+      expect(JSON.parse(String(call[1]?.body))).toMatchObject({
+        contributionId: CONTRIBUTION_ID,
+        revisionId: REVISION_ID,
+      });
+    }
+  });
+
   it('replays mutations in durable order with original UUIDs and idempotency keys', async () => {
     const storage = createStore();
     const journal = new OfflineJournal(storage, 1);

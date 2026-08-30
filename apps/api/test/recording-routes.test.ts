@@ -191,6 +191,46 @@ describe('Recording upload API', () => {
     expect(oversized.body.code).toBe('payload_too_large');
   });
 
+  it('[CAP-003][CAP-005][STATE-003] reports host disk exhaustion as retryable storage pressure without changing the recording identity', async () => {
+    const recordingService = service();
+    const exhausted = Object.assign(new Error('Synthetic disk is full'), {
+      code: 'ENOSPC',
+    });
+    vi.mocked(recordingService.uploadChunk).mockRejectedValueOnce(exhausted);
+
+    const failed = await request(app(recordingService))
+      .put(`/api/v1/recordings/${RECORDING_ID}/chunks/0`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'recording-chunk-storage-pressure')
+      .set('x-content-sha256', checksum)
+      .set('content-type', 'application/octet-stream')
+      .send(Buffer.from('audio'))
+      .expect(507);
+    expect(failed.body).toMatchObject({
+      code: 'server_storage_exhausted',
+      correlationId: CORRELATION_ID,
+    });
+    expect(JSON.stringify(failed.body)).not.toContain(exhausted.message);
+
+    await request(app(recordingService))
+      .put(`/api/v1/recordings/${RECORDING_ID}/chunks/0`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'recording-chunk-storage-pressure')
+      .set('x-content-sha256', checksum)
+      .set('content-type', 'application/octet-stream')
+      .send(Buffer.from('audio'))
+      .expect(201);
+    expect(recordingService.uploadChunk).toHaveBeenCalledTimes(2);
+    expect(
+      vi
+        .mocked(recordingService.uploadChunk)
+        .mock.calls.map((call) => call.slice(0, 5)),
+    ).toEqual([
+      [OWNER_ID, RECORDING_ID, 0, checksum, 'recording-chunk-storage-pressure'],
+      [OWNER_ID, RECORDING_ID, 0, checksum, 'recording-chunk-storage-pressure'],
+    ]);
+  });
+
   it('[CAP-004][AC-002] finalizes and explicitly retries a prepared manifest', async () => {
     const recordingService = service();
     const manifest = {

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import {
+  AiProviderOperationError,
   type CapabilityResolution,
   type JsonObject,
   type JsonValue,
@@ -73,6 +74,9 @@ class ProcessorPipelineFailure extends Error {
 
 function classify(error: unknown): ProcessorPipelineFailure {
   if (error instanceof ProcessorPipelineFailure) return error;
+  if (error instanceof AiProviderOperationError) {
+    return new ProcessorPipelineFailure(error.code, error.retryable);
+  }
   if (
     error instanceof ProcessorRuntimeValidationError ||
     error instanceof FoodAndDrinkValidationError ||

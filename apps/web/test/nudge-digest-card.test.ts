@@ -5,7 +5,7 @@ import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 import { flushPromises, mount } from '@vue/test-utils';
 import axe from 'axe-core';
 import { ref } from 'vue';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   act: vi.fn(),
@@ -114,6 +114,10 @@ describe('required-information digest UI', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('[NUDGE-002][NUDGE-005][NUDGE-007][AC-042][AC-043] renders one accessible digest for three items while identifying failure as technical', async () => {
     const { wrapper, queryClient } = mountCard();
     await flushPromises();
@@ -150,6 +154,37 @@ describe('required-information digest UI', () => {
     expect(wrapper.text()).toContain('Remind me in one hour');
     expect(wrapper.text()).toContain('Dismiss for this day');
     expect(wrapper.text()).toContain('Not applicable');
+    wrapper.unmount();
+    queryClient.clear();
+  });
+
+  it('[STATE-003][NUDGE-002] recovers a missed SSE update through the polling fallback', async () => {
+    vi.useFakeTimers();
+    const initial = resource();
+    const recoveredSource = resource();
+    if (recoveredSource.digest === undefined)
+      throw new Error('Digest fixture missing.');
+    const recovered: NudgeDayResource = {
+      ...recoveredSource,
+      digest: {
+        ...recoveredSource.digest,
+        status: 'delivered',
+        revision: 2,
+      },
+    };
+    mocks.getDay
+      .mockReset()
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValueOnce(recovered);
+    const { wrapper, queryClient } = mountCard();
+    await flushPromises();
+    expect(wrapper.text()).toContain('Queued until quiet hours end');
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flushPromises();
+
+    expect(mocks.getDay).toHaveBeenCalledTimes(2);
+    expect(wrapper.text()).not.toContain('Queued until quiet hours end');
     wrapper.unmount();
     queryClient.clear();
   });

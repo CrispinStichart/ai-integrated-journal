@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import type { JsonValue, StructuredGenerationRequest } from '@journal/ai';
+import {
+  AiProviderOperationError,
+  type JsonValue,
+  type StructuredGenerationRequest,
+} from '@journal/ai';
 import {
   GROUNDED_ANSWER_OPERATION,
   GroundedAnswerRepository,
@@ -261,4 +265,48 @@ describe('grounded-answer worker', () => {
       state: 'canceled',
     });
   });
+
+  it.each([
+    {
+      code: 'provider_unavailable' as const,
+      retryable: true,
+      disposition: 'transient',
+    },
+    {
+      code: 'provider_authentication_failed' as const,
+      retryable: false,
+      disposition: 'permanent',
+    },
+  ])(
+    '[STATE-002][STATE-003][SEARCH-007] classifies $code without persisting provider input',
+    async ({ code, retryable, disposition }) => {
+      const repo = repository();
+      const handler = new GroundedAnswerJobHandler(
+        {} as DatabaseClient,
+        blobStore(),
+        async () => ({
+          status: 'available',
+          port: {
+            generate: async () => {
+              throw new AiProviderOperationError({ code, retryable });
+            },
+          },
+        }),
+        repo,
+      );
+
+      await expect(
+        handler.execute(canonical, new AbortController().signal),
+      ).rejects.toMatchObject({ disposition });
+      expect(repo.markFailed).toHaveBeenCalledWith(
+        ANSWER_ID,
+        code,
+        expect.any(Date),
+      );
+      expect(repo.complete).not.toHaveBeenCalled();
+      expect(
+        JSON.stringify(vi.mocked(repo.markFailed).mock.calls),
+      ).not.toContain(record.question);
+    },
+  );
 });
