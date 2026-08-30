@@ -60,6 +60,62 @@ describe('search API client', () => {
     expect(url).toContain('mode=hybrid');
   });
 
+  it('[SEARCH-001][SEARCH-005] omits absent filters while preserving the remaining result constraints', async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify(response), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+
+    await lexicalSearch({
+      q: 'morning & evening',
+      dateTo: '2026-08-30',
+      processorId: '019c5b90-0000-7000-8000-000000000043',
+      resultType: 'journal_fragment',
+    });
+
+    const url = new URL(String(fetch.mock.calls[0]?.[0]), 'http://localhost');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      q: 'morning & evening',
+      limit: '20',
+      dateTo: '2026-08-30',
+      processorId: '019c5b90-0000-7000-8000-000000000043',
+      resultType: 'journal_fragment',
+    });
+    expect(fetch.mock.calls[0]?.[1]).toEqual({
+      credentials: 'same-origin',
+    });
+  });
+
+  it('[SEARCH-001] surfaces server problem details and a safe fallback for unreadable failures', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: 'about:blank',
+            title: 'Invalid search',
+            status: 400,
+            detail: 'The date range is invalid.',
+            code: 'validation_failed',
+            correlationId: '019c5b90-0000-7000-8000-000000000044',
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response('not-json', { status: 503 }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(lexicalSearch({ q: 'morning' })).rejects.toThrow(
+      'The date range is invalid.',
+    );
+    await expect(lexicalSearch({ q: 'morning' })).rejects.toThrow(
+      'Search could not be completed.',
+    );
+  });
+
   it('[SEARCH-003][SEARCH-007][SEC-002] submits an idempotent CSRF-protected answer request and validates polling responses', async () => {
     const answer = {
       id: '019c5b90-0000-7000-8000-000000000043',
@@ -99,5 +155,37 @@ describe('search API client', () => {
       id: answer.id,
     });
     expect(String(fetch.mock.calls[1]?.[0])).toContain(answer.id);
+  });
+
+  it('[SEARCH-007] reports grounded-answer failures without exposing invalid response bodies', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            type: 'about:blank',
+            title: 'Answer unavailable',
+            status: 409,
+            code: 'conflict',
+            correlationId: '019c5b90-0000-7000-8000-000000000045',
+          }),
+          { status: 409, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response('<html>upstream failed</html>', { status: 502 }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    vi.stubGlobal('crypto', { randomUUID: () => 'fixture-request-id' });
+
+    await expect(
+      askGroundedAnswer({
+        csrfToken: 'csrf-fixture',
+        request: { question: 'What happened?', mode: 'hybrid' },
+      }),
+    ).rejects.toThrow('Answer unavailable');
+    await expect(
+      getGroundedAnswer('019c5b90-0000-7000-8000-000000000043'),
+    ).rejects.toThrow('The grounded answer could not be loaded.');
   });
 });
