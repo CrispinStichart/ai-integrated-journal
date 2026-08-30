@@ -10,6 +10,7 @@ import {
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server';
 import { createUuidV7 } from '@journal/domain';
+import type { ActiveSessionResource } from '@journal/contracts';
 import argon2 from 'argon2';
 import type { Request } from 'express';
 
@@ -248,6 +249,41 @@ export class AuthenticationService implements RequestAuthenticator {
 
   async logout(session: ActiveSession): Promise<void> {
     await this.#store.revokeSession(session.sessionId, this.#now());
+  }
+
+  async listSessions(
+    session: ActiveSession,
+  ): Promise<readonly ActiveSessionResource[]> {
+    const records = await this.#store.listActiveSessions(
+      session.ownerId,
+      this.#now(),
+    );
+    return records
+      .map((record) => ({
+        id: record.id,
+        current: record.id === session.sessionId,
+        createdAt: record.createdAt.toISOString(),
+        lastUsedAt: record.lastUsedAt.toISOString(),
+        idleExpiresAt: record.idleExpiresAt.toISOString(),
+        absoluteExpiresAt: record.absoluteExpiresAt.toISOString(),
+      }))
+      .sort((left, right) => right.lastUsedAt.localeCompare(left.lastUsedAt));
+  }
+
+  async revokeOwnedSession(
+    session: ActiveSession,
+    sessionId: string,
+    correlationId: string,
+  ): Promise<{ revoked: boolean; currentSession: boolean }> {
+    const currentSession = session.sessionId === sessionId;
+    const revoked = await this.#store.revokeOwnedSession({
+      userId: session.ownerId,
+      sessionId,
+      now: this.#now(),
+      auditId: createUuidV7<'audit-event'>(),
+      correlationId,
+    });
+    return { revoked, currentSession: revoked && currentSession };
   }
 
   async registrationOptions(

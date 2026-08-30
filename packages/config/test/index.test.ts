@@ -124,6 +124,24 @@ describe('@journal/config operational shell', () => {
     ).toThrowError(/must not overlap/u);
   });
 
+  it('[SEC-003] validates and exposes only a correctly encoded provider credential encryption key', () => {
+    const key = Buffer.alloc(32, 9).toString('base64url');
+    const config = parseEnvironment({
+      AI_CREDENTIAL_ENCRYPTION_KEY: key,
+      BLOB_DATA_DIR: '/tmp/blobs',
+      DATABASE_URL: 'postgresql://journal@localhost/journal',
+    });
+    expect(config.credentialEncryptionKey).toBe(key);
+
+    expect(() =>
+      parseEnvironment({
+        AI_CREDENTIAL_ENCRYPTION_KEY: 'not-a-256-bit-key',
+        BLOB_DATA_DIR: '/tmp/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+      }),
+    ).toThrowError(/AI_CREDENTIAL_ENCRYPTION_KEY/u);
+  });
+
   it('enables secure cookies for a matching public HTTPS authentication origin', () => {
     const config = parseEnvironment({
       AUTH_ORIGIN: 'https://journal.example',

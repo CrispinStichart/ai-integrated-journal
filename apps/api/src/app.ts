@@ -1,5 +1,6 @@
 import {
   authenticatedResponseSchema,
+  activeSessionListSchema,
   authStatusResponseSchema,
   bootstrapRequestSchema,
   eventPollRequestSchema,
@@ -13,6 +14,7 @@ import {
   passwordLoginRequestSchema,
   passwordRecoveryRequestSchema,
   readinessResponseSchema,
+  revokeSessionResponseSchema,
   sseEventEnvelopeSchema,
 } from '@journal/contracts';
 import { createUuidV7 } from '@journal/domain';
@@ -24,7 +26,7 @@ import express, {
 } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
-import { ZodError, type ZodIssue } from 'zod';
+import { z, ZodError, type ZodIssue } from 'zod';
 
 import { correlationId, sendProblem, sendValidated } from './http.js';
 import {
@@ -67,6 +69,10 @@ import {
   sendRetentionError,
 } from './retention-routes.js';
 import { registerExportRoutes } from './export-routes.js';
+import {
+  registerSettingsRoutes,
+  sendSettingsError,
+} from './settings-routes.js';
 
 const JSON_BODY_LIMIT = '256kb';
 
@@ -339,6 +345,44 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       response.set('clear-site-data', '"cache", "cookies"');
       sendValidated(response, logoutResponseSchema, { loggedOut: true });
     });
+
+    app.get('/api/v1/auth/sessions', async (request, response) => {
+      const session = await requireAuthSession(request, response, dependencies);
+      if (!session) return;
+      response.set('cache-control', 'no-store');
+      sendValidated(response, activeSessionListSchema, {
+        sessions: [...(await service.listSessions(session))],
+      });
+    });
+
+    app.delete('/api/v1/auth/sessions/:id', async (request, response) => {
+      const session = await requireAuthSession(request, response, dependencies);
+      if (!session) return;
+      service.assertCsrf(request, session);
+      const id = z.string().uuid().parse(request.params.id);
+      const result = await service.revokeOwnedSession(
+        session,
+        id,
+        correlationId(response),
+      );
+      if (!result.revoked) {
+        sendProblem(request, response, {
+          code: 'not_found',
+          status: 404,
+          title: 'Active session not found',
+        });
+        return;
+      }
+      if (result.currentSession) {
+        response.setHeader('set-cookie', service.clearCookies());
+        response.set('clear-site-data', '"cache", "cookies"');
+      }
+      response.set('cache-control', 'no-store');
+      sendValidated(response, revokeSessionResponseSchema, {
+        revoked: true,
+        currentSession: result.currentSession,
+      });
+    });
   }
 
   app.get('/health/live', (_request, response) => {
@@ -484,6 +528,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
   registerSearchRoutes(app, dependencies);
   registerRetentionRoutes(app, dependencies);
   registerExportRoutes(app, dependencies);
+  registerSettingsRoutes(app, dependencies);
 
   app.use((request, response) => {
     sendProblem(request, response, {
@@ -528,6 +573,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       if (sendNudgeError(error, request, response)) return;
       if (sendSearchError(error, request, response)) return;
       if (sendRetentionError(error, request, response)) return;
+      if (sendSettingsError(error, request, response)) return;
       dependencies.logger.error(
         {
           correlationId: correlationId(response),

@@ -317,6 +317,126 @@ export const sessions = journalSchema.table(
   ],
 );
 
+/** Secret-free provider selection. Disclosures come from registered adapters. */
+export const providerConfigurations = journalSchema.table(
+  'provider_configuration',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    models: jsonb('models')
+      .$type<Readonly<Record<string, string>>>()
+      .notNull()
+      .default({}),
+    disclosureVersion: text('disclosure_version'),
+    disclosureAcceptedAt: timestamp('disclosure_accepted_at', {
+      withTimezone: true,
+    }),
+    revision: integer('revision').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'provider_configuration_pk',
+      columns: [table.ownerId, table.providerId],
+    }),
+    check(
+      'provider_configuration_id_valid',
+      sql`${table.providerId} ~ '^[a-z0-9][a-z0-9._-]{0,99}$'`,
+    ),
+    check(
+      'provider_configuration_disclosure_consistent',
+      sql`(${table.disclosureVersion} is null and ${table.disclosureAcceptedAt} is null) or (${table.disclosureVersion} ~ '^[a-f0-9]{64}$' and ${table.disclosureAcceptedAt} is not null)`,
+    ),
+    check(
+      'provider_configuration_revision_positive',
+      sql`${table.revision} > 0`,
+    ),
+  ],
+);
+
+/** Write-only provider secrets encrypted by a deployment-owned key. */
+export const providerCredentials = journalSchema.table(
+  'provider_credential',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    ciphertext: text('ciphertext').notNull(),
+    nonce: text('nonce').notNull(),
+    encryptionVersion: integer('encryption_version').notNull().default(1),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'provider_credential_pk',
+      columns: [table.ownerId, table.providerId],
+    }),
+    check(
+      'provider_credential_id_valid',
+      sql`${table.providerId} ~ '^[a-z0-9][a-z0-9._-]{0,99}$'`,
+    ),
+    check(
+      'provider_credential_ciphertext_not_blank',
+      sql`length(${table.ciphertext}) > 0`,
+    ),
+    check(
+      'provider_credential_nonce_not_blank',
+      sql`length(${table.nonce}) > 0`,
+    ),
+    check(
+      'provider_credential_version_positive',
+      sql`${table.encryptionVersion} > 0`,
+    ),
+  ],
+);
+
+/** Content-free idempotency receipts for owner settings mutations. */
+export const settingsApiIdempotency = journalSchema.table(
+  'settings_api_idempotency',
+  {
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    resultRevision: integer('result_revision').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'settings_api_idempotency_pk',
+      columns: [table.ownerId, table.operation, table.idempotencyKey],
+    }),
+    check(
+      'settings_api_idempotency_operation_not_blank',
+      sql`length(${table.operation}) > 0`,
+    ),
+    check(
+      'settings_api_idempotency_key_not_blank',
+      sql`length(${table.idempotencyKey}) > 0`,
+    ),
+    check(
+      'settings_api_idempotency_request_hash_sha256',
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      'settings_api_idempotency_revision_positive',
+      sql`${table.resultRevision} > 0`,
+    ),
+  ],
+);
+
 export const authChallenges = journalSchema.table(
   'auth_challenge',
   {
@@ -3698,6 +3818,8 @@ export const databaseSchema = {
   processorArtifactCandidates,
   processorArtifactManualRevisions,
   processorArtifactVersions,
+  providerConfigurations,
+  providerCredentials,
   processorInstallations,
   processorReconciliationOutcomes,
   processorReconciliations,
@@ -3725,6 +3847,7 @@ export const databaseSchema = {
   searchFragmentEmbeddings,
   searchFragments,
   sessions,
+  settingsApiIdempotency,
   transcriptCleanupRuns,
   transcriptionRuns,
   transcriptEvidenceSpans,

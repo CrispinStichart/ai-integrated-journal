@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import {
   authChallenges,
+  auditEvents,
   authenticators,
   passwordCredentials,
   recoveryCodes,
@@ -22,6 +23,8 @@ export interface SessionRecord {
   readonly userId: string;
   readonly displayName: string;
   readonly csrfTokenHash: string;
+  readonly createdAt: Date;
+  readonly lastUsedAt: Date;
   readonly idleExpiresAt: Date;
   readonly absoluteExpiresAt: Date;
   readonly revokedAt: Date | null;
@@ -76,6 +79,17 @@ export interface AuthenticationStore {
   touchSession(id: string, now: Date, idleExpiresAt: Date): Promise<void>;
   revokeSession(id: string, now: Date): Promise<void>;
   revokeUserSessions(userId: string, now: Date): Promise<void>;
+  listActiveSessions(
+    userId: string,
+    now: Date,
+  ): Promise<readonly SessionRecord[]>;
+  revokeOwnedSession(input: {
+    userId: string;
+    sessionId: string;
+    now: Date;
+    auditId: string;
+    correlationId: string;
+  }): Promise<boolean>;
   countAuthenticators(userId: string): Promise<number>;
   listAuthenticators(userId: string): Promise<readonly AuthenticatorRecord[]>;
   findAuthenticator(
@@ -216,6 +230,8 @@ export function createPostgresAuthenticationStore(
           userId: sessions.userId,
           displayName: users.displayName,
           csrfTokenHash: sessions.csrfTokenHash,
+          createdAt: sessions.createdAt,
+          lastUsedAt: sessions.lastUsedAt,
           idleExpiresAt: sessions.idleExpiresAt,
           absoluteExpiresAt: sessions.absoluteExpiresAt,
           revokedAt: sessions.revokedAt,
@@ -243,6 +259,57 @@ export function createPostgresAuthenticationStore(
         .update(sessions)
         .set({ revokedAt: now })
         .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+    },
+    async listActiveSessions(userId, now) {
+      return database
+        .select({
+          id: sessions.id,
+          userId: sessions.userId,
+          displayName: users.displayName,
+          csrfTokenHash: sessions.csrfTokenHash,
+          createdAt: sessions.createdAt,
+          lastUsedAt: sessions.lastUsedAt,
+          idleExpiresAt: sessions.idleExpiresAt,
+          absoluteExpiresAt: sessions.absoluteExpiresAt,
+          revokedAt: sessions.revokedAt,
+        })
+        .from(sessions)
+        .innerJoin(users, eq(users.id, sessions.userId))
+        .where(
+          and(
+            eq(sessions.userId, userId),
+            isNull(sessions.revokedAt),
+            gt(sessions.idleExpiresAt, now),
+            gt(sessions.absoluteExpiresAt, now),
+          ),
+        );
+    },
+    async revokeOwnedSession(input) {
+      return database.transaction(async (transaction) => {
+        const [revoked] = await transaction
+          .update(sessions)
+          .set({ revokedAt: input.now })
+          .where(
+            and(
+              eq(sessions.id, input.sessionId),
+              eq(sessions.userId, input.userId),
+              isNull(sessions.revokedAt),
+            ),
+          )
+          .returning({ id: sessions.id });
+        if (revoked === undefined) return false;
+        await transaction.insert(auditEvents).values({
+          id: input.auditId,
+          action: 'auth.session_revoked',
+          actorId: input.userId,
+          entityType: 'session',
+          entityId: input.sessionId,
+          correlationId: input.correlationId,
+          metadata: {},
+          occurredAt: input.now,
+        });
+        return true;
+      });
     },
     async countAuthenticators(userId) {
       return (

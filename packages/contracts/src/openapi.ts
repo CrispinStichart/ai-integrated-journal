@@ -18,6 +18,15 @@ import {
   passwordLoginRequestSchema,
   passwordRecoveryRequestSchema,
 } from './auth.js';
+import {
+  activeSessionListSchema,
+  providerSettingsMutationResponseSchema,
+  revokeSessionResponseSchema,
+  settingsMutationResponseSchema,
+  settingsResourceSchema,
+  updateProviderSettingsRequestSchema,
+  updateSettingsRequestSchema,
+} from './settings.js';
 import { lastEventIdSchema, sseEventEnvelopeSchema } from './events.js';
 import {
   createExportRequestSchema,
@@ -223,6 +232,25 @@ export function createOpenApiDocument(): Record<string, unknown> {
             ),
             '401': problemResponse('Invalid recovery code'),
             '429': problemResponse('Rate limited'),
+          },
+        },
+      },
+      '/api/v1/auth/sessions': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse('Active owner sessions', 'ActiveSessionList'),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+      },
+      '/api/v1/auth/sessions/{id}': {
+        delete: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [processorIdParameter()],
+          responses: {
+            '200': schemaResponse('Session revoked', 'RevokeSessionResponse'),
+            '404': problemResponse('Active session not found'),
           },
         },
       },
@@ -1013,6 +1041,57 @@ export function createOpenApiDocument(): Record<string, unknown> {
           },
         },
       },
+      '/api/v1/settings': {
+        get: {
+          security: [{ sessionCookie: [] }],
+          responses: {
+            '200': schemaResponse(
+              'Owner settings and secret-free provider disclosure',
+              'SettingsResource',
+            ),
+            '401': problemResponse('Authentication required'),
+          },
+        },
+        put: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          requestBody: jsonRequest('UpdateSettingsRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Updated owner settings',
+              'SettingsMutationResponse',
+            ),
+            '400': problemResponse('Invalid timezone or backup policy'),
+            '409': problemResponse('Settings revision conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
+      '/api/v1/settings/providers/{providerId}': {
+        put: {
+          security: [{ sessionCookie: [], csrfToken: [] }],
+          parameters: [
+            {
+              in: 'path',
+              name: 'providerId',
+              required: true,
+              schema: {
+                type: 'string',
+                pattern: '^[a-z0-9][a-z0-9._-]{0,99}$',
+              },
+            },
+          ],
+          requestBody: jsonRequest('UpdateProviderSettingsRequest'),
+          responses: {
+            '200': schemaResponse(
+              'Updated secret-free provider state',
+              'ProviderSettingsMutationResponse',
+            ),
+            '400': problemResponse('Disclosure, model, or credential invalid'),
+            '409': problemResponse('Settings revision conflict'),
+            '428': problemResponse('Conditional idempotent headers required'),
+          },
+        },
+      },
       '/health/live': {
         get: {
           responses: { '200': schemaResponse('Live', 'LivenessResponse') },
@@ -1248,6 +1327,7 @@ export function createOpenApiDocument(): Record<string, unknown> {
         },
       },
       schemas: {
+        ActiveSessionList: componentSchema(activeSessionListSchema),
         BrowserPurgeAcknowledgement: componentSchema(
           browserPurgeAcknowledgementSchema,
         ),
@@ -1340,6 +1420,9 @@ export function createOpenApiDocument(): Record<string, unknown> {
           persistedExtensibleValueSchema,
         ),
         ProblemDetails: componentSchema(problemDetailsSchema),
+        ProviderSettingsMutationResponse: componentSchema(
+          providerSettingsMutationResponseSchema,
+        ),
         PermanentDeletionMutationResponse: componentSchema(
           permanentDeletionMutationResponseSchema,
         ),
@@ -1396,6 +1479,15 @@ export function createOpenApiDocument(): Record<string, unknown> {
           recordingTranscriptInspectorSchema,
         ),
         SemanticJsonValue: componentSchema(semanticJsonValueSchema),
+        SettingsMutationResponse: componentSchema(
+          settingsMutationResponseSchema,
+        ),
+        SettingsResource: componentSchema(settingsResourceSchema),
+        UpdateProviderSettingsRequest: componentSchema(
+          updateProviderSettingsRequestSchema,
+        ),
+        UpdateSettingsRequest: componentSchema(updateSettingsRequestSchema),
+        RevokeSessionResponse: componentSchema(revokeSessionResponseSchema),
         SseEventEnvelope: componentSchema(sseEventEnvelopeSchema),
         TranscriptMutationResponse: componentSchema(
           transcriptMutationResponseSchema,

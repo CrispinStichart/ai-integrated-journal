@@ -55,6 +55,141 @@ test('[ARCH-005][STATE-006] renders an accessible, navigable application shell',
   await expect(page.locator('#main-content')).toBeFocused();
 });
 
+test('[SEC-003–SEC-006][MODEL-001–MODEL-006][TIME-001–TIME-003] configures a disclosed provider without exposing its credential', async ({
+  page,
+}) => {
+  await authenticateShell(page);
+  const disclosureVersion = 'a'.repeat(64);
+  const settings = {
+    revision: 4,
+    journalTimezone: 'UTC',
+    retention: {
+      materialGraceDays: 30,
+      audioGraceDays: 30,
+      rawResponseRetention: 'days_30',
+      originalAudioRetention: 'indefinite',
+    },
+    backup: {
+      configured: false,
+      scheduleEnabled: false,
+      schedule: '03:30 UTC daily',
+      encrypted: true,
+      retentionSummary: '7 daily, 5 weekly, and 12 monthly snapshots',
+    },
+    privacy: {
+      journalPrivateByDefault: true,
+      contentFreeLogs: true,
+      credentialsExcludedFromExports: true,
+      externalProcessingRequiresProviderEnablement: true,
+      offlineCacheEncrypted: true,
+    },
+    providers: [
+      {
+        id: 'synthetic.external',
+        displayName: 'Synthetic external provider',
+        capabilities: ['speech_to_text'],
+        disclosure: {
+          contentRecipient: 'Synthetic Corp',
+          external: true,
+          retention: { status: 'known', value: '30 days' },
+          trainingUse: { status: 'unknown' },
+        },
+        disclosureVersion,
+        enabled: false,
+        models: { speech_to_text: 'speech-v1' },
+        credentialConfigured: false,
+        credentialStorageAvailable: true,
+        revision: 1,
+      },
+    ],
+  };
+  let providerWrite:
+    | { body: Record<string, unknown>; headers: Record<string, string> }
+    | undefined;
+  await page.route('**/api/v1/settings', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(settings),
+    }),
+  );
+  await page.route(
+    '**/api/v1/settings/providers/synthetic.external',
+    (route) => {
+      providerWrite = {
+        body: route.request().postDataJSON() as Record<string, unknown>,
+        headers: route.request().headers(),
+      };
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          provider: {
+            ...settings.providers[0],
+            enabled: true,
+            credentialConfigured: true,
+            disclosureAcceptedAt: '2040-01-01T00:00:00.000Z',
+            revision: 2,
+          },
+          idempotency: {
+            key: route.request().headers()['idempotency-key'],
+            replayed: false,
+          },
+        }),
+      });
+    },
+  );
+  await page.route('**/api/v1/auth/sessions', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sessions: [] }),
+    }),
+  );
+  await page.route('**/api/v1/nudges/preferences', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        quietStartHour: 21,
+        quietEndHour: 8,
+        dailyLimit: 1,
+        revision: 1,
+        ownerTimezone: 'UTC',
+        updatedAt: '2040-01-01T00:00:00.000Z',
+      }),
+    }),
+  );
+
+  await page.goto('/settings');
+  await expect(
+    page.getByRole('heading', { name: 'Synthetic external provider' }),
+  ).toBeVisible();
+  await expect(page.getByText('Training use is unknown.')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Provider enabled' }).check();
+  await page
+    .getByRole('checkbox', { name: /I understand which content/u })
+    .check();
+  await page.getByLabel('Replace credential').fill('browser-private-key');
+  await page
+    .getByRole('button', { name: 'Save Synthetic external provider' })
+    .click();
+  await expect.poll(() => providerWrite).toBeDefined();
+  expect(providerWrite?.body).toMatchObject({
+    enabled: true,
+    acknowledgeDisclosureVersion: disclosureVersion,
+    credential: 'browser-private-key',
+    models: { speech_to_text: 'speech-v1' },
+  });
+  expect(providerWrite?.headers['if-match']).toBe('"settings-4"');
+  expect(providerWrite?.headers['x-csrf-token']).toBe('c'.repeat(43));
+  expect(providerWrite?.headers['idempotency-key']).toMatch(
+    /^provider-settings-/u,
+  );
+  await expect(page.getByLabel('Replace credential')).toHaveValue('');
+  await expect(page.getByText('browser-private-key')).toHaveCount(0);
+});
+
 test('[PORT-003–PORT-008][AC-050] creates and downloads a privacy-explicit portable export', async ({
   page,
 }) => {

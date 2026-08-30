@@ -14,6 +14,7 @@ import type { SearchService } from './search-service.js';
 import type { GroundedAnswerService } from './grounded-answer-service.js';
 import type { RetentionService } from './retention-service.js';
 import type { ExportService } from './export-service.js';
+import type { SettingsService } from './settings-service.js';
 
 export interface AuthenticatedPrincipal {
   readonly ownerId: string;
@@ -63,6 +64,7 @@ export interface ApiDependencies {
   readonly reprocessingService?: ReprocessingService;
   readonly retentionService?: RetentionService;
   readonly searchService?: SearchService;
+  readonly settingsService?: SettingsService;
   readonly transcriptService?: TranscriptService;
   readonly now?: () => Date;
   readonly createCorrelationId?: () => string;

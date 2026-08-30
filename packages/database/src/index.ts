@@ -46,12 +46,15 @@ export {
   processorArtifactCandidates,
   processorArtifactManualRevisions,
   processorArtifactVersions,
+  providerConfigurations,
+  providerCredentials,
   recoveryCodes,
   recordingApiIdempotency,
   recordingChunks,
   recordings,
   recordingUploads,
   sessions,
+  settingsApiIdempotency,
   searchEmbeddingCohorts,
   searchEmbeddingRequests,
   searchFragmentEmbeddings,
@@ -103,6 +106,14 @@ export {
 } from './repositories/foundation-repository.js';
 export { seedDatabase, type SeedDatabaseResult } from './seeds.js';
 export { inTransaction, type TransactionWork } from './transaction.js';
+export {
+  SettingsConflictError,
+  SettingsNotFoundError,
+  SettingsRepository,
+  settingsRequestHash,
+  type EncryptedProviderCredential,
+  type PersistedSettings,
+} from './settings-repository.js';
 export {
   ExportConflictError,
   ExportNotFoundError,

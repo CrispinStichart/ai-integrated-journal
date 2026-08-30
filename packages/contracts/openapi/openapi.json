@@ -166,6 +166,81 @@
         }
       }
     },
+    "/api/v1/auth/sessions": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active owner sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveSessionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sessions/{id}": {
+      "delete": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "description": "Canonical lowercase RFC 9562 UUIDv7."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeSessionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Active session not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/passkeys/registration/options": {
       "post": {
         "security": [
@@ -2716,6 +2791,170 @@
         }
       }
     },
+    "/api/v1/settings": {
+      "get": {
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner settings and secret-free provider disclosure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated owner settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid timezone or backup policy",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Settings revision conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Conditional idempotent headers required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/providers/{providerId}": {
+      "put": {
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProviderSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated secret-free provider state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSettingsMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Disclosure, model, or credential invalid",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Settings revision conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Conditional idempotent headers required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "responses": {
@@ -3374,6 +3613,64 @@
       }
     },
     "schemas": {
+      "ActiveSessionList": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "description": "Canonical lowercase RFC 9562 UUIDv7."
+                },
+                "current": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                },
+                "lastUsedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                },
+                "idleExpiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                },
+                "absoluteExpiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                }
+              },
+              "required": [
+                "id",
+                "current",
+                "createdAt",
+                "lastUsedAt",
+                "idleExpiresAt",
+                "absoluteExpiresAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "sessions"
+        ],
+        "additionalProperties": false
+      },
       "BrowserPurgeAcknowledgement": {
         "type": "object",
         "properties": {
@@ -11723,6 +12020,227 @@
           }
         }
       },
+      "ProviderSettingsMutationResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "capabilities": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "embeddings",
+                    "speech_to_text",
+                    "structured_generation"
+                  ]
+                }
+              },
+              "disclosure": {
+                "type": "object",
+                "properties": {
+                  "contentRecipient": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "external": {
+                    "type": "boolean"
+                  },
+                  "retention": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "const": "known"
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "detail": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "const": "unknown"
+                          },
+                          "detail": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "trainingUse": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "const": "known"
+                          },
+                          "value": {
+                            "type": "boolean"
+                          },
+                          "detail": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "status",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "const": "unknown"
+                          },
+                          "detail": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1000
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "privacyPolicyUrl": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "contentRecipient",
+                  "external",
+                  "retention",
+                  "trainingUse"
+                ],
+                "additionalProperties": false
+              },
+              "disclosureVersion": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "models": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "enum": [
+                    "embeddings",
+                    "speech_to_text",
+                    "structured_generation"
+                  ]
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              },
+              "credentialConfigured": {
+                "type": "boolean"
+              },
+              "credentialStorageAvailable": {
+                "type": "boolean"
+              },
+              "disclosureAcceptedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "description": "UTC RFC 3339 instant with a trailing Z."
+              },
+              "revision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "displayName",
+              "capabilities",
+              "disclosure",
+              "disclosureVersion",
+              "enabled",
+              "models",
+              "credentialConfigured",
+              "credentialStorageAvailable",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "idempotency": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 255
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "replayed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "provider",
+          "idempotency"
+        ],
+        "additionalProperties": false
+      },
       "PermanentDeletionMutationResponse": {
         "type": "object",
         "properties": {
@@ -19276,6 +19794,802 @@
             ]
           }
         }
+      },
+      "SettingsMutationResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "journalTimezone": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "retention": {
+                "type": "object",
+                "properties": {
+                  "materialGraceDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3650
+                  },
+                  "audioGraceDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3650
+                  },
+                  "rawResponseRetention": {
+                    "type": "string",
+                    "enum": [
+                      "do_not_retain",
+                      "days_30",
+                      "days_90",
+                      "year_1",
+                      "indefinite"
+                    ]
+                  },
+                  "originalAudioRetention": {
+                    "type": "string",
+                    "enum": [
+                      "indefinite",
+                      "30_days",
+                      "90_days",
+                      "365_days"
+                    ]
+                  }
+                },
+                "required": [
+                  "materialGraceDays",
+                  "audioGraceDays",
+                  "rawResponseRetention",
+                  "originalAudioRetention"
+                ],
+                "additionalProperties": false
+              },
+              "backup": {
+                "type": "object",
+                "properties": {
+                  "configured": {
+                    "type": "boolean"
+                  },
+                  "scheduleEnabled": {
+                    "type": "boolean"
+                  },
+                  "schedule": {
+                    "type": "string",
+                    "const": "03:30 UTC daily"
+                  },
+                  "encrypted": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "retentionSummary": {
+                    "type": "string",
+                    "const": "7 daily, 5 weekly, and 12 monthly snapshots"
+                  }
+                },
+                "required": [
+                  "configured",
+                  "scheduleEnabled",
+                  "schedule",
+                  "encrypted",
+                  "retentionSummary"
+                ],
+                "additionalProperties": false
+              },
+              "privacy": {
+                "type": "object",
+                "properties": {
+                  "journalPrivateByDefault": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "contentFreeLogs": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "credentialsExcludedFromExports": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "externalProcessingRequiresProviderEnablement": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "offlineCacheEncrypted": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "journalPrivateByDefault",
+                  "contentFreeLogs",
+                  "credentialsExcludedFromExports",
+                  "externalProcessingRequiresProviderEnablement",
+                  "offlineCacheEncrypted"
+                ],
+                "additionalProperties": false
+              },
+              "providers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+                    },
+                    "displayName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "capabilities": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "embeddings",
+                          "speech_to_text",
+                          "structured_generation"
+                        ]
+                      }
+                    },
+                    "disclosure": {
+                      "type": "object",
+                      "properties": {
+                        "contentRecipient": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "external": {
+                          "type": "boolean"
+                        },
+                        "retention": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "const": "known"
+                                },
+                                "value": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 500
+                                },
+                                "detail": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "const": "unknown"
+                                },
+                                "detail": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "trainingUse": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "const": "known"
+                                },
+                                "value": {
+                                  "type": "boolean"
+                                },
+                                "detail": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "const": "unknown"
+                                },
+                                "detail": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 1000
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "privacyPolicyUrl": {
+                          "type": "string",
+                          "format": "uri"
+                        }
+                      },
+                      "required": [
+                        "contentRecipient",
+                        "external",
+                        "retention",
+                        "trainingUse"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "disclosureVersion": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "models": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "enum": [
+                          "embeddings",
+                          "speech_to_text",
+                          "structured_generation"
+                        ]
+                      },
+                      "additionalProperties": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "credentialConfigured": {
+                      "type": "boolean"
+                    },
+                    "credentialStorageAvailable": {
+                      "type": "boolean"
+                    },
+                    "disclosureAcceptedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "UTC RFC 3339 instant with a trailing Z."
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "displayName",
+                    "capabilities",
+                    "disclosure",
+                    "disclosureVersion",
+                    "enabled",
+                    "models",
+                    "credentialConfigured",
+                    "credentialStorageAvailable",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "revision",
+              "journalTimezone",
+              "retention",
+              "backup",
+              "privacy",
+              "providers"
+            ],
+            "additionalProperties": false
+          },
+          "idempotency": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 255
+              },
+              "replayed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "replayed"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "settings",
+          "idempotency"
+        ],
+        "additionalProperties": false
+      },
+      "SettingsResource": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "journalTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "materialGraceDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3650
+              },
+              "audioGraceDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3650
+              },
+              "rawResponseRetention": {
+                "type": "string",
+                "enum": [
+                  "do_not_retain",
+                  "days_30",
+                  "days_90",
+                  "year_1",
+                  "indefinite"
+                ]
+              },
+              "originalAudioRetention": {
+                "type": "string",
+                "enum": [
+                  "indefinite",
+                  "30_days",
+                  "90_days",
+                  "365_days"
+                ]
+              }
+            },
+            "required": [
+              "materialGraceDays",
+              "audioGraceDays",
+              "rawResponseRetention",
+              "originalAudioRetention"
+            ],
+            "additionalProperties": false
+          },
+          "backup": {
+            "type": "object",
+            "properties": {
+              "configured": {
+                "type": "boolean"
+              },
+              "scheduleEnabled": {
+                "type": "boolean"
+              },
+              "schedule": {
+                "type": "string",
+                "const": "03:30 UTC daily"
+              },
+              "encrypted": {
+                "type": "boolean",
+                "const": true
+              },
+              "retentionSummary": {
+                "type": "string",
+                "const": "7 daily, 5 weekly, and 12 monthly snapshots"
+              }
+            },
+            "required": [
+              "configured",
+              "scheduleEnabled",
+              "schedule",
+              "encrypted",
+              "retentionSummary"
+            ],
+            "additionalProperties": false
+          },
+          "privacy": {
+            "type": "object",
+            "properties": {
+              "journalPrivateByDefault": {
+                "type": "boolean",
+                "const": true
+              },
+              "contentFreeLogs": {
+                "type": "boolean",
+                "const": true
+              },
+              "credentialsExcludedFromExports": {
+                "type": "boolean",
+                "const": true
+              },
+              "externalProcessingRequiresProviderEnablement": {
+                "type": "boolean",
+                "const": true
+              },
+              "offlineCacheEncrypted": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "journalPrivateByDefault",
+              "contentFreeLogs",
+              "credentialsExcludedFromExports",
+              "externalProcessingRequiresProviderEnablement",
+              "offlineCacheEncrypted"
+            ],
+            "additionalProperties": false
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$"
+                },
+                "displayName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "capabilities": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "embeddings",
+                      "speech_to_text",
+                      "structured_generation"
+                    ]
+                  }
+                },
+                "disclosure": {
+                  "type": "object",
+                  "properties": {
+                    "contentRecipient": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "external": {
+                      "type": "boolean"
+                    },
+                    "retention": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "known"
+                            },
+                            "value": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "detail": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "unknown"
+                            },
+                            "detail": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "trainingUse": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "known"
+                            },
+                            "value": {
+                              "type": "boolean"
+                            },
+                            "detail": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "unknown"
+                            },
+                            "detail": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "privacyPolicyUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "contentRecipient",
+                    "external",
+                    "retention",
+                    "trainingUse"
+                  ],
+                  "additionalProperties": false
+                },
+                "disclosureVersion": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "models": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": [
+                      "embeddings",
+                      "speech_to_text",
+                      "structured_generation"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "credentialConfigured": {
+                  "type": "boolean"
+                },
+                "credentialStorageAvailable": {
+                  "type": "boolean"
+                },
+                "disclosureAcceptedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "description": "UTC RFC 3339 instant with a trailing Z."
+                },
+                "revision": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "displayName",
+                "capabilities",
+                "disclosure",
+                "disclosureVersion",
+                "enabled",
+                "models",
+                "credentialConfigured",
+                "credentialStorageAvailable",
+                "revision"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "journalTimezone",
+          "retention",
+          "backup",
+          "privacy",
+          "providers"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateProviderSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "models": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "embeddings",
+                "speech_to_text",
+                "structured_generation"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "acknowledgeDisclosureVersion": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "credential": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384
+          },
+          "clearCredential": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "models"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "journalTimezone": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "materialGraceDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3650
+              },
+              "audioGraceDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3650
+              },
+              "rawResponseRetention": {
+                "type": "string",
+                "enum": [
+                  "do_not_retain",
+                  "days_30",
+                  "days_90",
+                  "year_1",
+                  "indefinite"
+                ]
+              },
+              "originalAudioRetention": {
+                "type": "string",
+                "enum": [
+                  "indefinite",
+                  "30_days",
+                  "90_days",
+                  "365_days"
+                ]
+              }
+            },
+            "required": [
+              "materialGraceDays",
+              "audioGraceDays",
+              "rawResponseRetention",
+              "originalAudioRetention"
+            ],
+            "additionalProperties": false
+          },
+          "backupScheduleEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "journalTimezone",
+          "retention",
+          "backupScheduleEnabled"
+        ],
+        "additionalProperties": false
+      },
+      "RevokeSessionResponse": {
+        "type": "object",
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "const": true
+          },
+          "currentSession": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revoked",
+          "currentSession"
+        ],
+        "additionalProperties": false
       },
       "SseEventEnvelope": {
         "type": "object",

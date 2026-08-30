@@ -40,6 +40,10 @@ const environmentSchema = z
     BACKUP_REPOSITORY_DIR: optionalAbsolutePath,
     BACKUP_PASSWORD_FILE: optionalAbsolutePath,
     BACKUP_STAGING_DIR: optionalAbsolutePath,
+    AI_CREDENTIAL_ENCRYPTION_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/, 'must be a base64url-encoded 256-bit key')
+      .optional(),
   })
   .superRefine((value, context) => {
     const origin = new URL(value.AUTH_ORIGIN);
@@ -80,6 +84,7 @@ export type AppConfig = Readonly<{
   databaseUrl: string;
   http: Readonly<{ host: string; port: number }>;
   logLevel: z.infer<typeof environmentSchema>['LOG_LEVEL'];
+  credentialEncryptionKey?: string;
 }>;
 
 export class ConfigurationError extends Error {
@@ -123,6 +128,7 @@ export function parseEnvironment(
     BACKUP_REPOSITORY_DIR: environment.BACKUP_REPOSITORY_DIR,
     BACKUP_PASSWORD_FILE: environment.BACKUP_PASSWORD_FILE,
     BACKUP_STAGING_DIR: environment.BACKUP_STAGING_DIR,
+    AI_CREDENTIAL_ENCRYPTION_KEY: environment.AI_CREDENTIAL_ENCRYPTION_KEY,
   });
 
   if (!result.success) {
@@ -193,6 +199,9 @@ export function parseEnvironment(
       port: result.data.HTTP_PORT,
     }),
     logLevel: result.data.LOG_LEVEL,
+    ...(result.data.AI_CREDENTIAL_ENCRYPTION_KEY === undefined
+      ? {}
+      : { credentialEncryptionKey: result.data.AI_CREDENTIAL_ENCRYPTION_KEY }),
   });
 }
 

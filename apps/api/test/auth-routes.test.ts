@@ -26,6 +26,7 @@ const issued: IssuedSession = {
   displayName: 'Owner',
   expiresAt: active.expiresAt,
 };
+const ACTIVE_SESSION_ID = '019c5b90-0000-7000-8000-000000000081';
 
 function fakeService(): AuthenticationService {
   return {
@@ -45,6 +46,20 @@ function fakeService(): AuthenticationService {
     authenticationOptions: vi.fn(async () => ({ challenge: 'authentication' })),
     loginWithPasskey: vi.fn(async () => issued),
     logout: vi.fn(async () => undefined),
+    listSessions: vi.fn(async () => [
+      {
+        id: ACTIVE_SESSION_ID,
+        current: true,
+        createdAt: '2026-08-17T10:00:00.000Z',
+        lastUsedAt: '2026-08-17T11:00:00.000Z',
+        idleExpiresAt: '2026-08-17T11:30:00.000Z',
+        absoluteExpiresAt: '2026-08-17T12:00:00.000Z',
+      },
+    ]),
+    revokeOwnedSession: vi.fn(async () => ({
+      revoked: true,
+      currentSession: true,
+    })),
     sessionCookie: vi.fn(
       (token: string) =>
         `journal_session=${token}; Path=/; HttpOnly; SameSite=Strict`,
@@ -143,6 +158,28 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
     expect(service.logout).toHaveBeenCalledWith(active);
     expect(response.headers['clear-site-data']).toBe('"cache", "cookies"');
     expect(response.headers['set-cookie']).toHaveLength(2);
+  });
+
+  it('[SEC-002][SEC-008] lists active sessions and clears browser data when the current session is revoked', async () => {
+    const service = fakeService();
+    const listed = await request(app(service))
+      .get('/api/v1/auth/sessions')
+      .expect(200)
+      .expect('cache-control', 'no-store');
+    expect(listed.body.sessions).toHaveLength(1);
+    expect(JSON.stringify(listed.body)).not.toContain(issued.token);
+
+    const revoked = await request(app(service))
+      .delete(`/api/v1/auth/sessions/${ACTIVE_SESSION_ID}`)
+      .set('x-csrf-token', active.csrfToken)
+      .expect(200);
+    expect(service.revokeOwnedSession).toHaveBeenCalledWith(
+      active,
+      ACTIVE_SESSION_ID,
+      CORRELATION_ID,
+    );
+    expect(revoked.headers['clear-site-data']).toBe('"cache", "cookies"');
+    expect(revoked.headers['set-cookie']).toHaveLength(2);
   });
 
   it('returns stable problem details for authentication service failures', async () => {

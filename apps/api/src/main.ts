@@ -5,7 +5,9 @@ import { loadConfig } from '@journal/config';
 import {
   assertQueueFoundation,
   createDatabaseClient,
+  createQueueJobPayload,
   createQueueClient,
+  queueNames,
 } from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
 import { LocalBlobStore } from '@journal/storage';
@@ -29,6 +31,10 @@ import { PostgresSearchService } from './search-service.js';
 import { PostgresGroundedAnswerService } from './grounded-answer-service.js';
 import { PostgresRetentionService } from './retention-service.js';
 import { PostgresExportService } from './export-service.js';
+import {
+  createProviderCredentialCipher,
+  PostgresSettingsService,
+} from './settings-service.js';
 
 const config = loadConfig();
 const logger = createContentSafeLogger({
@@ -38,6 +44,10 @@ const logger = createContentSafeLogger({
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const boss = createQueueClient(config.databaseUrl);
 const providers = new AiProviderFactoryRegistry();
+const credentialCipher =
+  config.credentialEncryptionKey === undefined
+    ? undefined
+    : createProviderCredentialCipher(config.credentialEncryptionKey);
 boss.on('error', (error: Error) => {
   logger.error({ errorType: error.name }, 'Queue runtime error');
 });
@@ -149,6 +159,28 @@ const app = createApiApp({
     config.backup.configured,
   ),
   searchService,
+  settingsService: new PostgresSettingsService(
+    database.database,
+    providers.listProviders(),
+    config.backup.configured,
+    credentialCipher,
+    async (enabled) => {
+      if (enabled) {
+        await boss.schedule(
+          queueNames.backup,
+          '30 3 * * *',
+          createQueueJobPayload({
+            identifiers: { scheduleKey: 'backup.daily' },
+            operation: 'backup',
+            queueName: queueNames.backup,
+          }),
+          { key: 'backup.daily', tz: 'UTC' },
+        );
+      } else {
+        await boss.unschedule(queueNames.backup, 'backup.daily');
+      }
+    },
+  ),
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });
 const server = app.listen(config.http.port, config.http.host, () => {

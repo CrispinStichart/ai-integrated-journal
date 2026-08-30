@@ -57,12 +57,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/settings',
     name: 'settings',
-    component: () => import('../views/SectionView.vue'),
-    props: {
-      description:
-        'Manage privacy, offline storage, and application preferences.',
-      title: 'Settings',
-    },
+    component: () => import('../views/SettingsView.vue'),
     meta: { title: 'Settings' },
   },
 ];

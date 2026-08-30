@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { createUuidV7 } from '@journal/domain';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -82,6 +83,8 @@ function createMemoryStore(): AuthenticationStore & {
         userId: session.userId,
         displayName: owner.displayName,
         csrfTokenHash: session.csrfTokenHash,
+        createdAt: session.now,
+        lastUsedAt: session.now,
         idleExpiresAt: session.idleExpiresAt,
         absoluteExpiresAt: session.absoluteExpiresAt,
         revokedAt: null,
@@ -105,6 +108,27 @@ function createMemoryStore(): AuthenticationStore & {
         if (session.userId === userId)
           sessionsByHash.set(hash, { ...session, revokedAt: now });
       }
+    },
+    listActiveSessions: async (userId, now) =>
+      [...sessionsByHash.values()].filter(
+        (session) =>
+          session.userId === userId &&
+          session.revokedAt === null &&
+          session.idleExpiresAt > now &&
+          session.absoluteExpiresAt > now,
+      ),
+    revokeOwnedSession: async ({ userId, sessionId, now }) => {
+      for (const [hash, session] of sessionsByHash) {
+        if (
+          session.userId === userId &&
+          session.id === sessionId &&
+          session.revokedAt === null
+        ) {
+          sessionsByHash.set(hash, { ...session, revokedAt: now });
+          return true;
+        }
+      }
+      return false;
     },
     countAuthenticators: async () => authenticators.size,
     listAuthenticators: async () => [...authenticators.values()],
@@ -261,6 +285,33 @@ describe('authentication vertical slice (SEC-001, SEC-002, SEC-008)', () => {
     await expect(
       auth.loginWithPassword('a replacement password'),
     ).resolves.toBeDefined();
+  });
+
+  it('[SEC-002][SEC-008] lists only secret-free active session metadata and revokes an owner session', async () => {
+    const store = createMemoryStore();
+    const auth = service(store);
+    const first = await auth.bootstrap({
+      displayName: 'Owner',
+      password: 'a strong local password',
+      journalTimeZone: 'UTC',
+    });
+    const second = await auth.loginWithPassword('a strong local password');
+    const active = await auth.authenticate(
+      requestWithCookies(first.token, first.csrfToken),
+    );
+    if (!active) throw new Error('expected an active session');
+
+    const sessions = await auth.listSessions(active);
+    expect(sessions).toHaveLength(2);
+    expect(sessions.filter((item) => item.current)).toHaveLength(1);
+    expect(JSON.stringify(sessions)).not.toContain(first.token);
+    expect(JSON.stringify(sessions)).not.toContain(first.csrfToken);
+    const secondRecord = store.sessions.get(sha256(second.token));
+    if (!secondRecord) throw new Error('expected second persisted session');
+    await expect(
+      auth.revokeOwnedSession(active, secondRecord.id, createUuidV7()),
+    ).resolves.toEqual({ revoked: true, currentSession: false });
+    expect(store.sessions.get(sha256(second.token))?.revokedAt).not.toBeNull();
   });
 
   it('emits strict development and production cookie attributes', () => {

@@ -32,6 +32,8 @@ corepack pnpm db:seed
 ```
 
 See `infrastructure/README.md` for storage and shutdown details.
+See [docs/settings-and-privacy.md](docs/settings-and-privacy.md) for provider
+credentials, retention, offline storage, backup scheduling, and session controls.
 
 Run every local quality gate, production build, and Firefox end-to-end test:
 
