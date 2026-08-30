@@ -18,6 +18,11 @@ const absolutePath = z
   .min(1)
   .refine(path.isAbsolute, { error: 'must be an absolute path' });
 
+const optionalAbsolutePath = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  absolutePath.optional(),
+);
+
 const environmentSchema = z
   .object({
     APP_ENV: z
@@ -32,6 +37,9 @@ const environmentSchema = z
       .default('info'),
     AUTH_ORIGIN: z.url().default('http://localhost:5173'),
     WEBAUTHN_RP_ID: z.string().min(1).default('localhost'),
+    BACKUP_REPOSITORY_DIR: optionalAbsolutePath,
+    BACKUP_PASSWORD_FILE: optionalAbsolutePath,
+    BACKUP_STAGING_DIR: optionalAbsolutePath,
   })
   .superRefine((value, context) => {
     const origin = new URL(value.AUTH_ORIGIN);
@@ -60,6 +68,15 @@ export type AppConfig = Readonly<{
     secureCookies: boolean;
   }>;
   blobDataDirectory: string;
+  backup: Readonly<
+    | { configured: false }
+    | {
+        configured: true;
+        repositoryDirectory: string;
+        passwordFile: string;
+        stagingDirectory: string;
+      }
+  >;
   databaseUrl: string;
   http: Readonly<{ host: string; port: number }>;
   logLevel: z.infer<typeof environmentSchema>['LOG_LEVEL'];
@@ -80,6 +97,16 @@ function issueMessage(issue: z.core.$ZodIssue): string {
   return `${key}: ${issue.message}`;
 }
 
+function pathsOverlap(left: string, right: string): boolean {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.startsWith(`${normalizedRight}${path.sep}`) ||
+    normalizedRight.startsWith(`${normalizedLeft}${path.sep}`)
+  );
+}
+
 /** Parses only supported keys and never includes environment values in errors. */
 export function parseEnvironment(
   environment: Readonly<Record<string, string | undefined>>,
@@ -93,10 +120,53 @@ export function parseEnvironment(
     LOG_LEVEL: environment.LOG_LEVEL,
     AUTH_ORIGIN: environment.AUTH_ORIGIN,
     WEBAUTHN_RP_ID: environment.WEBAUTHN_RP_ID,
+    BACKUP_REPOSITORY_DIR: environment.BACKUP_REPOSITORY_DIR,
+    BACKUP_PASSWORD_FILE: environment.BACKUP_PASSWORD_FILE,
+    BACKUP_STAGING_DIR: environment.BACKUP_STAGING_DIR,
   });
 
   if (!result.success) {
     throw new ConfigurationError(result.error.issues.map(issueMessage));
+  }
+
+  const backupValues = [
+    result.data.BACKUP_REPOSITORY_DIR,
+    result.data.BACKUP_PASSWORD_FILE,
+    result.data.BACKUP_STAGING_DIR,
+  ];
+  const configuredBackupValues = backupValues.filter(
+    (value): value is string => value !== undefined,
+  );
+  if (
+    configuredBackupValues.length !== 0 &&
+    configuredBackupValues.length !== backupValues.length
+  ) {
+    throw new ConfigurationError([
+      'BACKUP_REPOSITORY_DIR, BACKUP_PASSWORD_FILE, and BACKUP_STAGING_DIR must be configured together',
+    ]);
+  }
+  if (configuredBackupValues.length === backupValues.length) {
+    const [repositoryDirectory, passwordFile, stagingDirectory] =
+      configuredBackupValues;
+    const blobDirectory = result.data.BLOB_DATA_DIR;
+    if (
+      repositoryDirectory === undefined ||
+      passwordFile === undefined ||
+      stagingDirectory === undefined
+    ) {
+      throw new ConfigurationError(['backup paths are incomplete']);
+    }
+    if (
+      pathsOverlap(repositoryDirectory, blobDirectory) ||
+      pathsOverlap(stagingDirectory, blobDirectory) ||
+      pathsOverlap(repositoryDirectory, stagingDirectory) ||
+      pathsOverlap(passwordFile, repositoryDirectory) ||
+      pathsOverlap(passwordFile, blobDirectory)
+    ) {
+      throw new ConfigurationError([
+        'backup repository, password, staging, and live blob paths must not overlap',
+      ]);
+    }
   }
 
   return Object.freeze({
@@ -107,6 +177,16 @@ export function parseEnvironment(
       secureCookies: new URL(result.data.AUTH_ORIGIN).protocol === 'https:',
     }),
     blobDataDirectory: result.data.BLOB_DATA_DIR,
+    backup: Object.freeze(
+      configuredBackupValues.length === 0
+        ? { configured: false }
+        : {
+            configured: true,
+            repositoryDirectory: configuredBackupValues[0] as string,
+            passwordFile: configuredBackupValues[1] as string,
+            stagingDirectory: configuredBackupValues[2] as string,
+          },
+    ),
     databaseUrl: result.data.DATABASE_URL,
     http: Object.freeze({
       host: result.data.HTTP_HOST,

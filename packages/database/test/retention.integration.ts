@@ -356,4 +356,72 @@ describe('permanent retention enforcement', () => {
       },
     ]);
   });
+
+  it('[PORT-001][PORT-002][RET-006] gates configured deletion on a committed tombstone backup checkpoint', async () => {
+    const gatedContributionId = createUuidV7<'contribution'>({
+      timestamp: timestamp++,
+    });
+    const gatedRevisionId = createUuidV7<'contribution-revision'>({
+      timestamp: timestamp++,
+    });
+    const gatedDayId = createUuidV7<'journal-day'>({ timestamp: timestamp++ });
+    await inTransaction(client.database, async (transaction) => {
+      const repository = new JournalWriteRepository(transaction);
+      await repository.createTextContribution({
+        contributionId: gatedContributionId,
+        revisionId: gatedRevisionId,
+        proposedJournalDayId: gatedDayId,
+        ownerId,
+        sourceType: 'typed_text',
+        text: 'Synthetic content held until a tombstone checkpoint exists.',
+        capturedAt: deletedAt,
+        capturedTimezone: parseIanaTimezone('UTC'),
+        journalTimezone: parseIanaTimezone('UTC'),
+        journalDate: parseJournalDate('2026-07-03'),
+        journalDateAssignment: 'migration',
+        audit: { auditId: id(), correlationId: id(), occurredAt: deletedAt },
+      });
+      await repository.softDeleteContribution({
+        ownerId,
+        contributionId: gatedContributionId,
+        audit: { auditId: id(), correlationId: id(), occurredAt: deletedAt },
+      });
+    });
+    const repository = new RetentionRepository(client.database);
+    const requested = await repository.request({
+      id: id(),
+      tombstoneId: id(),
+      ownerId,
+      entityKind: 'contribution',
+      entityId: gatedContributionId,
+      correlationId: id(),
+      requestedAt: purgeAt,
+      backupConfigured: true,
+    });
+    expect(requested.deletion.backupCheckpoint).toBe('pending');
+    await expect(
+      repository.claim(purgeAt, requested.deletion.id),
+    ).resolves.toBeUndefined();
+    await expect(
+      client.database
+        .select({ id: contributions.id })
+        .from(contributions)
+        .where(eq(contributions.id, gatedContributionId)),
+    ).resolves.toHaveLength(1);
+
+    await client.database
+      .update(permanentDeletionRequests)
+      .set({ backupCheckpoint: 'committed' })
+      .where(eq(permanentDeletionRequests.id, requested.deletion.id));
+    await expect(
+      repository.claim(purgeAt, requested.deletion.id),
+    ).resolves.toMatchObject({ backupCheckpoint: 'committed' });
+    await repository.complete(requested.deletion.id, purgeAt);
+    await expect(
+      client.database
+        .select({ id: contributions.id })
+        .from(contributions)
+        .where(eq(contributions.id, gatedContributionId)),
+    ).resolves.toEqual([]);
+  });
 });

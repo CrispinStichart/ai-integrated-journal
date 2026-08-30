@@ -29,6 +29,7 @@ describe('@journal/config operational shell', () => {
         rpId: 'localhost',
         secureCookies: false,
       },
+      backup: { configured: false },
       blobDataDirectory: '/var/lib/ai-integrated-journal/blobs',
       databaseUrl: 'postgresql://journal@localhost:5432/journal',
       http: { host: '127.0.0.1', port: 4321 },
@@ -37,6 +38,7 @@ describe('@journal/config operational shell', () => {
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.isFrozen(config.http)).toBe(true);
     expect(Object.isFrozen(config.auth)).toBe(true);
+    expect(Object.isFrozen(config.backup)).toBe(true);
   });
 
   it.each([
@@ -86,6 +88,40 @@ describe('@journal/config operational shell', () => {
         DATABASE_URL: secret,
       }),
     ).toThrowError(expect.not.stringContaining(secret));
+  });
+
+  it('[PORT-001][SEC-005] requires a complete non-secret backup path set', () => {
+    expect(() =>
+      parseEnvironment({
+        BACKUP_REPOSITORY_DIR: '/var/backups/journal',
+        BLOB_DATA_DIR: '/var/lib/journal/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+      }),
+    ).toThrowError(/must be configured together/u);
+
+    const config = parseEnvironment({
+      BACKUP_PASSWORD_FILE: '/var/lib/journal-secrets/restic.password',
+      BACKUP_REPOSITORY_DIR: '/var/backups/journal',
+      BACKUP_STAGING_DIR: '/var/cache/journal-backup',
+      BLOB_DATA_DIR: '/var/lib/journal/blobs',
+      DATABASE_URL: 'postgresql://journal@localhost/journal',
+    });
+    expect(config.backup).toEqual({
+      configured: true,
+      passwordFile: '/var/lib/journal-secrets/restic.password',
+      repositoryDirectory: '/var/backups/journal',
+      stagingDirectory: '/var/cache/journal-backup',
+    });
+
+    expect(() =>
+      parseEnvironment({
+        BACKUP_PASSWORD_FILE: '/var/lib/journal-secrets/restic.password',
+        BACKUP_REPOSITORY_DIR: '/var/lib/journal/blobs/repository',
+        BACKUP_STAGING_DIR: '/var/cache/journal-backup',
+        BLOB_DATA_DIR: '/var/lib/journal/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+      }),
+    ).toThrowError(/must not overlap/u);
   });
 
   it('enables secure cookies for a matching public HTTPS authentication origin', () => {

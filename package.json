@@ -10,6 +10,9 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "boundaries": "node scripts/check-boundaries.mjs",
+    "backup:create": "node packages/database/scripts/backup.mjs create",
+    "backup:init": "node packages/database/scripts/backup.mjs init",
+    "backup:restore": "node packages/database/scripts/backup.mjs restore",
     "build": "corepack pnpm -r --workspace-concurrency=1 run build",
     "data:bootstrap": "node infrastructure/bootstrap-local-data.mjs",
     "db:migrate": "corepack pnpm --filter @journal/database migrate",

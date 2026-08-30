@@ -142,7 +142,12 @@ const app = createApiApp({
   ),
   processorService: new PostgresProcessorService(database.database),
   reprocessingService: new PostgresReprocessingService(database.database, boss),
-  retentionService: new PostgresRetentionService(database.database, boss),
+  retentionService: new PostgresRetentionService(
+    database.database,
+    boss,
+    undefined,
+    config.backup.configured,
+  ),
   searchService,
   transcriptService: new PostgresTranscriptService(database.database, boss),
 });

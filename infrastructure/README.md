@@ -28,6 +28,12 @@ Docker daemons that cannot see the client workspace's bind-mount paths.
 directories outside the source tree. It uses `BLOB_DATA_DIR` when set and
 otherwise defaults to the platform user-data directory.
 
+Encrypted local backup and empty-target restore use `restic`, `pg_dump`, and
+`pg_restore`. Configure the optional paths in `.env`, then follow the setup,
+retention, recovery, and quarterly drill procedure in
+[`docs/backup-and-restore.md`](../docs/backup-and-restore.md). Backup repository,
+staging, password, and live blob paths must not overlap.
+
 Migrations and seeds are deliberate commands rather than application-startup
 side effects. Task 11 will register the first forward-only Drizzle migrations
 and idempotent seed operations behind these stable entry points.

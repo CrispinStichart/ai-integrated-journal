@@ -15,6 +15,7 @@ import type { PgBoss } from 'pg-boss';
 
 export const RETENTION_OPERATION = 'retention';
 export const RETENTION_REQUEST_OPERATION = 'retention_request';
+const BACKUP_DELETION_FENCE = 'journal.backup-deletion-fence';
 
 type RetentionWork = Readonly<{ requestId?: string }>;
 
@@ -28,9 +29,10 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
   readonly #exports: ExportRepository;
 
   public constructor(
-    database: DatabaseClient,
+    private readonly database: DatabaseClient,
     private readonly blobs: BlobStore,
     private readonly now: () => Date = () => new Date(),
+    private readonly backupConfigured = false,
   ) {
     this.#repository = new RetentionRepository(database.database);
     this.#exports = new ExportRepository(database.database);
@@ -75,6 +77,7 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
           entityId: target.entityId,
           correlationId: createUuidV7<'correlation'>(),
           requestedAt: now,
+          backupConfigured: this.backupConfigured,
         });
       }
     }
@@ -87,48 +90,52 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
   }
 
   private async expireExports(now: Date, signal: AbortSignal): Promise<void> {
-    for (;;) {
-      signal.throwIfAborted();
-      const due = await this.#exports.expireDue(now);
-      if (due.length === 0) return;
-      for (const item of due) {
-        signal.throwIfAborted();
-        if (item.archiveBlobKey === null) continue;
-        try {
-          await this.blobs.delete(item.archiveBlobKey);
-        } catch (error) {
-          if (!(error instanceof BlobNotFoundError)) throw error;
-        }
-        await this.#exports.markHostedArchiveDeleted(
-          item.id,
-          item.archiveBlobKey,
-          this.now(),
-        );
-      }
-    }
-  }
-
-  private async purge(requestId: string, signal: AbortSignal): Promise<void> {
-    try {
+    await this.withBackupDeletionFence(async () => {
       for (;;) {
-        if (signal.aborted) signal.throwIfAborted();
-        const items = await this.#repository.blobItems(requestId);
-        if (items.length === 0) break;
-        for (const item of items) {
-          if (signal.aborted) signal.throwIfAborted();
+        signal.throwIfAborted();
+        const due = await this.#exports.expireDue(now);
+        if (due.length === 0) return;
+        for (const item of due) {
+          signal.throwIfAborted();
+          if (item.archiveBlobKey === null) continue;
           try {
-            await this.blobs.delete(item.blobKey);
+            await this.blobs.delete(item.archiveBlobKey);
           } catch (error) {
             if (!(error instanceof BlobNotFoundError)) throw error;
           }
-          await this.#repository.markBlobDeleted(
-            requestId,
-            item.blobKey,
+          await this.#exports.markHostedArchiveDeleted(
+            item.id,
+            item.archiveBlobKey,
             this.now(),
           );
         }
       }
-      await this.#repository.complete(requestId, this.now());
+    });
+  }
+
+  private async purge(requestId: string, signal: AbortSignal): Promise<void> {
+    try {
+      await this.withBackupDeletionFence(async () => {
+        for (;;) {
+          if (signal.aborted) signal.throwIfAborted();
+          const items = await this.#repository.blobItems(requestId);
+          if (items.length === 0) break;
+          for (const item of items) {
+            if (signal.aborted) signal.throwIfAborted();
+            try {
+              await this.blobs.delete(item.blobKey);
+            } catch (error) {
+              if (!(error instanceof BlobNotFoundError)) throw error;
+            }
+            await this.#repository.markBlobDeleted(
+              requestId,
+              item.blobKey,
+              this.now(),
+            );
+          }
+        }
+        await this.#repository.complete(requestId, this.now());
+      });
     } catch (error) {
       await this.#repository.markFailed(
         requestId,
@@ -141,16 +148,45 @@ export class RetentionJobHandler implements CanonicalJobHandler<RetentionWork> {
       );
     }
   }
+
+  private async withBackupDeletionFence<T>(work: () => Promise<T>): Promise<T> {
+    const client = await this.database.pool.connect();
+    let locked = false;
+    try {
+      await client.query('select pg_advisory_lock(hashtextextended($1, 0))', [
+        BACKUP_DELETION_FENCE,
+      ]);
+      locked = true;
+      return await work();
+    } finally {
+      try {
+        if (locked) {
+          await client.query(
+            'select pg_advisory_unlock(hashtextextended($1, 0))',
+            [BACKUP_DELETION_FENCE],
+          );
+        }
+      } finally {
+        client.release();
+      }
+    }
+  }
 }
 
 export function registerRetentionConsumer(input: {
   readonly boss: PgBoss;
   readonly database: DatabaseClient;
   readonly blobs: BlobStore;
+  readonly backupConfigured?: boolean;
 }): Promise<string> {
   return registerQueueWorker({
     boss: input.boss,
     queueName: queueNames.maintenance,
-    handler: new RetentionJobHandler(input.database, input.blobs),
+    handler: new RetentionJobHandler(
+      input.database,
+      input.blobs,
+      undefined,
+      input.backupConfigured,
+    ),
   });
 }

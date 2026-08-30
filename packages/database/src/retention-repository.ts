@@ -27,6 +27,7 @@ import { inTransaction } from './transaction.js';
 const BACKUP_WARNING =
   'No backup repository is configured, so no verified post-deletion restore checkpoint can be committed.';
 const CLAIM_LEASE_MILLISECONDS = 15 * 60 * 1_000;
+const BACKUP_DELETION_FENCE = 'journal.backup-deletion-fence';
 
 export class RetentionNotFoundError extends Error {
   override readonly name = 'RetentionNotFoundError';
@@ -76,8 +77,12 @@ export class RetentionRepository {
     readonly entityId: string;
     readonly correlationId: string;
     readonly requestedAt: Date;
+    readonly backupConfigured?: boolean;
   }): Promise<{ readonly deletion: DeletionRow; readonly replayed: boolean }> {
     return inTransaction(this.database, async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${BACKUP_DELETION_FENCE}, 0))`,
+      );
       const [existing] = await transaction
         .select()
         .from(permanentDeletionRequests)
@@ -175,7 +180,9 @@ export class RetentionRepository {
           generation,
           eligibleAt: preview.eligibleAt,
           requestedAt: input.requestedAt,
-          backupCheckpoint: 'not_configured',
+          backupCheckpoint: input.backupConfigured
+            ? 'pending'
+            : 'not_configured',
           updatedAt: input.requestedAt,
         })
         .returning();
@@ -192,7 +199,9 @@ export class RetentionRepository {
         metadata: {
           entityKind: input.entityKind,
           generation,
-          backupCheckpoint: 'not_configured',
+          backupCheckpoint: input.backupConfigured
+            ? 'pending'
+            : 'not_configured',
         },
         occurredAt: input.requestedAt,
       });
@@ -311,6 +320,7 @@ export class RetentionRepository {
         .where(
           and(
             inStatusClaimable(now),
+            sql`${permanentDeletionRequests.backupCheckpoint} <> 'pending'`,
             lte(permanentDeletionRequests.eligibleAt, now),
             requestId === undefined
               ? undefined
@@ -387,6 +397,11 @@ export class RetentionRepository {
         .limit(1);
       if (request === undefined) throw new RetentionNotFoundError();
       if (request.status === 'completed') return;
+      if (request.backupCheckpoint === 'pending') {
+        throw new RetentionConflictError(
+          'The tombstone backup checkpoint is not committed.',
+        );
+      }
       const [remaining] = await transaction
         .select({ blobKey: retentionBlobCleanupItems.blobKey })
         .from(retentionBlobCleanupItems)

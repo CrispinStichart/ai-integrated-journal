@@ -424,7 +424,7 @@ Produce a point-in-time streamed ZIP containing:
 
 Verify AC-050–052.
 
-### 49. Backup and restore
+### 49. Backup and restore - FINISHED
 
 Back up PostgreSQL, pg-boss state, blobs, and non-secret configuration using the selected mechanism. Restore into an empty target, validate checksums and referential integrity, rebuild search indexes, and safely resume only work whose canonical state still requires it.
 

@@ -36,19 +36,21 @@ import { RetentionJobHandler } from '../src/retention.js';
 const REQUEST_ID = '019d2b3c-4000-7000-8000-000000000003';
 const OWNER_ID = '019d2b3c-4000-7000-8000-000000000001';
 const RAW_RESPONSE_ID = '019d2b3c-4000-7000-8000-000000000002';
+const fenceClient = { query: vi.fn(), release: vi.fn() };
+const database = {
+  pool: { connect: vi.fn(async () => fenceClient) },
+} as unknown as DatabaseClient;
 
 describe('retention worker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fenceClient.query.mockResolvedValue({});
     repository.expiredRawResponses.mockResolvedValue([]);
     exportRepository.expireDue.mockResolvedValue([]);
   });
 
   it('[RET-006][RET-007] accepts only identifier-only scheduled or request work', async () => {
-    const handler = new RetentionJobHandler(
-      {} as DatabaseClient,
-      {} as BlobStore,
-    );
+    const handler = new RetentionJobHandler(database, {} as BlobStore);
     await expect(
       handler.load(
         createQueueJobPayload({
@@ -92,7 +94,7 @@ describe('retention worker', () => {
         .mockRejectedValueOnce(new BlobNotFoundError())
         .mockResolvedValueOnce(undefined),
     } as unknown as BlobStore;
-    const handler = new RetentionJobHandler({} as DatabaseClient, blobs);
+    const handler = new RetentionJobHandler(database, blobs);
 
     await handler.execute(
       { requestId: REQUEST_ID },
@@ -117,7 +119,7 @@ describe('retention worker', () => {
         throw new Error('adapter unavailable');
       }),
     } as unknown as BlobStore;
-    const handler = new RetentionJobHandler({} as DatabaseClient, blobs);
+    const handler = new RetentionJobHandler(database, blobs);
 
     await expect(
       handler.execute({ requestId: REQUEST_ID }, new AbortController().signal),
@@ -138,7 +140,7 @@ describe('retention worker', () => {
     repository.request.mockResolvedValueOnce({});
     repository.claim.mockResolvedValueOnce(undefined);
     const handler = new RetentionJobHandler(
-      {} as DatabaseClient,
+      database,
       {} as BlobStore,
       () => now,
     );
@@ -169,11 +171,7 @@ describe('retention worker', () => {
         throw new BlobNotFoundError();
       }),
     } as unknown as BlobStore;
-    const handler = new RetentionJobHandler(
-      {} as DatabaseClient,
-      blobs,
-      () => now,
-    );
+    const handler = new RetentionJobHandler(database, blobs, () => now);
 
     await handler.execute({}, new AbortController().signal);
 

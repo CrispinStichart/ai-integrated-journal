@@ -52,6 +52,7 @@ export class PostgresRetentionService implements RetentionService {
     database: ConstructorParameters<typeof RetentionRepository>[0],
     private readonly boss: PgBoss,
     private readonly now: () => Date = () => new Date(),
+    private readonly backupConfigured = false,
   ) {
     this.#repository = new RetentionRepository(database);
   }
@@ -100,6 +101,7 @@ export class PostgresRetentionService implements RetentionService {
       entityId: target.entityId,
       correlationId,
       requestedAt: this.now(),
+      backupConfigured: this.backupConfigured,
     });
     if (!result.replayed) {
       const payload = createQueueJobPayload({

@@ -12,6 +12,7 @@ import { registerSearchEmbeddingConsumer } from './search-embedding.js';
 import { registerGroundedAnswerConsumer } from './grounded-answer.js';
 import { registerRetentionConsumer } from './retention.js';
 import { registerExportConsumer } from './export.js';
+import { registerBackupConsumer } from './backup.js';
 import { WorkerRuntime } from './worker.js';
 
 const config = loadConfig();
@@ -89,8 +90,16 @@ const worker = new WorkerRuntime({
           'structured_generation',
         ),
     });
-    await registerRetentionConsumer({ boss: queue, database, blobs });
+    await registerRetentionConsumer({
+      boss: queue,
+      database,
+      blobs,
+      backupConfigured: config.backup.configured,
+    });
     await registerExportConsumer({ boss: queue, database, blobs });
+    if (config.backup.configured) {
+      await registerBackupConsumer({ boss: queue });
+    }
   },
 });
 await worker.start();
