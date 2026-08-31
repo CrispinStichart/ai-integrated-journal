@@ -34,10 +34,12 @@ function requestWithCookies(
 function createMemoryStore(): AuthenticationStore & {
   sessions: Map<string, SessionRecord>;
   recoveryHashes: Set<string>;
+  auditActions: string[];
 } {
   let owner: OwnerRecord | undefined;
   const sessionsByHash = new Map<string, SessionRecord>();
   const recoveryHashes = new Set<string>();
+  const auditActions: string[] = [];
   const authenticators = new Map<string, AuthenticatorRecord>();
   const challenges = new Map<
     string,
@@ -53,6 +55,7 @@ function createMemoryStore(): AuthenticationStore & {
   return {
     sessions: sessionsByHash,
     recoveryHashes,
+    auditActions,
     ownerExists: async () => owner !== undefined,
     createOwner: async (input: NewOwner) => {
       if (owner) return false;
@@ -62,19 +65,21 @@ function createMemoryStore(): AuthenticationStore & {
         passwordHash: input.passwordHash,
       };
       input.recoveryCodes.forEach((code) => recoveryHashes.add(code.hash));
+      auditActions.push('auth.owner_bootstrapped');
       return true;
     },
     getOwner: async () => owner,
-    updatePassword: async (_userId, passwordHash) => {
-      if (owner) owner = { ...owner, passwordHash };
-    },
-    consumeRecoveryCode: async (codeHash) => {
-      if (!owner || !recoveryHashes.delete(codeHash)) return undefined;
-      return owner.id;
-    },
-    replaceRecoveryCodes: async (_userId, codes) => {
+    recoverOwner: async (input) => {
+      if (!owner || !recoveryHashes.has(input.codeHash)) return undefined;
+      owner = { ...owner, passwordHash: input.passwordHash };
       recoveryHashes.clear();
-      codes.forEach((code) => recoveryHashes.add(code.hash));
+      input.recoveryCodes.forEach((code) => recoveryHashes.add(code.hash));
+      for (const [hash, session] of sessionsByHash) {
+        if (session.userId === owner.id)
+          sessionsByHash.set(hash, { ...session, revokedAt: input.now });
+      }
+      auditActions.push('auth.password_recovered');
+      return owner;
     },
     createSession: async (session: NewSession) => {
       if (!owner) throw new Error('owner missing');
@@ -103,12 +108,6 @@ function createMemoryStore(): AuthenticationStore & {
           sessionsByHash.set(hash, { ...session, revokedAt: now });
       }
     },
-    revokeUserSessions: async (userId, now) => {
-      for (const [hash, session] of sessionsByHash) {
-        if (session.userId === userId)
-          sessionsByHash.set(hash, { ...session, revokedAt: now });
-      }
-    },
     listActiveSessions: async (userId, now) =>
       [...sessionsByHash.values()].filter(
         (session) =>
@@ -125,6 +124,7 @@ function createMemoryStore(): AuthenticationStore & {
           session.revokedAt === null
         ) {
           sessionsByHash.set(hash, { ...session, revokedAt: now });
+          auditActions.push('auth.session_revoked');
           return true;
         }
       }
@@ -191,6 +191,7 @@ describe('authentication vertical slice (SEC-001, SEC-002, SEC-008)', () => {
     });
 
     expect(first.recoveryCodes).toHaveLength(10);
+    expect(store.auditActions).toContain('auth.owner_bootstrapped');
     expect([...store.recoveryHashes]).not.toContain(first.recoveryCodes?.[0]);
     expect((await store.getOwner())?.passwordHash).toMatch(/^\$argon2id\$/);
     await expect(
@@ -274,6 +275,7 @@ describe('authentication vertical slice (SEC-001, SEC-002, SEC-008)', () => {
     const recovered = await auth.recover(code, 'a replacement password');
 
     expect(recovered.recoveryCodes).toHaveLength(10);
+    expect(store.auditActions).toContain('auth.password_recovered');
     expect(
       store.sessions.get(sha256(bootstrap.token))?.revokedAt,
     ).not.toBeNull();

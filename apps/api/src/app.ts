@@ -257,7 +257,12 @@ export function createApiApp(dependencies: ApiDependencies): Express {
 
     app.post('/api/v1/auth/bootstrap', async (request, response) => {
       const input = bootstrapRequestSchema.parse(request.body);
-      issueSession(response, service, await service.bootstrap(input), 201);
+      issueSession(
+        response,
+        service,
+        await service.bootstrap(input, correlationId(response)),
+        201,
+      );
     });
 
     app.post('/api/v1/auth/password/login', async (request, response) => {
@@ -274,7 +279,11 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       issueSession(
         response,
         service,
-        await service.recover(input.recoveryCode, input.newPassword),
+        await service.recover(
+          input.recoveryCode,
+          input.newPassword,
+          correlationId(response),
+        ),
       );
     });
 
@@ -308,7 +317,11 @@ export function createApiApp(dependencies: ApiDependencies): Express {
         issueSession(
           response,
           service,
-          await service.verifyRegistration(session, input.response),
+          await service.verifyRegistration(
+            session,
+            input.response,
+            correlationId(response),
+          ),
         );
       },
     );
@@ -338,7 +351,7 @@ export function createApiApp(dependencies: ApiDependencies): Express {
       const session = await requireAuthSession(request, response, dependencies);
       if (!session) return;
       service.assertCsrf(request, session);
-      await service.logout(session);
+      await service.logout(session, correlationId(response));
       response.setHeader('set-cookie', service.clearCookies());
       // Pending encrypted outbox records are recovery data. Clearing all site
       // storage here would silently destroy offline work (ADR-0009).

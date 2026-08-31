@@ -51,14 +51,11 @@ function createStore(
     ownerExists: vi.fn(async () => true),
     createOwner: vi.fn(async () => true),
     getOwner: vi.fn(async () => OWNER),
-    updatePassword: vi.fn(async () => undefined),
-    consumeRecoveryCode: vi.fn(async () => undefined),
-    replaceRecoveryCodes: vi.fn(async () => undefined),
+    recoverOwner: vi.fn(async () => undefined),
     createSession: vi.fn(async () => undefined),
     findSession: vi.fn(async () => undefined),
     touchSession: vi.fn(async () => undefined),
     revokeSession: vi.fn(async () => undefined),
-    revokeUserSessions: vi.fn(async () => undefined),
     listActiveSessions: vi.fn(async () => []),
     revokeOwnedSession: vi.fn(async () => false),
     countAuthenticators: vi.fn(async () => 1),
@@ -248,6 +245,11 @@ describe('passkey authentication boundaries (SEC-001, SEC-002)', () => {
         counter: 0,
         transports: [],
       }),
+      expect.objectContaining({
+        now: NOW,
+        auditId: expect.any(String),
+        correlationId: expect.any(String),
+      }),
     );
     expect(store.revokeSession).toHaveBeenCalledWith(
       ACTIVE_SESSION.sessionId,
@@ -394,9 +396,12 @@ describe('passkey authentication boundaries (SEC-001, SEC-002)', () => {
 
     expect(store.ownerExists).toHaveBeenCalledOnce();
     expect(store.countAuthenticators).toHaveBeenCalledWith(OWNER.id);
-    expect(store.revokeSession).toHaveBeenCalledWith(
-      ACTIVE_SESSION.sessionId,
-      NOW,
+    expect(store.revokeOwnedSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: ACTIVE_SESSION.ownerId,
+        sessionId: ACTIVE_SESSION.sessionId,
+        now: NOW,
+      }),
     );
     expect(service.csrfCookie('a token=with delimiters')).toBe(
       'journal_csrf=a%20token%3Dwith%20delimiters; Path=/; SameSite=Strict; Secure',

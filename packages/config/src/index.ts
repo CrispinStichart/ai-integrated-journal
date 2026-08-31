@@ -23,6 +23,13 @@ const optionalAbsolutePath = z.preprocess(
   absolutePath.optional(),
 );
 
+const loopbackHost = z
+  .string()
+  .min(1)
+  .refine((value) => ['localhost', '127.0.0.1', '::1'].includes(value), {
+    error: 'must bind to a loopback address',
+  });
+
 const environmentSchema = z
   .object({
     APP_ENV: z
@@ -30,7 +37,7 @@ const environmentSchema = z
       .default('development'),
     BLOB_DATA_DIR: absolutePath,
     DATABASE_URL: postgresUrl,
-    HTTP_HOST: z.string().min(1).default('127.0.0.1'),
+    HTTP_HOST: loopbackHost.default('127.0.0.1'),
     HTTP_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
     LOG_LEVEL: z
       .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])

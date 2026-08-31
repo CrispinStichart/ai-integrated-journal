@@ -223,6 +223,14 @@ export function registerRecordingRoutes(
         checksum === undefined
       )
         return;
+      if (request.get('content-type') !== 'application/octet-stream') {
+        sendProblem(request, response, {
+          code: 'unsupported_media_type',
+          status: 415,
+          title: 'Audio chunks require application/octet-stream',
+        });
+        return;
+      }
       const declared = request.get('content-length');
       if (
         declared !== undefined &&

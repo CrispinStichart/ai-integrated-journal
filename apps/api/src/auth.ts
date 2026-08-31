@@ -177,11 +177,14 @@ export class AuthenticationService implements RequestAuthenticator {
     }
   }
 
-  async bootstrap(input: {
-    displayName: string;
-    password: string;
-    journalTimeZone: string;
-  }): Promise<IssuedSession> {
+  async bootstrap(
+    input: {
+      displayName: string;
+      password: string;
+      journalTimeZone: string;
+    },
+    correlationId: string = createUuidV7<'correlation'>(),
+  ): Promise<IssuedSession> {
     const passwordHash = await this.#hashPassword(input.password);
     const codes = this.#newRecoveryCodes();
     const ownerId = createUuidV7<'owner'>();
@@ -194,6 +197,8 @@ export class AuthenticationService implements RequestAuthenticator {
         id: createUuidV7<'recovery-code'>(),
         hash: sha256(code),
       })),
+      auditId: createUuidV7<'audit-event'>(),
+      correlationId,
     });
     if (!created)
       throw new AuthenticationError(
@@ -219,36 +224,43 @@ export class AuthenticationService implements RequestAuthenticator {
   async recover(
     recoveryCodeValue: string,
     newPassword: string,
+    correlationId: string = createUuidV7<'correlation'>(),
   ): Promise<IssuedSession> {
     const now = this.#now();
-    const ownerId = await this.#store.consumeRecoveryCode(
-      sha256(recoveryCodeValue.toUpperCase()),
+    const passwordHash = await this.#hashPassword(newPassword);
+    const codes = this.#newRecoveryCodes();
+    const owner = await this.#store.recoverOwner({
+      codeHash: sha256(recoveryCodeValue.toUpperCase()),
+      passwordHash,
+      recoveryCodes: codes.map((code) => ({
+        id: createUuidV7<'recovery-code'>(),
+        hash: sha256(code),
+      })),
       now,
-    );
-    const owner = await this.#store.getOwner();
-    if (!ownerId || !owner || owner.id !== ownerId) {
+      auditId: createUuidV7<'audit-event'>(),
+      correlationId,
+    });
+    if (owner === undefined) {
       throw new AuthenticationError(
         'authentication_required',
         401,
         'Invalid recovery code',
       );
     }
-    const passwordHash = await this.#hashPassword(newPassword);
-    const codes = this.#newRecoveryCodes();
-    await this.#store.updatePassword(ownerId, passwordHash, now);
-    await this.#store.replaceRecoveryCodes(
-      ownerId,
-      codes.map((code) => ({
-        id: createUuidV7<'recovery-code'>(),
-        hash: sha256(code),
-      })),
-    );
-    await this.#store.revokeUserSessions(ownerId, now);
-    return this.#issueSession(ownerId, owner.displayName, codes);
+    return this.#issueSession(owner.id, owner.displayName, codes);
   }
 
-  async logout(session: ActiveSession): Promise<void> {
-    await this.#store.revokeSession(session.sessionId, this.#now());
+  async logout(
+    session: ActiveSession,
+    correlationId: string = createUuidV7<'correlation'>(),
+  ): Promise<void> {
+    await this.#store.revokeOwnedSession({
+      userId: session.ownerId,
+      sessionId: session.sessionId,
+      now: this.#now(),
+      auditId: createUuidV7<'audit-event'>(),
+      correlationId,
+    });
   }
 
   async listSessions(
@@ -317,6 +329,7 @@ export class AuthenticationService implements RequestAuthenticator {
   async verifyRegistration(
     session: ActiveSession,
     response: Record<string, unknown>,
+    correlationId: string = createUuidV7<'correlation'>(),
   ): Promise<IssuedSession> {
     const challenge = challengeFromResponse(response);
     const stored = await this.#store.consumeChallenge(
@@ -346,14 +359,21 @@ export class AuthenticationService implements RequestAuthenticator {
       );
     }
     const credential = verification.registrationInfo.credential;
-    await this.#store.saveAuthenticator({
-      id: createUuidV7<'authenticator'>(),
-      userId: session.ownerId,
-      credentialId: credential.id,
-      publicKey: Buffer.from(credential.publicKey).toString('base64url'),
-      counter: credential.counter,
-      transports: credential.transports ?? [],
-    });
+    await this.#store.saveAuthenticator(
+      {
+        id: createUuidV7<'authenticator'>(),
+        userId: session.ownerId,
+        credentialId: credential.id,
+        publicKey: Buffer.from(credential.publicKey).toString('base64url'),
+        counter: credential.counter,
+        transports: credential.transports ?? [],
+      },
+      {
+        now: this.#now(),
+        auditId: createUuidV7<'audit-event'>(),
+        correlationId,
+      },
+    );
     await this.#store.revokeSession(session.sessionId, this.#now());
     return this.#issueSession(session.ownerId, session.displayName);
   }

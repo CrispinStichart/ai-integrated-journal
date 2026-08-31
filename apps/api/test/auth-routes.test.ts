@@ -120,6 +120,15 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
         newPassword: 'a replacement password',
       })
       .expect(200);
+    expect(service.bootstrap).toHaveBeenCalledWith(
+      expect.any(Object),
+      CORRELATION_ID,
+    );
+    expect(service.recover).toHaveBeenCalledWith(
+      'AAAAA-AAAAA-AAAAA-22222',
+      'a replacement password',
+      CORRELATION_ID,
+    );
   });
 
   it('serves passkey registration and authentication ceremonies', async () => {
@@ -144,7 +153,11 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
       .expect(200);
 
     expect(service.assertCsrf).toHaveBeenCalledTimes(2);
-    expect(service.verifyRegistration).toHaveBeenCalledOnce();
+    expect(service.verifyRegistration).toHaveBeenCalledWith(
+      active,
+      {},
+      CORRELATION_ID,
+    );
     expect(service.loginWithPasskey).toHaveBeenCalledOnce();
   });
 
@@ -155,7 +168,7 @@ describe('authentication HTTP routes (SEC-001, SEC-002, SEC-008)', () => {
       .set('x-csrf-token', active.csrfToken)
       .expect(200);
 
-    expect(service.logout).toHaveBeenCalledWith(active);
+    expect(service.logout).toHaveBeenCalledWith(active, CORRELATION_ID);
     expect(response.headers['clear-site-data']).toBe('"cache", "cookies"');
     expect(response.headers['set-cookie']).toHaveLength(2);
   });

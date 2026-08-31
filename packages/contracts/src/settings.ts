@@ -21,12 +21,19 @@ const disclosureValueSchema = <T extends z.ZodType>(value: T) =>
     }),
   ]);
 
+const httpsUrlSchema = z
+  .url()
+  .refine(
+    (value) => new URL(value).protocol === 'https:',
+    'Privacy policy URLs must use HTTPS.',
+  );
+
 export const providerDisclosureSchema = z.strictObject({
   contentRecipient: z.string().min(1).max(200),
   external: z.boolean(),
   retention: disclosureValueSchema(z.string().min(1).max(500)),
   trainingUse: disclosureValueSchema(z.boolean()),
-  privacyPolicyUrl: z.url().optional(),
+  privacyPolicyUrl: httpsUrlSchema.optional(),
 });
 
 export const providerSettingsSchema = z.strictObject({

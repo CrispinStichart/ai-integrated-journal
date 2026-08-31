@@ -33,6 +33,19 @@ describe('settings contracts', () => {
     expect(() =>
       providerSettingsSchema.parse({ ...provider, credential: 'private-key' }),
     ).toThrow();
+
+    for (const privacyPolicyUrl of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'http://provider.example/privacy',
+    ]) {
+      expect(() =>
+        providerSettingsSchema.parse({
+          ...provider,
+          disclosure: { ...provider.disclosure, privacyPolicyUrl },
+        }),
+      ).toThrow(/Privacy policy URLs must use HTTPS/u);
+    }
   });
 
   it('[RET-001–RET-007][PORT-001–PORT-008][TIME-001–TIME-003] bounds mutable owner policy', () => {

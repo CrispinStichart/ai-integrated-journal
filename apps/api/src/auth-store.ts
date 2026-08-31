@@ -45,6 +45,8 @@ export interface NewOwner {
   readonly journalTimeZone: string;
   readonly passwordHash: string;
   readonly recoveryCodes: readonly { id: string; hash: string }[];
+  readonly auditId: string;
+  readonly correlationId: string;
 }
 
 export interface NewSession {
@@ -64,21 +66,18 @@ export interface AuthenticationStore {
   ownerExists(): Promise<boolean>;
   createOwner(owner: NewOwner): Promise<boolean>;
   getOwner(): Promise<OwnerRecord | undefined>;
-  updatePassword(
-    userId: string,
-    passwordHash: string,
-    now: Date,
-  ): Promise<void>;
-  consumeRecoveryCode(codeHash: string, now: Date): Promise<string | undefined>;
-  replaceRecoveryCodes(
-    userId: string,
-    codes: readonly { id: string; hash: string }[],
-  ): Promise<void>;
+  recoverOwner(input: {
+    codeHash: string;
+    passwordHash: string;
+    recoveryCodes: readonly { id: string; hash: string }[];
+    now: Date;
+    auditId: string;
+    correlationId: string;
+  }): Promise<OwnerRecord | undefined>;
   createSession(session: NewSession): Promise<void>;
   findSession(tokenHash: string): Promise<SessionRecord | undefined>;
   touchSession(id: string, now: Date, idleExpiresAt: Date): Promise<void>;
   revokeSession(id: string, now: Date): Promise<void>;
-  revokeUserSessions(userId: string, now: Date): Promise<void>;
   listActiveSessions(
     userId: string,
     now: Date,
@@ -95,7 +94,14 @@ export interface AuthenticationStore {
   findAuthenticator(
     credentialId: string,
   ): Promise<AuthenticatorRecord | undefined>;
-  saveAuthenticator(record: AuthenticatorRecord): Promise<void>;
+  saveAuthenticator(
+    record: AuthenticatorRecord,
+    audit: {
+      now: Date;
+      auditId: string;
+      correlationId: string;
+    },
+  ): Promise<void>;
   updateAuthenticatorCounter(
     id: string,
     counter: number,
@@ -158,6 +164,15 @@ export function createPostgresAuthenticationStore(
               codeHash: code.hash,
             })),
           );
+          await transaction.insert(auditEvents).values({
+            id: owner.auditId,
+            action: 'auth.owner_bootstrapped',
+            actorId: owner.id,
+            entityType: 'owner',
+            entityId: owner.id,
+            correlationId: owner.correlationId,
+            metadata: {},
+          });
         });
         return true;
       } catch (error) {
@@ -180,35 +195,60 @@ export function createPostgresAuthenticationStore(
         .limit(1);
       return owner;
     },
-    async updatePassword(userId, passwordHash, now) {
-      await database
-        .update(passwordCredentials)
-        .set({ passwordHash, updatedAt: now })
-        .where(eq(passwordCredentials.userId, userId));
-    },
-    async consumeRecoveryCode(codeHash, now) {
-      const [used] = await database
-        .update(recoveryCodes)
-        .set({ usedAt: now })
-        .where(
-          and(
-            eq(recoveryCodes.codeHash, codeHash),
-            isNull(recoveryCodes.usedAt),
-          ),
-        )
-        .returning({ userId: recoveryCodes.userId });
-      return used?.userId;
-    },
-    async replaceRecoveryCodes(userId, codes) {
-      await database.transaction(async (transaction) => {
+    async recoverOwner(input) {
+      return database.transaction(async (transaction) => {
+        const [used] = await transaction
+          .update(recoveryCodes)
+          .set({ usedAt: input.now })
+          .where(
+            and(
+              eq(recoveryCodes.codeHash, input.codeHash),
+              isNull(recoveryCodes.usedAt),
+            ),
+          )
+          .returning({ userId: recoveryCodes.userId });
+        if (used === undefined) return undefined;
+        const [owner] = await transaction
+          .select({ id: users.id, displayName: users.displayName })
+          .from(users)
+          .where(eq(users.id, used.userId))
+          .limit(1);
+        if (owner === undefined) throw new Error('Recovery owner is missing');
+        await transaction
+          .update(passwordCredentials)
+          .set({ passwordHash: input.passwordHash, updatedAt: input.now })
+          .where(eq(passwordCredentials.userId, owner.id));
         await transaction
           .delete(recoveryCodes)
-          .where(eq(recoveryCodes.userId, userId));
+          .where(eq(recoveryCodes.userId, owner.id));
+        await transaction.insert(recoveryCodes).values(
+          input.recoveryCodes.map((code) => ({
+            id: code.id,
+            userId: owner.id,
+            codeHash: code.hash,
+          })),
+        );
         await transaction
-          .insert(recoveryCodes)
-          .values(
-            codes.map((code) => ({ id: code.id, userId, codeHash: code.hash })),
+          .update(sessions)
+          .set({ revokedAt: input.now })
+          .where(
+            and(eq(sessions.userId, owner.id), isNull(sessions.revokedAt)),
           );
+        await transaction.insert(auditEvents).values({
+          id: input.auditId,
+          action: 'auth.password_recovered',
+          actorId: owner.id,
+          entityType: 'owner',
+          entityId: owner.id,
+          correlationId: input.correlationId,
+          metadata: {},
+          occurredAt: input.now,
+        });
+        return {
+          id: owner.id,
+          displayName: owner.displayName,
+          passwordHash: input.passwordHash,
+        };
       });
     },
     async createSession(session) {
@@ -253,12 +293,6 @@ export function createPostgresAuthenticationStore(
         .update(sessions)
         .set({ revokedAt: now })
         .where(and(eq(sessions.id, id), isNull(sessions.revokedAt)));
-    },
-    async revokeUserSessions(userId, now) {
-      await database
-        .update(sessions)
-        .set({ revokedAt: now })
-        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
     },
     async listActiveSessions(userId, now) {
       return database
@@ -347,14 +381,26 @@ export function createPostgresAuthenticationStore(
         .limit(1);
       return record;
     },
-    async saveAuthenticator(record) {
-      await database.insert(authenticators).values({
-        id: record.id,
-        userId: record.userId,
-        credentialId: record.credentialId,
-        publicKey: record.publicKey,
-        counter: record.counter,
-        transports: [...record.transports],
+    async saveAuthenticator(record, audit) {
+      await database.transaction(async (transaction) => {
+        await transaction.insert(authenticators).values({
+          id: record.id,
+          userId: record.userId,
+          credentialId: record.credentialId,
+          publicKey: record.publicKey,
+          counter: record.counter,
+          transports: [...record.transports],
+        });
+        await transaction.insert(auditEvents).values({
+          id: audit.auditId,
+          action: 'auth.passkey_registered',
+          actorId: record.userId,
+          entityType: 'authenticator',
+          entityId: record.id,
+          correlationId: audit.correlationId,
+          metadata: {},
+          occurredAt: audit.now,
+        });
       });
     },
     async updateAuthenticatorCounter(id, counter, now) {

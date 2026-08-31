@@ -124,9 +124,20 @@ async function* bytes(value: string): AsyncGenerator<Uint8Array> {
   yield encoder.encode(value);
 }
 
+export function inertMarkdownBlock(value: string, language = 'text'): string {
+  let longestRun = 0;
+  for (const match of value.matchAll(/`+/gu)) {
+    longestRun = Math.max(longestRun, match[0].length);
+  }
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${value}${value.endsWith('\n') ? '' : '\n'}${fence}`;
+}
+
 function markdownValue(value: unknown): string {
-  if (typeof value === 'string') return value;
-  return `\`${canonicalJson(value)}\``;
+  return inertMarkdownBlock(
+    typeof value === 'string' ? value : canonicalJson(value),
+    typeof value === 'string' ? 'text' : 'json',
+  );
 }
 
 async function* jsonLines(
@@ -195,11 +206,11 @@ async function* journalMarkdown(
       const payload = item.payload;
       if (item.entityType === 'contribution_revision') {
         yield encoder.encode(
-          `## Contribution ${item.stableId} · revision ${String(payload.revision ?? item.versionId)}\n\nAuthority: **${String(payload.authority ?? 'unknown')}**\n\n${String(payload.text ?? '')}\n\n`,
+          `## Contribution ${item.stableId} · revision ${String(payload.revision ?? item.versionId)}\n\nAuthority: **${String(payload.authority ?? 'unknown')}**\n\n${inertMarkdownBlock(String(payload.text ?? ''))}\n\n`,
         );
       } else if (item.entityType === 'transcript_revision') {
         yield encoder.encode(
-          `## Transcript ${item.stableId} · revision ${String(payload.revision ?? item.versionId)}\n\nLayer authority: **${String(payload.authority ?? 'unknown')}**\n\n${String(payload.text ?? '')}\n\n`,
+          `## Transcript ${item.stableId} · revision ${String(payload.revision ?? item.versionId)}\n\nLayer authority: **${String(payload.authority ?? 'unknown')}**\n\n${inertMarkdownBlock(String(payload.text ?? ''))}\n\n`,
         );
       } else if (item.entityType === 'processor_artifact_version') {
         yield encoder.encode(

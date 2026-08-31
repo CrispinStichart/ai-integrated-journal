@@ -38,9 +38,9 @@ function fakeDatabase(): FakeDatabase {
     {
       get(_target, property) {
         if (property === 'transaction') {
-          return async (work: (transaction: unknown) => Promise<void>) => {
+          return async (work: (transaction: unknown) => Promise<unknown>) => {
             if (transactionError !== undefined) throw transactionError;
-            await work(chain);
+            return work(chain);
           };
         }
         return () => {
@@ -80,6 +80,8 @@ describe('PostgreSQL authentication store (SEC-002)', () => {
       recoveryCodes: [
         { id: '019c5b90-0000-7000-8000-000000000002', hash: 'code-hash' },
       ],
+      auditId: '019c5b90-0000-7000-8000-000000000003',
+      correlationId: '019c5b90-0000-7000-8000-000000000004',
     };
 
     await expect(store.createOwner(owner)).resolves.toBe(true);
@@ -140,20 +142,49 @@ describe('PostgreSQL authentication store (SEC-002)', () => {
     await expect(store.findAuthenticator('missing')).resolves.toBeUndefined();
   });
 
-  it('executes credential, recovery, session, and authenticator mutations', async () => {
+  it('[SEC-002][SEC-008] recovers credentials, sessions, codes, and the content-free audit atomically', async () => {
     const fake = fakeDatabase();
     const store = createPostgresAuthenticationStore(fake.database);
     const now = new Date('2026-08-16T12:00:00Z');
-    await store.updatePassword('owner', 'new-hash', now);
-    fake.outcomes.push([{ userId: 'owner' }]);
-    await expect(store.consumeRecoveryCode('code', now)).resolves.toBe('owner');
+    fake.outcomes.push(
+      [{ userId: 'owner' }],
+      [{ id: 'owner', displayName: 'Owner' }],
+    );
+    await expect(
+      store.recoverOwner({
+        codeHash: 'code',
+        passwordHash: 'new-hash',
+        recoveryCodes: [{ id: 'code-id', hash: 'hash' }],
+        now,
+        auditId: 'audit',
+        correlationId: 'correlation',
+      }),
+    ).resolves.toEqual({
+      id: 'owner',
+      displayName: 'Owner',
+      passwordHash: 'new-hash',
+    });
     fake.outcomes.push([]);
     await expect(
-      store.consumeRecoveryCode('missing', now),
+      store.recoverOwner({
+        codeHash: 'missing',
+        passwordHash: 'unused-hash',
+        recoveryCodes: [{ id: 'unused-code-id', hash: 'unused-hash' }],
+        now,
+        auditId: 'unused-audit',
+        correlationId: 'unused-correlation',
+      }),
     ).resolves.toBeUndefined();
-    await store.replaceRecoveryCodes('owner', [
-      { id: 'code-id', hash: 'hash' },
-    ]);
+
+    expect(fake.calls).toContain('insert');
+    expect(fake.calls).toContain('update');
+    expect(fake.calls).toContain('delete');
+  });
+
+  it('executes session and authenticator mutations', async () => {
+    const fake = fakeDatabase();
+    const store = createPostgresAuthenticationStore(fake.database);
+    const now = new Date('2026-08-16T12:00:00Z');
     await store.createSession({
       id: 'session',
       userId: 'owner',
@@ -165,15 +196,17 @@ describe('PostgreSQL authentication store (SEC-002)', () => {
     });
     await store.touchSession('session', now, new Date(now.getTime() + 500));
     await store.revokeSession('session', now);
-    await store.revokeUserSessions('owner', now);
-    await store.saveAuthenticator({
-      id: 'authenticator',
-      userId: 'owner',
-      credentialId: 'credential',
-      publicKey: 'key',
-      counter: 0,
-      transports: ['internal'],
-    });
+    await store.saveAuthenticator(
+      {
+        id: 'authenticator',
+        userId: 'owner',
+        credentialId: 'credential',
+        publicKey: 'key',
+        counter: 0,
+        transports: ['internal'],
+      },
+      { now, auditId: 'audit', correlationId: 'correlation' },
+    );
     await store.updateAuthenticatorCounter('authenticator', 1, now);
     await store.saveChallenge({
       id: 'challenge',
@@ -186,7 +219,6 @@ describe('PostgreSQL authentication store (SEC-002)', () => {
 
     expect(fake.calls).toContain('insert');
     expect(fake.calls).toContain('update');
-    expect(fake.calls).toContain('delete');
   });
 
   it('atomically consumes valid challenges and omits nullable owners', async () => {

@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public synthetic idempotency and temporal fixture identifiers"
+regexTarget = "line"
+regexes = [
+  '''(?i)(?:idempotency-key['"]?\s*,|idempotencyKey\s*:|eventKey\s*:)\s*['"](?:grounded|recording|nightly)-[a-z0-9-]+['"]''',
+]

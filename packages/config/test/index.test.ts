@@ -74,9 +74,45 @@ describe('@journal/config operational shell', () => {
       },
       'AUTH_ORIGIN',
     ],
+    [
+      {
+        BLOB_DATA_DIR: '/tmp/blobs',
+        DATABASE_URL: 'postgresql://journal@localhost/journal',
+        HTTP_HOST: '0.0.0.0',
+      },
+      'HTTP_HOST',
+    ],
   ])('fails fast when configuration is invalid', (environment, expectedKey) => {
     expect(() => parseEnvironment(environment)).toThrow(ConfigurationError);
     expect(() => parseEnvironment(environment)).toThrow(expectedKey);
+  });
+
+  it('[SEC-001][SEC-009] permits only explicit loopback API bindings', () => {
+    for (const host of ['localhost', '127.0.0.1', '::1']) {
+      expect(
+        parseEnvironment({
+          BLOB_DATA_DIR: '/tmp/blobs',
+          DATABASE_URL: 'postgresql://journal@localhost/journal',
+          HTTP_HOST: host,
+        }).http.host,
+      ).toBe(host);
+    }
+
+    for (const host of [
+      '192.168.1.10',
+      '10.0.0.5',
+      'journal.local',
+      '::',
+      '[::1]',
+    ]) {
+      expect(() =>
+        parseEnvironment({
+          BLOB_DATA_DIR: '/tmp/blobs',
+          DATABASE_URL: 'postgresql://journal@localhost/journal',
+          HTTP_HOST: host,
+        }),
+      ).toThrowError(/HTTP_HOST: must bind to a loopback address/u);
+    }
   });
 
   it('does not expose a rejected secret value in its error', () => {

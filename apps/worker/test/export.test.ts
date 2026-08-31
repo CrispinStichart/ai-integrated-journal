@@ -73,6 +73,7 @@ vi.mock('@journal/database', async (importOriginal) => ({
 import { createQueueJobPayload, queueNames } from '@journal/database';
 import {
   ExportJobHandler,
+  inertMarkdownBlock,
   serializeSnapshotDatabaseItem,
   serializeSnapshotItem,
 } from '../src/export.js';
@@ -157,6 +158,28 @@ describe('streamed portable export worker', () => {
       payloadJson: '{"final_byte_size":9007199254740993}',
     });
     expect(line).toContain('"final_byte_size":9007199254740993');
+  });
+
+  it('[SEC-005][PORT-003] renders stored journal and provider text as inert Markdown even with adversarial fences', () => {
+    const hostile =
+      '<script>alert(1)</script>\n[open](javascript:alert(2))\n```\n<img src=x onerror=alert(3)>';
+    const rendered = inertMarkdownBlock(hostile);
+
+    expect(rendered).toBe(`\`\`\`\`text\n${hostile}\n\`\`\`\``);
+    const lines = rendered.split('\n');
+    expect(lines.at(0)).toBe('````text');
+    expect(lines.at(-1)).toBe('````');
+    expect(lines.slice(1, -1).join('\n')).toBe(hostile);
+    expect(
+      Math.max(
+        ...Array.from(hostile.matchAll(/`+/gu), (match) => match[0].length),
+      ),
+    ).toBeLessThan(4);
+
+    const manyRuns = '`x'.repeat(100_000);
+    expect(inertMarkdownBlock(manyRuns)).toBe(
+      `\`\`\`text\n${manyRuns}\n\`\`\``,
+    );
   });
 
   it('[PORT-003][PORT-004][AC-050] emits a ZIP64 archive with JSONL, Markdown, and checksummed versioned manifest entries', async () => {

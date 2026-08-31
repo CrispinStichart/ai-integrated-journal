@@ -180,6 +180,18 @@ describe('Recording upload API', () => {
       .expect(400);
     expect(missingChecksum.body.code).toBe('validation_failed');
 
+    const wrongMediaTypeService = service();
+    const wrongMediaType = await request(app(wrongMediaTypeService))
+      .put(`/api/v1/recordings/${RECORDING_ID}/chunks/1`)
+      .set('authorization', 'Bearer valid')
+      .set('idempotency-key', 'recording-chunk-wrong-media-type')
+      .set('x-content-sha256', checksum)
+      .set('content-type', 'text/html')
+      .send('<script>alert(1)</script>')
+      .expect(415);
+    expect(wrongMediaType.body.code).toBe('unsupported_media_type');
+    expect(wrongMediaTypeService.uploadChunk).not.toHaveBeenCalled();
+
     const oversized = await request(app(service()))
       .put(`/api/v1/recordings/${RECORDING_ID}/chunks/1`)
       .set('authorization', 'Bearer valid')

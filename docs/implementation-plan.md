@@ -453,7 +453,7 @@ Exercise:
 - Export during concurrent editing or deletion.
 - Restore after permanent deletion.
 
-### 53. Security and privacy review
+### 53. Security and privacy review - FINISHED
 
 Threat-model bootstrap, sessions, uploads, stored journal content, processor prompts, exports, deletion, and local network exposure. Verify authorization, CSRF, stored-XSS prevention, content-type handling, secret scanning, content-free logs, provider disclosure, and destructive-action audits.
 
