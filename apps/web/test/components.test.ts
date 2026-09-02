@@ -56,6 +56,9 @@ describe('accessible shell components', () => {
       attachTo: document.body,
     });
 
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
     wrapper.vm.open();
     const dialog = wrapper.get('dialog');
     expect(dialog.attributes('open')).toBe('');
@@ -65,6 +68,8 @@ describe('accessible shell components', () => {
     wrapper.vm.close();
     expect(dialog.attributes('open')).toBeUndefined();
     expect(wrapper.emitted('closed')).toHaveLength(1);
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
     wrapper.unmount();
   });
 });

@@ -161,6 +161,14 @@ function storageCommitFailed(error: unknown): boolean {
   );
 }
 
+function captureFailureMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'NotAllowedError')
+    return 'Microphone permission was denied. Allow access and try again.';
+  if (error instanceof Error || error instanceof DOMException)
+    return error.message;
+  return 'Audio capture failed.';
+}
+
 /**
  * Owns browser audio capture independently of any route component. IndexedDB,
  * not this controller's reactive snapshot, remains the recovery authority.
@@ -477,9 +485,7 @@ export class BrowserCaptureController {
     const message =
       errorCode === 'browser_storage_exhausted'
         ? 'Browser storage is exhausted. The last saved checkpoint is preserved.'
-        : error instanceof Error
-          ? error.message
-          : 'Audio capture failed.';
+        : captureFailureMessage(error);
     this.#snapshot.value = {
       ...this.#snapshot.value,
       phase: 'failed',

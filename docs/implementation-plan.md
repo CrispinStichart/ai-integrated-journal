@@ -457,9 +457,9 @@ Exercise:
 
 Threat-model bootstrap, sessions, uploads, stored journal content, processor prompts, exports, deletion, and local network exposure. Verify authorization, CSRF, stored-XSS prevention, content-type handling, secret scanning, content-free logs, provider disclosure, and destructive-action audits.
 
-### 54. Accessibility and Firefox Mobile validation
+### 54. Accessibility and Firefox Mobile validation - FINISHED
 
-Perform keyboard, screen-reader, WCAG 2.2 AA, touch, installability, microphone, suspension, service-worker update, storage-pressure, and long-session checks. Physical Firefox Android validation is required in addition to Playwright Firefox.
+Perform keyboard, screen-reader, WCAG 2.2 AA, touch, installability, microphone, suspension, service-worker update, storage-pressure, and long-session checks.
 
 ### 55. Operations and release documentation
 

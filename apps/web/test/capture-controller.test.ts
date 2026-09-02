@@ -109,6 +109,7 @@ function createHarness(
     failAtIndex?: number;
     protectedByteSize?: number;
     putRecordingError?: Error;
+    permissionError?: Error;
   } = {},
 ) {
   const calls: string[] = [];
@@ -151,6 +152,7 @@ function createHarness(
     captureTimezone: () => 'UTC',
     getUserMedia: async () => {
       calls.push('permission');
+      if (options.permissionError !== undefined) throw options.permissionError;
       return stream;
     },
     isTypeSupported: (mimeType) =>
@@ -363,6 +365,30 @@ describe('browser capture controller', () => {
     await expect(harness.controller.stop()).resolves.toBeUndefined();
   });
 
+  it('[CAP-002][CAP-006] exposes microphone permission denial without persisting a false recording', async () => {
+    const harness = createHarness({
+      permissionError: new DOMException(
+        'Microphone permission denied.',
+        'NotAllowedError',
+      ),
+    });
+
+    await expect(harness.controller.start(captureInput)).rejects.toThrow(
+      'Microphone permission denied',
+    );
+
+    expect(harness.calls).toEqual(['id-0', 'id-1', 'id-2', 'permission']);
+    expect(harness.storage.recordings.size).toBe(0);
+    expect(harness.controller.snapshot.value).toMatchObject({
+      phase: 'failed',
+      recordingId: IDS[0],
+      contributionId: IDS[1],
+      errorCode: 'capture_failed',
+      message: 'Microphone permission was denied. Allow access and try again.',
+    });
+    expect(harness.track.stop).not.toHaveBeenCalled();
+  });
+
   it('[CAP-003][CAP-006] treats an aborted IndexedDB manifest transaction as exhausted storage', async () => {
     const harness = createHarness({
       putRecordingError: new DOMException(
@@ -518,6 +544,33 @@ describe('browser capture controller', () => {
     } finally {
       await browserMetadata.destroy();
     }
+  });
+
+  it('[CAP-002][CAP-003][CAP-005] remains stable across a long sequence of microphone checkpoints', async () => {
+    const harness = createHarness();
+    await harness.controller.start(captureInput);
+
+    for (let index = 0; index < 256; index += 1) {
+      harness.recorder.emit(
+        new Blob([`checkpoint-${index}`], {
+          type: AUDIO_MIME_CANDIDATES[0],
+        }),
+      );
+    }
+    await harness.controller.flushPendingWrites();
+    await harness.controller.stop();
+
+    expect(harness.storage.chunks).toHaveLength(256);
+    expect(harness.storage.chunks.at(-1)?.index).toBe(255);
+    expect(harness.storage.recordings.get(IDS[0])).toMatchObject({
+      nextChunkIndex: 256,
+      state: 'saved_locally',
+    });
+    expect(harness.controller.snapshot.value).toMatchObject({
+      phase: 'saved_locally',
+      lastSavedChunkIndex: 255,
+    });
+    expect(harness.track.stop).toHaveBeenCalledOnce();
   });
 
   it('[CAP-002] exposes the shared capture lifecycle through the composable API', async () => {

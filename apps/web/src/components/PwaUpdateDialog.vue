@@ -2,13 +2,19 @@
 import { ref, watch } from 'vue';
 
 import { pwaStatus } from '../pwa';
+import { useBrowserCaptureController } from '../recording/capture-controller';
 import AppDialog from './AppDialog.vue';
 
 const updateDialog = ref<InstanceType<typeof AppDialog>>();
+const capture = useBrowserCaptureController();
 
-watch(pwaStatus.needRefresh, (needed) => {
-  if (needed) updateDialog.value?.open();
-});
+watch(
+  [pwaStatus.needRefresh, () => capture.snapshot.value.phase],
+  ([needed, phase]) => {
+    if (needed && phase !== 'recording' && phase !== 'stopping')
+      updateDialog.value?.open();
+  },
+);
 
 async function update(): Promise<void> {
   await pwaStatus.applyUpdate();

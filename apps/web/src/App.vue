@@ -130,12 +130,14 @@ watch(
   />
 
   <template v-else>
-    <a
-      class="btn btn-sm fixed top-2 left-2 z-50 -translate-y-20 focus:translate-y-0"
-      href="#main-content"
-    >
-      Skip to content
-    </a>
+    <nav aria-label="Skip links">
+      <a
+        class="btn btn-sm fixed top-2 left-2 z-50 -translate-y-20 focus:translate-y-0"
+        href="#main-content"
+      >
+        Skip to content
+      </a>
+    </nav>
 
     <div class="drawer lg:drawer-open">
       <input
@@ -143,7 +145,8 @@ watch(
         v-model="ui.navigationOpen"
         type="checkbox"
         class="drawer-toggle"
-        aria-label="Application navigation"
+        aria-hidden="true"
+        tabindex="-1"
       />
 
       <div
@@ -153,13 +156,16 @@ watch(
           class="navbar sticky top-0 z-30 border-b border-base-300 bg-base-100/95 px-3 backdrop-blur sm:px-6"
         >
           <div class="navbar-start gap-2">
-            <label
-              for="application-navigation"
+            <button
+              type="button"
               class="btn btn-square btn-ghost drawer-button lg:hidden"
               aria-label="Open navigation"
+              aria-controls="application-navigation-panel"
+              :aria-expanded="ui.navigationOpen"
+              @click="ui.navigationOpen = !ui.navigationOpen"
             >
               <AppIcon name="menu" />
-            </label>
+            </button>
             <RouterLink to="/" class="text-lg font-semibold tracking-tight"
               >Journal</RouterLink
             >
@@ -237,6 +243,7 @@ watch(
           class="drawer-overlay"
         />
         <aside
+          id="application-navigation-panel"
           class="flex min-h-full w-72 flex-col bg-base-200 p-4 text-base-content"
         >
           <RouterLink
@@ -271,9 +278,11 @@ watch(
       </div>
     </div>
 
-    <p class="sr-only" aria-live="polite" aria-atomic="true">
-      {{ ui.liveMessage }}
-    </p>
-    <PwaUpdateDialog />
+    <aside aria-label="Application notifications">
+      <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {{ ui.liveMessage }}
+      </p>
+      <PwaUpdateDialog />
+    </aside>
   </template>
 </template>
