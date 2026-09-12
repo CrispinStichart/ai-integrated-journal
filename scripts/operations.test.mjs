@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -19,14 +19,20 @@ function read(relativePath) {
   return readFileSync(path.join(repositoryRoot, relativePath), 'utf8');
 }
 
-function trackedFiles() {
-  return execFileSync('git', ['ls-files'], {
-    cwd: repositoryRoot,
-    encoding: 'utf8',
-  })
+function repositoryFiles() {
+  return execFileSync(
+    'git',
+    ['ls-files', '--cached', '--others', '--exclude-standard'],
+    {
+      cwd: repositoryRoot,
+      encoding: 'utf8',
+    },
+  )
     .trim()
     .split('\n')
-    .filter(Boolean);
+    .filter(
+      (file) => Boolean(file) && existsSync(path.join(repositoryRoot, file)),
+    );
 }
 
 function expandRequirementReferences(source) {
@@ -100,7 +106,7 @@ test('every normative product identifier has tracked automated evidence metadata
       ),
     ].map((match) => match[1]),
   );
-  const evidenceFiles = trackedFiles().filter(
+  const evidenceFiles = repositoryFiles().filter(
     (file) =>
       /\.(?:ts|mjs)$/u.test(file) &&
       (file.includes('/test/') ||
@@ -157,7 +163,7 @@ test('release documentation links and concrete evidence paths resolve', () => {
   }
 });
 
-test('release state and operational command wiring cannot drift silently', () => {
+test('current documentation and operational command wiring cannot drift silently', () => {
   const packageJson = JSON.parse(read('package.json'));
   for (const script of [
     'config:check',
@@ -185,12 +191,14 @@ test('release state and operational command wiring cannot drift silently', () =>
   ]) {
     assert.match(packageJson.scripts[script], /scripts\/with-local-env\.mjs/u);
   }
-  assert.match(
-    read('docs/implementation-plan.md'),
-    /### 55\. Operations and release documentation - FINISHED/u,
-  );
+  const topLevelDocumentation = readdirSync(path.join(repositoryRoot, 'docs'), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+    .map((entry) => read(path.join('docs', entry.name)))
+    .join('\n');
   assert.doesNotMatch(
-    read('docs/requirement-to-test-matrix.md'),
-    /\| (?:Planned|Partial|Complete) \|/u,
+    topLevelDocumentation,
+    /\b(?:Task \d+|Phase \d+|vertical slices?|milestones?)\b| - FINISHED\b|implementation-plan\.md|Defects corrected|Validation date|Results on \d{4}-\d{2}-\d{2}|Migration `20/iu,
   );
 });

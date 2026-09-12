@@ -20,7 +20,7 @@ const JOURNAL_DATE = '2026-08-16';
 const MOVED_DATE = '2030-01-01';
 const PASSWORD = 'source-only journal password';
 
-function milestoneApp(database: JournalDatabase) {
+function availabilityApp(database: JournalDatabase) {
   const authenticationService = new AuthenticationService({
     store: createPostgresAuthenticationStore(database),
     rpId: 'localhost',
@@ -61,7 +61,7 @@ function milestoneApp(database: JournalDatabase) {
   });
 }
 
-describe('Phase 2 text-journal milestone', () => {
+describe('journal availability without optional processing', () => {
   type TestContainer = ReturnType<typeof createPostgresTestContainer>;
   let container: Awaited<ReturnType<TestContainer['start']>>;
   let client: DatabaseClient;
@@ -80,7 +80,7 @@ describe('Phase 2 text-journal milestone', () => {
     await container?.stop();
   });
 
-  it('[ARCH-005][DATA-001–DATA-004][DATA-010–DATA-012][TIME-001–TIME-003][STATE-006–STATE-007][AC-001][AC-003] preserves the complete source-only workflow across optional-service failure and restart', async () => {
+  it('[ARCH-005][DATA-001–DATA-004][DATA-010–DATA-012][TIME-001–TIME-003][STATE-006–STATE-007][AC-001][AC-003] preserves journal sources across optional-service failure and restart', async () => {
     const contributionIds = [
       createUuidV7<'contribution'>(),
       createUuidV7<'contribution'>(),
@@ -93,7 +93,7 @@ describe('Phase 2 text-journal milestone', () => {
       createUuidV7<'contribution-revision'>(),
       createUuidV7<'contribution-revision'>(),
     ];
-    const firstAgent = request.agent(milestoneApp(client.database));
+    const firstAgent = request.agent(availabilityApp(client.database));
     const bootstrap = await firstAgent
       .post('/api/v1/auth/bootstrap')
       .send({
@@ -107,7 +107,7 @@ describe('Phase 2 text-journal milestone', () => {
     const createContribution = (index: number, text: string) =>
       firstAgent
         .post('/api/v1/contributions')
-        .set('idempotency-key', `milestone-create-${index}`)
+        .set('idempotency-key', `availability-create-${index}`)
         .set('x-csrf-token', firstCsrf)
         .send({
           contributionId: contributionIds[index],
@@ -160,7 +160,7 @@ describe('Phase 2 text-journal milestone', () => {
 
     await firstAgent
       .patch(`/api/v1/contributions/${contributionIds[0]}`)
-      .set('idempotency-key', 'milestone-edit-before-restart')
+      .set('idempotency-key', 'availability-edit-before-restart')
       .set('if-match', '"revision-1"')
       .set('x-csrf-token', firstCsrf)
       .send({
@@ -172,20 +172,20 @@ describe('Phase 2 text-journal milestone', () => {
       .expect('etag', '"revision-2"');
     await firstAgent
       .post(`/api/v1/contributions/${contributionIds[1]}/move`)
-      .set('idempotency-key', 'milestone-move')
+      .set('idempotency-key', 'availability-move')
       .set('if-match', '"revision-1"')
       .set('x-csrf-token', firstCsrf)
       .send({ proposedJournalDayId: dayIds[1], journalDate: MOVED_DATE })
       .expect(200);
     await firstAgent
       .delete(`/api/v1/contributions/${contributionIds[0]}`)
-      .set('idempotency-key', 'milestone-delete')
+      .set('idempotency-key', 'availability-delete')
       .set('if-match', '"revision-2"')
       .set('x-csrf-token', firstCsrf)
       .expect(200);
     await firstAgent
       .post(`/api/v1/contributions/${contributionIds[0]}/restore`)
-      .set('idempotency-key', 'milestone-restore')
+      .set('idempotency-key', 'availability-restore')
       .set('if-match', '"revision-2"')
       .set('x-csrf-token', firstCsrf)
       .expect(200);
@@ -196,7 +196,7 @@ describe('Phase 2 text-journal milestone', () => {
       pool: { max: 4 },
     });
 
-    const restartedAgent = request.agent(milestoneApp(client.database));
+    const restartedAgent = request.agent(availabilityApp(client.database));
     const login = await restartedAgent
       .post('/api/v1/auth/password/login')
       .send({ password: PASSWORD })
@@ -225,7 +225,7 @@ describe('Phase 2 text-journal milestone', () => {
 
     await restartedAgent
       .patch(`/api/v1/contributions/${contributionIds[0]}`)
-      .set('idempotency-key', 'milestone-edit-after-restart')
+      .set('idempotency-key', 'availability-edit-after-restart')
       .set('if-match', '"revision-2"')
       .set('x-csrf-token', restartedCsrf)
       .send({

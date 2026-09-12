@@ -20,17 +20,11 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": [
-        "openai.chatgpt",
-        "streetsidesoftware.code-spell-checker"
-      ]
+      "extensions": ["openai.chatgpt", "streetsidesoftware.code-spell-checker"]
     }
   },
   "remoteUser": "pwuser",
-  "onCreateCommand": [
-    "sudo",
-    "/usr/local/bin/bootstrap-ai-journal-workspace"
-  ],
+  "onCreateCommand": ["sudo", "/usr/local/bin/bootstrap-ai-journal-workspace"],
   "waitFor": "onCreateCommand",
   "hostRequirements": {
     "storage": "10gb"

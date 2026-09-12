@@ -1,9 +1,6 @@
 # Retention and permanent deletion
 
-This document is the operational contract for RET-001–RET-007. Material and
-audio deletion use independent owner-scoped policies and a 30-day recoverable
-grace period by default. Original audio otherwise defaults to indefinite
-retention. Raw provider responses default to 30 days.
+This document is the operational contract for RET-001–RET-007. Material and audio deletion use independent owner-scoped policies and a 30-day recoverable grace period by default. Original audio otherwise defaults to indefinite retention. Raw provider responses default to 30 days.
 
 ## Deletion matrix
 
@@ -21,43 +18,14 @@ retention. Raw provider responses default to 30 days.
 | Audit | Delete older target/derived audit rows that carry content hashes or linked mutable metadata. Retain minimal request/completion events containing kind, generation, checkpoint state, actor, correlation, and time only. | Same. | Same. |
 | Tombstone | Retain forever, append-only, with owner, kind, stable ID, deletion time, generation, and correlation ID only. | Same. | Same. |
 
-The export and backup adapters consume this ledger without weakening its
-ordering rules. When backup is not configured, deletion completes live storage
-with `backupCheckpoint = not_configured` and an explicit warning that no
-verified post-deletion restore point exists. With backup configured, completion
-waits for the required checkpoint.
+The export and backup adapters consume this ledger without weakening its ordering rules. When backup is not configured, deletion completes live storage with `backupCheckpoint = not_configured` and an explicit warning that no verified post-deletion restore point exists. With backup configured, completion waits for the required checkpoint.
 
 ## Ordering, bounds, and recovery
 
-1. The authenticated owner requests a scoped impact preview. The API requires
-   the exact `PERMANENTLY DELETE` confirmation and rejects material still in
-   grace.
-2. One PostgreSQL transaction locks the owner's policy generation, commits the
-   primary and child tombstones, records the durable purge request, captures
-   object keys, and appends the minimal requested audit event. Queue payloads
-   contain only the request ID. A failed queue send is recoverable because the
-   daily scanner claims the durable request.
-3. Workers claim at most 100 requests per scheduled execution with `SKIP
-   LOCKED`. Object keys are read 128 at a time. A missing object is an
-   idempotent success; another storage error marks the request retryable and
-   leaves SQL material intact. A purging lease older than 15 minutes can be
-   reclaimed after a worker crash.
-4. Only after all object rows are marked deleted does one PostgreSQL
-   transaction purge the source graph, revisions, transitive processor data,
-   text/vector indexes, grounded answers, feedback, and content-bearing audit
-   history. It removes temporary object-key rows and commits the completion
-   event atomically.
-5. Before replaying offline work, every browser drains the owner-scoped
-   tombstone ledger page by page. IndexedDB cache/outbox/recording cleanup is
-   transactional per page. Service-worker caches are removed, the applied
-   generation is persisted, and only then is the final generation
-   acknowledged. Replay cannot run between pages.
+1. The authenticated owner requests a scoped impact preview. The API requires the exact `PERMANENTLY DELETE` confirmation and rejects material still in grace.
+2. One PostgreSQL transaction locks the owner's policy generation, commits the primary and child tombstones, records the durable purge request, captures object keys, and appends the minimal requested audit event. Queue payloads contain only the request ID. A failed queue send is recoverable because the daily scanner claims the durable request.
+3. Workers claim at most 100 requests per scheduled execution with `SKIP LOCKED`. Object keys are read 128 at a time. A missing object is an idempotent success; another storage error marks the request retryable and leaves SQL material intact. A purging lease older than 15 minutes can be reclaimed after a worker crash.
+4. Only after all object rows are marked deleted does one PostgreSQL transaction purge the source graph, revisions, transitive processor data, text/vector indexes, grounded answers, feedback, and content-bearing audit history. It removes temporary object-key rows and commits the completion event atomically.
+5. Before replaying offline work, every browser drains the owner-scoped tombstone ledger page by page. IndexedDB cache/outbox/recording cleanup is transactional per page. Service-worker caches are removed, the applied generation is persisted, and only then is the final generation acknowledged. Replay cannot run between pages.
 
-The request and every destructive query are owner-scoped. Tombstones never
-contain journal text, filenames, object keys, provider payloads, or content
-checksums. They are the permanent negative authority: normal create and restore
-paths reject tombstoned Journal Day, contribution, and recording identities.
-Backup/import implementations must do the same, must restore into an empty
-target, and must reapply the newest available tombstone checkpoint before any
-read or worker is enabled. Media that predates both a deletion and its
-checkpoint cannot be described as a verified post-deletion restore source.
+The request and every destructive query are owner-scoped. Tombstones never contain journal text, filenames, object keys, provider payloads, or content checksums. They are the permanent negative authority: normal create and restore paths reject tombstoned Journal Day, contribution, and recording identities. Backup/import implementations must do the same, must restore into an empty target, and must reapply the newest available tombstone checkpoint before any read or worker is enabled. Media that predates both a deletion and its checkpoint cannot be described as a verified post-deletion restore source.

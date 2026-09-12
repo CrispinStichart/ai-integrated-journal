@@ -1,6 +1,6 @@
 # Manual artifact editing
 
-Task 35 adds the manual-authority layer over the immutable generated artifacts from Tasks 32–34. A stable artifact has a monotonic edit revision used in strong ETags, append-only generated versions, append-only manual overlay revisions, and at most one reviewable generated conflict candidate.
+The manual-authority layer protects user decisions while preserving immutable generated artifacts. A stable artifact has a monotonic edit revision used in strong ETags, append-only generated versions, append-only manual overlay revisions, and at most one reviewable generated conflict candidate.
 
 ## Authority and effective values
 

@@ -1,6 +1,6 @@
 # Portable export format
 
-Task 48 implements the portability requirements PORT-003–PORT-008 and acceptance criteria AC-050–AC-052.
+The portable export preserves the journal's immutable sources, derived data, authority, provenance, and selected binary content in a checksummed archive.
 
 ## Snapshot and lifecycle
 

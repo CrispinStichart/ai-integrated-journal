@@ -2,5 +2,6 @@
   "plugins": [],
   "semi": true,
   "singleQuote": true,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "proseWrap": "never"
 }

@@ -13,8 +13,7 @@ AI stages can be retried or re-run under new definitions. Users can correct sour
 
 1. Authority is explicit and orthogonal to authorship:
    - `manual` means a value was authored, corrected, confirmed, pinned, deleted, or explicitly adopted by the user;
-   - `generated` means a value was proposed by deterministic or AI processing.
-   Actor/provenance fields separately record the user, system stage, processor version, provider, model, and run.
+   - `generated` means a value was proposed by deterministic or AI processing. Actor/provenance fields separately record the user, system stage, processor version, provider, model, and run.
 2. Source layers retain their meaning. Typed text and corrected-transcript edits are manual source revisions. Raw STT is an immutable generated capture. Cleaned text is a generated source transform unless the user explicitly edits/adopts a separate manual revision. Generated cleanup never rewrites corrected or raw text.
 3. A manual change creates an immutable artifact/revision plus an active manual override for the affected logical artifact and, for structured payloads, the narrowest addressed field/path. The prior version remains auditable.
 4. Reconciliation may create or update generated candidates only. It must copy active manual values into the effective view and may not overwrite, clear, or shadow them. A conflicting generated value is retained as a reviewable candidate linked to the active manual override.

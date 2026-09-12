@@ -15,13 +15,13 @@ Fields whose domain needs semantic state use this discriminated JSON union:
 
 ```ts
 type SemanticValue<T> =
-  | { state: "unknown" }
-  | { state: "known"; value: T }
-  | { state: "none" }
-  | { state: "neutral" }
-  | { state: "not_applicable" }
+  | { state: 'unknown' }
+  | { state: 'known'; value: T }
+  | { state: 'none' }
+  | { state: 'neutral' }
+  | { state: 'not_applicable' }
   | {
-      state: "uncertain";
+      state: 'uncertain';
       value?: T;
       confidence?: number;
     };

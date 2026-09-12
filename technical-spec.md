@@ -197,9 +197,21 @@ Requirement evaluations use exactly: `not_evaluated`, `satisfied`, `insufficient
 
 ```ts
 interface BlobStore {
-  putImmutable(input: AsyncIterable<Uint8Array>, metadata: BlobMetadata): Promise<StoredBlob>;
-  putStagingChunk(uploadId: string, index: number, input: AsyncIterable<Uint8Array>, checksum: string): Promise<StagedChunk>;
-  finalizeChunks(uploadId: string, orderedChunks: readonly StagedChunk[], metadata: BlobMetadata): Promise<StoredBlob>;
+  putImmutable(
+    input: AsyncIterable<Uint8Array>,
+    metadata: BlobMetadata,
+  ): Promise<StoredBlob>;
+  putStagingChunk(
+    uploadId: string,
+    index: number,
+    input: AsyncIterable<Uint8Array>,
+    checksum: string,
+  ): Promise<StagedChunk>;
+  finalizeChunks(
+    uploadId: string,
+    orderedChunks: readonly StagedChunk[],
+    metadata: BlobMetadata,
+  ): Promise<StoredBlob>;
   open(key: string, range?: ByteRange): Promise<ReadableStream<Uint8Array>>;
   stat(key: string): Promise<StoredBlobMetadata>;
   delete(key: string): Promise<void>;
@@ -486,21 +498,21 @@ Each increment preserves source data without depending on later AI features. No 
 
 ## 20. Requirement implementation map
 
-| Requirement group | Primary implementation sections |
-| --- | --- |
-| ARCH, DATA, PROV | 3, 6, 10 |
-| CAP, STT | 6.3, 7, 8, 10.2–10.3 |
-| MEM, FB | 6.5, 9, 13 |
-| PROC, FOOD, MOOD, TASK, SUM | 6.4, 10.4 |
-| NUDGE, SEM | 6.1, 6.5, 10.4 |
-| TIME, SLEEP | 6.2, 11 |
-| EDIT, STATE | 6.4, 9, 10.1–10.2 |
-| SEARCH | 9, 12 |
-| RET | 6.1, 7.3, 15 |
-| SEC | 8.4, 14, 16 |
-| PORT | 7, 15 |
-| MODEL | 6.4, 10.3 |
-| AC acceptance criteria | 18 and the relevant functional section above |
+| Requirement group           | Primary implementation sections              |
+| --------------------------- | -------------------------------------------- |
+| ARCH, DATA, PROV            | 3, 6, 10                                     |
+| CAP, STT                    | 6.3, 7, 8, 10.2–10.3                         |
+| MEM, FB                     | 6.5, 9, 13                                   |
+| PROC, FOOD, MOOD, TASK, SUM | 6.4, 10.4                                    |
+| NUDGE, SEM                  | 6.1, 6.5, 10.4                               |
+| TIME, SLEEP                 | 6.2, 11                                      |
+| EDIT, STATE                 | 6.4, 9, 10.1–10.2                            |
+| SEARCH                      | 9, 12                                        |
+| RET                         | 6.1, 7.3, 15                                 |
+| SEC                         | 8.4, 14, 16                                  |
+| PORT                        | 7, 15                                        |
+| MODEL                       | 6.4, 10.3                                    |
+| AC acceptance criteria      | 18 and the relevant functional section above |
 
 ## 21. Deferred decisions
 

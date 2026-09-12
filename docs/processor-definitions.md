@@ -10,7 +10,7 @@ Publishing is atomic and rejects the entire version before changing the current 
 
 Exact dependencies must exist, target another processor, resolve their JSON Pointer output selector against that version's schema, and form an acyclic processor-version graph. Definitions also bound instructions to 16,000 characters and configure prompt, canonical input, runtime, and result limits within server-enforced maxima.
 
-Journal sources are untrusted prompt data. The fixed `data_only` output policy prohibits code execution, tool calls, SQL, and HTML. Later runtime work must preserve that boundary: model output is schema-validated data and cannot directly mutate canonical records or enter an executable sink.
+Journal sources are untrusted prompt data. The fixed `data_only` output policy prohibits code execution, tool calls, SQL, and HTML. The runtime preserves that boundary: model output is schema-validated data and cannot directly mutate canonical records or enter an executable sink.
 
 ## API
 

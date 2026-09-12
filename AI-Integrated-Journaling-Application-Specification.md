@@ -59,23 +59,23 @@ Requirement identifiers are stable. Removing a requirement shall not cause its i
 
 ## 5. Definitions
 
-| Term                     | Definition                                                                                                                                |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Journal Day**          | A date-keyed container that groups contributions and results. It is not a single monolithic entry.                                        |
-| **Contribution**         | A discrete item added to a Journal Day, such as typed text, a recording, or a nudge response.                                             |
-| **Source**               | User-authored or captured primary material: audio, raw STT, corrected transcript, cleaned transcript, typed text, or explicit user input. |
-| **Raw STT**              | The immutable response returned by a speech-to-text operation, including available timing and metadata.                                   |
-| **Corrected Transcript** | A user-correctable representation of what was actually said, without intentional stylistic rewriting.                                     |
-| **Cleaned Transcript**   | A derived, readable representation with disfluencies and accidental repetition removed while preserving meaning.                          |
-| **Observation**          | A bounded, source-supported claim, such as a consumption event or a mood statement.                                                       |
-| **Interpretation**       | A conclusion, aggregation, classification, rating, or summary derived from one or more observations or sources.                           |
-| **Processor**            | A configurable rule-driven operation that extracts observations, produces interpretations, or performs another declared transformation.   |
-| **Evidence Span**        | A reference to the precise source region supporting a result, optionally including audio time offsets.                                    |
-| **Provenance**           | The record of source inputs, processor and prompt versions, model/provider, times, and user/AI authorship behind an artifact.             |
-| **Memory**               | A visible persistent fact, vocabulary item, entity, alias, preference, or correction rule used to assist future processing.               |
-| **Manual Override**      | A user-entered or user-corrected value that takes precedence over generated values.                                                       |
-| **Stale**                | A derived artifact whose inputs or governing definition have changed since it was produced.                                               |
-| **Journal Timezone**     | The default timezone used to assign journal dates and interpret relative temporal language.                                               |
+| Term | Definition |
+| --- | --- |
+| **Journal Day** | A date-keyed container that groups contributions and results. It is not a single monolithic entry. |
+| **Contribution** | A discrete item added to a Journal Day, such as typed text, a recording, or a nudge response. |
+| **Source** | User-authored or captured primary material: audio, raw STT, corrected transcript, cleaned transcript, typed text, or explicit user input. |
+| **Raw STT** | The immutable response returned by a speech-to-text operation, including available timing and metadata. |
+| **Corrected Transcript** | A user-correctable representation of what was actually said, without intentional stylistic rewriting. |
+| **Cleaned Transcript** | A derived, readable representation with disfluencies and accidental repetition removed while preserving meaning. |
+| **Observation** | A bounded, source-supported claim, such as a consumption event or a mood statement. |
+| **Interpretation** | A conclusion, aggregation, classification, rating, or summary derived from one or more observations or sources. |
+| **Processor** | A configurable rule-driven operation that extracts observations, produces interpretations, or performs another declared transformation. |
+| **Evidence Span** | A reference to the precise source region supporting a result, optionally including audio time offsets. |
+| **Provenance** | The record of source inputs, processor and prompt versions, model/provider, times, and user/AI authorship behind an artifact. |
+| **Memory** | A visible persistent fact, vocabulary item, entity, alias, preference, or correction rule used to assist future processing. |
+| **Manual Override** | A user-entered or user-corrected value that takes precedence over generated values. |
+| **Stale** | A derived artifact whose inputs or governing definition have changed since it was produced. |
+| **Journal Timezone** | The default timezone used to assign journal dates and interpret relative temporal language. |
 
 ## 6. Architectural principles
 
@@ -552,33 +552,33 @@ Journal Day
 
 ## 22. Edge cases and required behavior
 
-| Edge case                                           | Required behavior                                                                                       |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Multiple recordings in one day                      | Preserve each separately; present a unified day if desired.                                             |
-| Recording after midnight about the prior waking day | Allow assignment to the prior Journal Day; retain actual capture time and timezone.                     |
-| Travel across timezones                             | Use the recorded timezone and configured Journal Timezone; never silently move existing items.          |
-| No timestamps from STT                              | Preserve transcript and mark timing unavailable.                                                        |
-| Raw STT is wrong but cleaned text looks plausible   | Preserve raw STT; allow correction before regenerating cleanup and derived results.                     |
-| Correction changes “Monday” to “Tuesday”            | Correct only that occurrence unless the user explicitly creates a broader rule.                         |
-| Name correction recurs                              | Suggest a visible known-entity/alias memory; do not silently globalize it.                              |
-| User mentions another person's meal                 | Do not record it as the user's consumption.                                                             |
-| User says they bought or considered food            | Do not infer consumption.                                                                               |
-| Later food statement adds quantity/detail           | Update or supersede the original event; avoid a duplicate.                                              |
-| User had a bad morning and good evening             | Preserve both mood observations; compute any aggregate separately.                                      |
-| Mood is not discussed                               | Record insufficient information, never neutral.                                                         |
-| “I slept badly last night” in Monday's journal      | Associate nightly sleep with Monday by wake-date convention, retaining evidence and correction ability. |
-| Nap plus nightly sleep                              | Store separate sleep events.                                                                            |
-| “Maybe I should…”                                   | Preserve as tentative/contemplative, not a firm task by default.                                        |
-| “I called the dentist”                              | Treat as an accomplished event, not a future task.                                                      |
-| Processor/API outage                                | Save journal and audio; show stage failure; retry later.                                                |
-| Upload interrupted                                  | Retain recoverable local capture and retry with the same recording identity.                            |
-| Transcript edited after extraction                  | Mark dependent outputs stale; do not silently treat them as current.                                    |
-| Reprocessing conflicts with manual rating           | Preserve manual rating and show the new AI suggestion separately.                                       |
-| Required processor fails technically                | Show failure, not a “you forgot” nudge.                                                                 |
-| User dismisses a nudge                              | Preserve dismissal for that day; do not repeatedly prompt unless explicitly configured.                 |
-| Audio deleted, transcript retained                  | Retain text and provenance; mark audio evidence/playback unavailable.                                   |
-| Processor schema evolves                            | Preserve old payload/version; migrate or reprocess only explicitly.                                     |
-| Search answer lacks support                         | State that evidence is insufficient and show the closest sources, if useful.                            |
+| Edge case | Required behavior |
+| --- | --- |
+| Multiple recordings in one day | Preserve each separately; present a unified day if desired. |
+| Recording after midnight about the prior waking day | Allow assignment to the prior Journal Day; retain actual capture time and timezone. |
+| Travel across timezones | Use the recorded timezone and configured Journal Timezone; never silently move existing items. |
+| No timestamps from STT | Preserve transcript and mark timing unavailable. |
+| Raw STT is wrong but cleaned text looks plausible | Preserve raw STT; allow correction before regenerating cleanup and derived results. |
+| Correction changes “Monday” to “Tuesday” | Correct only that occurrence unless the user explicitly creates a broader rule. |
+| Name correction recurs | Suggest a visible known-entity/alias memory; do not silently globalize it. |
+| User mentions another person's meal | Do not record it as the user's consumption. |
+| User says they bought or considered food | Do not infer consumption. |
+| Later food statement adds quantity/detail | Update or supersede the original event; avoid a duplicate. |
+| User had a bad morning and good evening | Preserve both mood observations; compute any aggregate separately. |
+| Mood is not discussed | Record insufficient information, never neutral. |
+| “I slept badly last night” in Monday's journal | Associate nightly sleep with Monday by wake-date convention, retaining evidence and correction ability. |
+| Nap plus nightly sleep | Store separate sleep events. |
+| “Maybe I should…” | Preserve as tentative/contemplative, not a firm task by default. |
+| “I called the dentist” | Treat as an accomplished event, not a future task. |
+| Processor/API outage | Save journal and audio; show stage failure; retry later. |
+| Upload interrupted | Retain recoverable local capture and retry with the same recording identity. |
+| Transcript edited after extraction | Mark dependent outputs stale; do not silently treat them as current. |
+| Reprocessing conflicts with manual rating | Preserve manual rating and show the new AI suggestion separately. |
+| Required processor fails technically | Show failure, not a “you forgot” nudge. |
+| User dismisses a nudge | Preserve dismissal for that day; do not repeatedly prompt unless explicitly configured. |
+| Audio deleted, transcript retained | Retain text and provenance; mark audio evidence/playback unavailable. |
+| Processor schema evolves | Preserve old payload/version; migrate or reprocess only explicitly. |
+| Search answer lacks support | State that evidence is insufficient and show the closest sources, if useful. |
 
 ## 23. Acceptance criteria
 
