@@ -195,7 +195,7 @@ describe('WORKER generic processor runtime', () => {
       await rm(blobRoot, { recursive: true, force: true });
   });
 
-  it('[ARCH-001][ARCH-003][DATA-031][DATA-032][PROV-001][PROC-004][PROC-007][MODEL-002][STATE-004][STATE-005][TIME-004][SEC-005][SEC-007] stores a validated exact-bound complete result with content-free queue data and full provider lineage', async () => {
+  it('[ARCH-001][ARCH-003][DATA-031][DATA-032][PROV-001][PROC-004][PROC-007][MODEL-002][STATE-004][STATE-005][TIME-004][SEC-005][SEC-007] stores a validated exact-bound complete observation result with content-free queue data and full provider lineage', async () => {
     const run = await inTransaction(client.database, (transaction) =>
       enqueueProcessorRun({
         boss,
@@ -351,7 +351,7 @@ describe('WORKER generic processor runtime', () => {
     expect((await handler.load(queued)).state).toBe('already-complete');
   });
 
-  it('[ARCH-003][DATA-031][PROV-002][PROV-004][PROC-007][EDIT-001][EDIT-002][STATE-004][SEC-007] binds exact artifact inputs and transitively stales only recorded downstream results before queuing identifier-only replacement work', async () => {
+  it('[ARCH-002][ARCH-003][DATA-031][PROV-002][PROV-004][PROC-007][EDIT-001][EDIT-002][STATE-004][SEC-007] binds an interpretation to exact observation inputs and transitively stales only recorded downstream results before queuing identifier-only replacement work', async () => {
     const [upstream] = await client.database
       .select()
       .from(processorResults)

@@ -64,7 +64,7 @@ The trust boundaries traced were:
 | Deletion | A CSRF/IDOR deletes data, deleted data is resurrected, or a destructive action is invisible. | Soft delete, audio delete, permanent deletion request/completion, export invalidation, settings/provider changes, session logout/revocation, password recovery, passkey registration, and owner bootstrap require the appropriate authentication/CSRF boundary and append content-free audits. Auth state changes and their audits commit atomically. Permanent deletion is tombstone-first, bounded, owner-scoped, invalidates derived/search/export/cache/outbox state, and restore replays the newest deletion checkpoint before opening. Retention, export, backup, auth, and reliability suites provide behavioral evidence. |
 | Logs and failures | Private content or secrets appear in logs, errors, or retry jobs. | Observability uses a deny-by-default field allowlist; HTTP completion logs record method/route/status/correlation only. Errors return stable codes without exception text, and queue retries carry canonical identifiers. Observability/API/worker reliability tests assert that bodies, headers, credentials, source text, provider payloads, and injected error messages are absent. |
 | Local network | Development defaults silently publish the journal to the LAN. | Express configuration now accepts only Node-valid loopback `HTTP_HOST` values; Vite binds its API proxy to `127.0.0.1`; Compose publishes PostgreSQL on `127.0.0.1`. `packages/config/test/index.test.ts` rejects wildcard, RFC1918, unspecified or bracketed bind IPv6, and arbitrary names; `apps/web/test/vite-config.test.ts` locks the proxy boundary. |
-| Supply chain | A known vulnerable dependency or image package ships. | The lockfile overrides the vulnerable transitive development `esbuild` to a fixed available release. The PostgreSQL image updates Debian security packages at build time and removes package indexes. Dependency and container scans described below are clean at their blocking thresholds. |
+| Supply chain | A known vulnerable dependency or image package ships. | The lockfile overrides vulnerable transitive development dependencies to fixed releases. The PostgreSQL image updates Debian security packages at build time and removes package indexes. The current dependency audit and the dated container-scan evidence and limitations are recorded below. |
 
 ## Defects corrected by Task 53
 
@@ -128,6 +128,14 @@ Results on 2026-08-31:
 
 These commands intentionally use `--redact`; reports and build logs must not
 print candidate secret values or private journal fixtures.
+
+Task 55 re-ran `corepack pnpm audit --audit-level moderate` on 2026-09-02.
+New advisories affecting transitive `fast-uri` and `qs` versions were found,
+the workspace overrides were advanced to patched releases, and the repeated
+audit reported **No known vulnerabilities found**. Gitleaks and Grype were not
+installed in the Task 55 environment, so new secret/container scans are
+explicitly **NOT RUN**; the 2026-08-31 results above remain historical evidence,
+not a claim about a newly rebuilt image or a current scan.
 
 ## Residual risks and operating constraints
 

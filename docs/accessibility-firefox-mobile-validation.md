@@ -79,5 +79,6 @@ corepack pnpm test:e2e
 corepack pnpm validate
 ```
 
-The final validation result and commit are recorded in the task handoff journal
-after the complete repository gate finishes.
+Release operators record any physical observations with the date, device,
+browser/assistive-technology versions, expected and actual results, and issue
+links. An unexecuted observation remains **NOT RUN** in release evidence.

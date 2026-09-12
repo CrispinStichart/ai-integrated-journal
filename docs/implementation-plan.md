@@ -461,7 +461,7 @@ Threat-model bootstrap, sessions, uploads, stored journal content, processor pro
 
 Perform keyboard, screen-reader, WCAG 2.2 AA, touch, installability, microphone, suspension, service-worker update, storage-pressure, and long-session checks.
 
-### 55. Operations and release documentation
+### 55. Operations and release documentation - FINISHED
 
 Document one-command local startup, configuration, data locations, migrations, upgrades, provider setup, backup, restore, deletion, troubleshooting, and recovery drills. Generate the final requirement-to-test traceability report.
 

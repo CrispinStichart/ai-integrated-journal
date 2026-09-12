@@ -21,11 +21,11 @@ retention. Raw provider responses default to 30 days.
 | Audit | Delete older target/derived audit rows that carry content hashes or linked mutable metadata. Retain minimal request/completion events containing kind, generation, checkpoint state, actor, correlation, and time only. | Same. | Same. |
 | Tombstone | Retain forever, append-only, with owner, kind, stable ID, deletion time, generation, and correlation ID only. | Same. | Same. |
 
-Tasks 48 and 49 add the export and backup repositories. Until those adapters
-exist, deletion completes live storage with `backupCheckpoint =
-not_configured` and an explicit warning that no verified post-deletion restore
-point exists. Those adapters must consume this ledger and may not weaken its
-ordering rules.
+The export and backup adapters consume this ledger without weakening its
+ordering rules. When backup is not configured, deletion completes live storage
+with `backupCheckpoint = not_configured` and an explicit warning that no
+verified post-deletion restore point exists. With backup configured, completion
+waits for the required checkpoint.
 
 ## Ordering, bounds, and recovery
 

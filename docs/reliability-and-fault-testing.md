@@ -66,5 +66,7 @@ they do not consume the developer machine's real disk. The backup test executes
 the complete restore orchestration with deterministic restic/pg_restore and SQL
 adapters, while the quarterly drill in `backup-and-restore.md` remains the proof
 for installed external binaries and physical recovery media. Physical Firefox
-Mobile, accessibility, security review, and final operator evidence belong to
-Tasks 53–55 and are not claimed by this task.
+Mobile and assistive-technology observations remain separately recorded in
+`accessibility-firefox-mobile-validation.md`; security evidence is in
+`security-and-privacy-review.md`; final operator evidence and honest NOT RUN
+limits are in `operations-and-release.md` and the traceability report.

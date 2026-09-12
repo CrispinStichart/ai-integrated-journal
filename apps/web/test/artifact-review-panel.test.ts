@@ -595,7 +595,7 @@ describe('artifact review UI', () => {
     wrapper.unmount();
   });
 
-  it('[SUM-001–004][SEM-004][AC-032] renders separate grounded narrative and accomplishment cards and preserves pin as a manual action', async () => {
+  it('[SUM-001–SUM-005][SEM-004][AC-032] renders the complete separate grounded narrative and accomplishment list and preserves pin as a manual action', async () => {
     const { wrapper, queryClient } = mountPanel([
       summaryArtifact(),
       accomplishmentArtifact(),

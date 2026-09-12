@@ -7,7 +7,7 @@ services:
     image: ai-integrated-journal-postgres:pg17-pgvector0.8.1
     environment:
       POSTGRES_DB: journal
-      POSTGRES_PASSWORD: ${JOURNAL_DATABASE_PASSWORD:-journal-local-only}
+      POSTGRES_PASSWORD: ${JOURNAL_DATABASE_PASSWORD:?set JOURNAL_DATABASE_PASSWORD in .env}
       POSTGRES_USER: journal
     ports:
       - '127.0.0.1:5432:5432'

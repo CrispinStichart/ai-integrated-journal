@@ -56,12 +56,12 @@ encrypted repository. Back up the password file separately; neither the
 repository nor a journal export contains it. Losing it makes the repository
 unrecoverable.
 
-The seeded `backup.daily` pg-boss schedule is disabled by default. Once task 50
-exposes policy management, enabling it runs at 03:30 UTC whenever the local
-host and worker are available. A configured worker consumes only its
-identifier-only schedule payload and invokes the same `backup:create` command.
-Until then, use the command from a host scheduler if daily automation is
-desired.
+The seeded `backup.daily` pg-boss schedule is disabled by default. After all
+three backup paths are configured, the authenticated Settings page can enable
+it at 03:30 UTC whenever the local host and worker are available. A configured
+worker consumes only its identifier-only schedule payload and invokes the same
+`backup:create` command. A host scheduler may invoke the command instead when
+the application worker is not continuously available.
 
 ## Restore into empty targets
 
@@ -129,3 +129,8 @@ snapshot ordering, checksums, corruption refusal, checkpoint gating, restore
 ordering, search rebuild invocation, and canonical job reconciliation. The
 quarterly drill additionally validates the installed external binaries and
 recovery media.
+
+The repository's deterministic adapters are not evidence that `restic`,
+`pg_dump`, `pg_restore`, the configured destination, or physical recovery media
+work on a particular host. Record those as **NOT RUN** until the complete drill
+above succeeds in that environment.
