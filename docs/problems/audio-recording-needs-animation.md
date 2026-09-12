@@ -1,0 +1,1 @@
+When recording the audio there should be some kind of animation. At minimum a gently pulsing indicator light, but even better would be some kind of simple waveform like what CHatGPT shows when recording audio. That way the user can see if the mic is picking up anything, and if it's picking up background noise. 
