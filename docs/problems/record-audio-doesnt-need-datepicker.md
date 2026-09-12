@@ -1,0 +1,1 @@
+The "Record audio" card doesn't need a date picker, because it should be tied to the selected journal day. If I want to add audio to a previous day, I'll just navigate to that day before starting the audio recording.
