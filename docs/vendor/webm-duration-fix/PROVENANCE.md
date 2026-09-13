@@ -45,7 +45,8 @@ This ledger must be updated whenever the vendored implementation changes.
 | Licensing | The fork-level `LICENSE` adds the local contributors' copyright notice and applies MIT to the fork and local modifications while retaining the upstream MIT notice. |
 | Provenance | This file pins the source import, records hashes and exclusions, and preserves the conflicting GitHub and npm license records. Upstream has no equivalent provenance document. |
 | License evidence paths | The GitHub `LICENSE` and published npm `package.json` are stored under `upstream/` with descriptive names. Their contents are unmodified. |
-| Implementation | None at provenance establishment. Any build-only import adjustments, characterization changes, or modernization must be added here in later tasks. |
+| Package scaffold | The private `@journal/webm-duration-fix` workspace package adds the repository-standard ESM/NodeNext build, strict type checking, root export, lint/test scripts, and a copied fork-level MIT license. These files have no upstream counterparts. |
+| API boundary | A local typed contract separates platform-neutral WebM byte validation/finalization from the `Blob` adapter. The duration-repair implementation remains deliberately injectable until the upstream source is imported and characterized; no upstream implementation source is imported by this scaffold. |
 
 ## Updating the snapshot
 

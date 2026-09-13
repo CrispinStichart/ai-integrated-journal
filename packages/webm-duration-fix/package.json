@@ -1,0 +1,24 @@
+{
+  "name": "@journal/webm-duration-fix",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src test --max-warnings 0",
+    "test": "vitest run --root ../.. packages/webm-duration-fix/test",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "MIT"
+}

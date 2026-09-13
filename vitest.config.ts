@@ -15,6 +15,7 @@ const workspacePackages = [
   'processors',
   'storage',
   'test-support',
+  'webm-duration-fix',
 ] as const;
 
 export default defineConfig({
