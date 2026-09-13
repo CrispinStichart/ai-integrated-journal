@@ -134,6 +134,9 @@ importers:
       '@journal/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@journal/webm-duration-fix':
+        specifier: workspace:*
+        version: link:../../packages/webm-duration-fix
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0

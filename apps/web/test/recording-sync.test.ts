@@ -4,11 +4,14 @@ import 'fake-indexeddb/auto';
 
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import { MAX_AUDIO_CHUNK_BYTES } from '@journal/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   recordingSyncController,
   RecordingSyncController,
+  isWebmRecording,
+  splitFinalizedBytes,
   type RecordingSyncDependencies,
   useRecordingSyncController,
 } from '../src/recording/sync-controller';
@@ -112,6 +115,16 @@ function harness(overrides: Partial<RecordingSyncDependencies> = {}) {
     now: () => new Date(NOW),
     online: () => true,
     decryptChunk: async (chunk) => chunk.ciphertext.slice(0),
+    protectChunk: vi.fn(async (_recordingId, _index, blob) => {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return {
+        byteSize: bytes.byteLength,
+        sha256: hex(bytes),
+        nonce: 'test-only-finalized',
+        ciphertext: bytes.buffer.slice(0),
+      };
+    }),
+    finalizeWebm: vi.fn(async (bytes) => ({ bytes, changed: false })),
     create: vi.fn().mockResolvedValue(remote('uploading')),
     status: vi.fn().mockResolvedValue({
       recording: remote('uploading'),
@@ -138,6 +151,32 @@ afterEach(async () => {
 });
 
 describe('recording synchronization', () => {
+  it('[CAP-003] detects WebM only from a normalized MIME type and EBML signature', () => {
+    const signature = Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 0x00);
+
+    expect(isWebmRecording(' Audio/WebM ; codecs=opus ', signature)).toBe(true);
+    expect(isWebmRecording('audio/ogg', signature)).toBe(false);
+    expect(
+      isWebmRecording('audio/webm;codecs=opus', Uint8Array.of(1, 2, 3, 4)),
+    ).toBe(false);
+  });
+
+  it('[CAP-003][CAP-004] deterministically splits finalized bytes at the protocol bound', () => {
+    const bytes = new Uint8Array(MAX_AUDIO_CHUNK_BYTES + 3);
+    for (let index = 0; index < bytes.byteLength; index += 1)
+      bytes[index] = index % 251;
+
+    const first = splitFinalizedBytes(bytes);
+    const second = splitFinalizedBytes(bytes);
+    expect(first.map((chunk) => chunk.byteLength)).toEqual([
+      MAX_AUDIO_CHUNK_BYTES,
+      3,
+    ]);
+    expect(first.map(hex)).toEqual(second.map(hex));
+    expect(first[0]?.[0]).toBe(bytes[0]);
+    expect(first[1]).toEqual(bytes.slice(MAX_AUDIO_CHUNK_BYTES));
+  });
+
   it('[CAP-002][CAP-003][CAP-004][AC-002] resumes only missing checkpoints and cleans up only after durable confirmation', async () => {
     let confirmFinalize!: (value: ReturnType<typeof remote>) => void;
     const finalizePending = new Promise<ReturnType<typeof remote>>(
@@ -264,6 +303,187 @@ describe('recording synchronization', () => {
     ).toEqual([]);
   });
 
+  it('[CAP-002][CAP-003][CAP-004] finalizes a complete ordered WebM once and uploads protected deterministic chunks', async () => {
+    const original = Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 10, 11, 12);
+    const finalizedBytes = encoder.encode('finalized-webm');
+    let confirmFinalize!: (value: ReturnType<typeof remote>) => void;
+    const finalizeRequest = vi.fn().mockReturnValue(
+      new Promise<ReturnType<typeof remote>>((resolve) => {
+        confirmFinalize = resolve;
+      }),
+    );
+    const finalizeWebm = vi.fn().mockResolvedValue({
+      bytes: finalizedBytes,
+      changed: true,
+    });
+    const { controller, dependencies, store } = harness({
+      finalize: finalizeRequest,
+      finalizeWebm,
+      status: vi.fn().mockResolvedValue({
+        recording: remote('uploading'),
+        acceptedIndexes: [],
+      }),
+    });
+    await store.putRecording(
+      localRecording({ nextChunkIndex: 0, totalBytes: '0' }),
+    );
+    for (const [index, bytes] of [
+      original.slice(0, 2),
+      original.slice(2),
+    ].entries()) {
+      await store.commitRecordingChunk(
+        RECORDING_ID,
+        {
+          recordingId: RECORDING_ID,
+          index,
+          ownerId: OWNER_ID,
+          schemaVersion: 1,
+          byteSize: bytes.byteLength,
+          sha256: hex(bytes),
+          mimeType: 'audio/webm;codecs=opus',
+          capturedAt: NOW,
+          nonce: 'test-only',
+          ciphertext: bytes.buffer.slice(0),
+        },
+        NOW,
+      );
+    }
+    await controller.initialize(OWNER_ID, 'csrf-token');
+
+    const resuming = controller.resume();
+    await vi.waitFor(() => expect(finalizeRequest).toHaveBeenCalledOnce());
+
+    expect(finalizeWebm).toHaveBeenCalledOnce();
+    expect(finalizeWebm).toHaveBeenCalledWith(original);
+    expect(dependencies.protectChunk).toHaveBeenCalledOnce();
+    expect(dependencies.upload).toHaveBeenCalledWith(
+      RECORDING_ID,
+      0,
+      hex(finalizedBytes),
+      expect.any(ArrayBuffer),
+      'csrf-token',
+    );
+    expect(
+      hex(
+        new Uint8Array(
+          vi.mocked(dependencies.upload).mock.calls[0]?.[3] as ArrayBuffer,
+        ),
+      ),
+    ).toBe(hex(finalizedBytes));
+    expect(finalizeRequest).toHaveBeenCalledWith(
+      RECORDING_ID,
+      expect.objectContaining({
+        chunkCount: '1',
+        totalBytes: String(finalizedBytes.byteLength),
+        finalSha256: hex(finalizedBytes),
+        manifestSha256: hex(
+          encoder.encode(
+            `0:${finalizedBytes.byteLength}:${hex(finalizedBytes)}\n`,
+          ),
+        ),
+      }),
+      'csrf-token',
+    );
+    expect(
+      await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toHaveLength(2);
+
+    confirmFinalize(remote('durable'));
+    await resuming;
+    expect(await store.listRecordingChunks(OWNER_ID, RECORDING_ID)).toEqual([]);
+  });
+
+  it('[CAP-003][CAP-004] leaves an already-valid WebM on the original checkpoint path', async () => {
+    const original = Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 9, 8, 7);
+    const finalizeWebm = vi.fn(async (bytes: Uint8Array) => ({
+      bytes,
+      changed: false,
+    }));
+    const { controller, dependencies, store } = harness({
+      finalizeWebm,
+      status: vi.fn().mockResolvedValue({
+        recording: remote('uploading'),
+        acceptedIndexes: [],
+      }),
+    });
+    await store.putRecording(
+      localRecording({ nextChunkIndex: 0, totalBytes: '0' }),
+    );
+    await store.commitRecordingChunk(
+      RECORDING_ID,
+      {
+        recordingId: RECORDING_ID,
+        index: 0,
+        ownerId: OWNER_ID,
+        schemaVersion: 1,
+        byteSize: original.byteLength,
+        sha256: hex(original),
+        mimeType: 'audio/webm;codecs=opus',
+        capturedAt: NOW,
+        nonce: 'test-only',
+        ciphertext: original.buffer.slice(0),
+      },
+      NOW,
+    );
+    await controller.initialize(OWNER_ID, 'csrf-token');
+    await controller.resume();
+
+    expect(finalizeWebm).toHaveBeenCalledOnce();
+    expect(dependencies.protectChunk).not.toHaveBeenCalled();
+    expect(dependencies.upload).toHaveBeenCalledWith(
+      RECORDING_ID,
+      0,
+      hex(original),
+      expect.anything(),
+      'csrf-token',
+    );
+  });
+
+  it('[CAP-003][CAP-006] makes WebM finalization failure recoverable and retains every checkpoint', async () => {
+    const original = Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 1);
+    const { controller, dependencies, store } = harness({
+      finalizeWebm: vi.fn().mockRejectedValue(new Error('invalid WebM')),
+      status: vi.fn().mockResolvedValue({
+        recording: remote('uploading'),
+        acceptedIndexes: [],
+      }),
+    });
+    await store.putRecording(
+      localRecording({ nextChunkIndex: 0, totalBytes: '0' }),
+    );
+    await store.commitRecordingChunk(
+      RECORDING_ID,
+      {
+        recordingId: RECORDING_ID,
+        index: 0,
+        ownerId: OWNER_ID,
+        schemaVersion: 1,
+        byteSize: original.byteLength,
+        sha256: hex(original),
+        mimeType: 'audio/webm',
+        capturedAt: NOW,
+        nonce: 'test-only',
+        ciphertext: original.buffer.slice(0),
+      },
+      NOW,
+    );
+    await controller.initialize(OWNER_ID, 'csrf-token');
+    await controller.resume();
+
+    expect(dependencies.upload).not.toHaveBeenCalled();
+    expect(dependencies.finalize).not.toHaveBeenCalled();
+    await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
+      state: 'failed',
+      retrySafe: true,
+      syncErrorCode: 'audio_finalization_failed',
+      syncErrorMessage:
+        'The saved WebM could not be finalized. Your local recording is still available.',
+    });
+    expect(
+      await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toHaveLength(1);
+  });
+
   it('[CAP-003][CAP-006] preserves checkpoints and suppresses unsafe retry after a checksum conflict', async () => {
     const upload = vi
       .fn()
@@ -324,7 +544,10 @@ describe('recording synchronization', () => {
         acceptedIndexes: [1],
       });
     const { controller, dependencies, store } = harness({ status });
-    const defaultFormat = localRecording({ serverCreated: true });
+    const defaultFormat = localRecording({
+      serverCreated: true,
+      mimeType: 'audio/ogg',
+    });
     Reflect.deleteProperty(defaultFormat, 'codec');
     Reflect.deleteProperty(defaultFormat, 'durationMilliseconds');
     await populate(store, defaultFormat);
@@ -333,6 +556,8 @@ describe('recording synchronization', () => {
 
     expect(status).toHaveBeenCalledTimes(2);
     expect(dependencies.create).not.toHaveBeenCalled();
+    expect(dependencies.finalizeWebm).not.toHaveBeenCalled();
+    expect(dependencies.protectChunk).not.toHaveBeenCalled();
     expect(dependencies.upload).not.toHaveBeenCalled();
     expect(dependencies.finalize).toHaveBeenCalledWith(
       RECORDING_ID,

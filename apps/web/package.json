@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@journal/contracts": "workspace:*",
+    "@journal/webm-duration-fix": "workspace:*",
     "@noble/hashes": "1.8.0",
     "@simplewebauthn/browser": "13.3.0",
     "@tanstack/vue-query": "5.101.4",
