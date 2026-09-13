@@ -7,7 +7,7 @@ Investigation is complete. Implementation is intentionally split into two indepe
 1. Vendor and modernize `webm-duration-fix` without changing application behavior.
 2. Use the validated vendored package to repair WebM recordings and fix playback.
 
-Each work unit should be validated and committed separately. The second must not begin until the first has established equivalent behavior, clear licensing, and adequate test coverage.
+Each work unit should be validated and committed separately. The second must not begin until the first has established equivalent behavior, documented licensing, and adequate test coverage.
 
 ## Problem and root cause
 
@@ -59,7 +59,8 @@ This unit creates a tested internal package but does not add it to the web appli
 ### 1. Establish provenance and licensing
 
 - Snapshot upstream v1.0.4 at commit `87a71bf304c8cb4fbf19248ed5663e6aff9524ac`; record the repository URL, tag, commit, retrieval date, and which files were imported.
-- Resolve the upstream discrepancy before copying code: the GitHub repository contains an MIT license while the published npm manifest declares ISC and omits a license file. Do not infer a license. Use authoritative upstream history or maintainer clarification, and retain the applicable license and notices with the vendored source.
+- License the vendored fork and our modifications under MIT. ISC is permissive and MIT-compatible, so the npm manifest's ISC declaration does not prevent that choice.
+- Preserve the original copyright and permission notices that apply to the imported source. Record that the GitHub repository contains an MIT license while the published npm manifest declares ISC and omits a license file; retain both upstream license records with the provenance documentation rather than erasing the discrepancy.
 - Document all deliberate differences from upstream so later audits and upgrades can distinguish imported code from local changes.
 
 ### 2. Create an isolated workspace package
@@ -159,4 +160,4 @@ This unit integrates only the package validated in work unit 1.
 - Encoded Opus blocks are byte-for-byte preserved; no audio is re-encoded.
 - Failed repair never loses the recoverable local recording or finalizes a malformed upload.
 - Long recordings are retrieved through valid bounded range responses.
-- The vendored source has traceable provenance, an unambiguous retained license, strict modern TypeScript, resource limits, and regression coverage.
+- The vendored source has traceable provenance, preserved upstream notices, an MIT license for the fork, strict modern TypeScript, resource limits, and regression coverage.
