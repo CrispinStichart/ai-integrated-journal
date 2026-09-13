@@ -46,7 +46,12 @@ This ledger must be updated whenever the vendored implementation changes.
 | Provenance | This file pins the source import, records hashes and exclusions, and preserves the conflicting GitHub and npm license records. Upstream has no equivalent provenance document. |
 | License evidence paths | The GitHub `LICENSE` and published npm `package.json` are stored under `upstream/` with descriptive names. Their contents are unmodified. |
 | Package scaffold | The private `@journal/webm-duration-fix` workspace package adds the repository-standard ESM/NodeNext build, strict type checking, root export, lint/test scripts, and a copied fork-level MIT license. These files have no upstream counterparts. |
-| API boundary | A local typed contract separates platform-neutral WebM byte validation/finalization from the `Blob` adapter. The duration-repair implementation remains deliberately injectable until the upstream source is imported and characterized; no upstream implementation source is imported by this scaffold. |
+| API boundary | A local typed contract separates platform-neutral WebM byte validation/finalization from the `Blob` adapter. The imported baseline remains internal until Task 4 replaces the injectable implementation without changing its characterized behavior. |
+| Source location | The nine pinned implementation files are imported under `packages/webm-duration-fix/src/upstream/`, preserving their upstream directory structure. |
+| ESM isolation | Relative TypeScript imports use explicit `.js` suffixes, the `ebml-block` CommonJS dependency uses a default import, and the browser `buffer` package is addressed as `buffer/index.js` so Node does not substitute its core module. Upstream trailing whitespace and excess final blank lines are normalized for repository checks. These are runtime/build isolation changes; the repair algorithm is unchanged. |
+| Temporary compiler boundary | Each imported source file has a `@ts-nocheck` header, and package/root lint plus formatting exclude `src/upstream`. This deliberately preserves the TypeScript 4.5-era source during characterization; Task 4 removes the quarantine while modernizing incrementally. |
+| Runtime dependencies | The private package pins the four versions declared by upstream: `buffer@6.0.3`, `ebml-block@1.1.2`, `events@3.3.0`, and `int64-buffer@1.0.1`. |
+| Characterization | Synthetic fixture generators, structural assertions, a sanitized regression analogue, semantic baselines, and one golden SHA-256 are recorded in the package tests and `CHARACTERIZATION.md`. |
 
 ## Updating the snapshot
 
