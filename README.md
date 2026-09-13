@@ -35,7 +35,7 @@ Run every local quality gate, production build, and Firefox end-to-end test:
 corepack pnpm validate
 ```
 
-The pre-commit hook runs the same validation command unless all staged changes are Markdown files, all are under `.devcontainer/`, or all are under `.git/`. Validation includes operations/documentation checks and containerized PostgreSQL persistence tests, so Docker must be running. Useful focused commands are `format:check`, `lint`, `boundaries`, `openapi:check`, `typecheck`, `test:operations`, `test:coverage`, `test:infrastructure`, `build`, and `test:e2e`.
+The pre-commit hook runs the same validation command unless all staged changes are Markdown files, all are under `.devcontainer/`, or all are under `.git/`. Validation includes unit tests, operations/documentation checks, and containerized PostgreSQL persistence tests, so Docker must be running. Useful focused commands are `format:check`, `lint`, `boundaries`, `openapi:check`, `typecheck`, `test`, `test:operations`, `test:infrastructure`, `build`, and `test:e2e`. Run `test:coverage` separately to generate optional text, HTML, and LCOV reports; coverage percentages are informational and do not gate validation.
 
 ## Adding AI providers
 

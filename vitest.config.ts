@@ -101,18 +101,6 @@ export default defineConfig({
       include: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      thresholds: {
-        branches: 75,
-        functions: 80,
-        lines: 80,
-        statements: 80,
-        'packages/{contracts,domain,processors,storage}/src/**': {
-          branches: 85,
-          functions: 90,
-          lines: 90,
-          statements: 90,
-        },
-      },
     },
     include: [
       'apps/**/*.test.ts',

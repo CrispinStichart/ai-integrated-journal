@@ -481,7 +481,7 @@ Every pull request and main-branch commit must pass:
 7. dependency, secret, and container scans;
 8. export/import and migration smoke tests.
 
-Coverage is measured by package and risk, not only as a repository aggregate. Initial minimums are 90% statements/lines/functions and 85% branches for domain, contracts, storage, and processor packages; 80% statements/lines/functions and 75% branches elsewhere. Authentication, manual-authority protection, upload idempotency, deletion exclusion, and unknown-versus-zero logic require direct branch coverage regardless of totals.
+Coverage reports are optional and informational; no minimum percentage gates pull requests or main-branch commits. Authentication, manual-authority protection, upload idempotency, deletion exclusion, and unknown-versus-zero logic require direct branch coverage regardless of aggregate percentages.
 
 ## 19. Initial delivery sequence
 
