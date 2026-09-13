@@ -1,4 +1,8 @@
-import { finalizeWebmBytes, type WebmContainerFinalizer } from './container.js';
+import {
+  assertInputSize,
+  finalizeWebmBytes,
+  type FinalizeWebmOptions,
+} from './container.js';
 
 export interface FinalizedWebmBlob {
   readonly blob: Blob;
@@ -8,11 +12,12 @@ export interface FinalizedWebmBlob {
 /** Browser-facing adaptation around the platform-neutral byte finalizer. */
 export async function finalizeWebmBlob(
   input: Blob,
-  finalizeContainer: WebmContainerFinalizer,
+  options: FinalizeWebmOptions = {},
 ): Promise<FinalizedWebmBlob> {
+  assertInputSize(input.size, options);
   const result = await finalizeWebmBytes(
     new Uint8Array(await input.arrayBuffer()),
-    finalizeContainer,
+    options,
   );
   return {
     blob: new Blob([Uint8Array.from(result.bytes)], {

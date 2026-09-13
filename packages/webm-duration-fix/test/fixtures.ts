@@ -24,6 +24,7 @@ export interface Fixture {
   codecPrivate: Uint8Array;
   expectedDuration: number;
   payloads: Uint8Array[];
+  preservedElements?: Uint8Array[];
 }
 
 interface ClusterFixture {
@@ -107,14 +108,20 @@ function simpleBlock(timecode: number, payload: Uint8Array): Uint8Array {
   return element(IDS.simpleBlock, concat(header, payload));
 }
 
-function cluster(fixture: ClusterFixture): Uint8Array {
-  return master(
-    IDS.cluster,
+function cluster(fixture: ClusterFixture, unknownSize: boolean): Uint8Array {
+  const data = concat(
     element(IDS.timecode, unsigned(fixture.timecode)),
     ...fixture.payloads.map((payload, index) =>
       simpleBlock(fixture.blockTimecodes[index] ?? 0, payload),
     ),
   );
+  return unknownSize
+    ? concat(
+        id(IDS.cluster),
+        Uint8Array.from([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
+        data,
+      )
+    : element(IDS.cluster, data);
 }
 
 function generatedPayload(seed: number, length: number): Uint8Array {
@@ -128,6 +135,8 @@ function makeStreamingFixture(options: {
   clusters: ClusterFixture[];
   codecPrivateLength?: number;
   duration?: number;
+  preserveUnknownElements?: boolean;
+  unknownClusterSizes?: boolean;
 }): Fixture {
   const codecPrivate = generatedPayload(7, options.codecPrivateLength ?? 19);
   const header = master(IDS.ebml, element(IDS.docType, ascii('webm')));
@@ -135,6 +144,9 @@ function makeStreamingFixture(options: {
   if (options.duration !== undefined) {
     infoChildren.push(element(IDS.duration, float64(options.duration)));
   }
+  const infoExtension = element([0x4a, 0xbd], generatedPayload(22, 9));
+  if (options.preserveUnknownElements === true)
+    infoChildren.push(infoExtension);
   const info = master(IDS.info, ...infoChildren);
   const tracks = master(
     IDS.tracks,
@@ -151,12 +163,16 @@ function makeStreamingFixture(options: {
       ),
     ),
   );
-  const clusters = options.clusters.map(cluster);
+  const clusters = options.clusters.map((value) =>
+    cluster(value, options.unknownClusterSizes === true),
+  );
+  const levelOneExtension = element([0x4a, 0xbc], generatedPayload(23, 4));
   const segment = concat(
     id(IDS.segment),
     Uint8Array.from([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
     info,
     tracks,
+    ...(options.preserveUnknownElements === true ? [levelOneExtension] : []),
     ...clusters,
   );
   const lastCluster = options.clusters.at(-1);
@@ -172,7 +188,41 @@ function makeStreamingFixture(options: {
       finalTimecode +
       (finalTimecode - previousTimecode),
     payloads: options.clusters.flatMap(({ payloads }) => payloads),
+    ...(options.preserveUnknownElements === true
+      ? { preservedElements: [infoExtension, levelOneExtension] }
+      : {}),
   };
+}
+
+export function unknownElementsFixture(): Fixture {
+  return makeStreamingFixture({
+    clusters: [
+      {
+        blockTimecodes: [0, 20],
+        payloads: [generatedPayload(20, 10), generatedPayload(21, 11)],
+        timecode: 0,
+      },
+    ],
+    preserveUnknownElements: true,
+  });
+}
+
+export function unknownSizeClustersFixture(): Fixture {
+  return makeStreamingFixture({
+    clusters: [
+      {
+        blockTimecodes: [0, 20],
+        payloads: [generatedPayload(24, 10), generatedPayload(25, 11)],
+        timecode: 0,
+      },
+      {
+        blockTimecodes: [0, 20],
+        payloads: [generatedPayload(26, 12), generatedPayload(27, 13)],
+        timecode: 100,
+      },
+    ],
+    unknownClusterSizes: true,
+  });
 }
 
 export function missingDurationFixture(): Fixture {

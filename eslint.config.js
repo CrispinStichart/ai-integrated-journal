@@ -12,7 +12,6 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/playwright-report/**',
-      'packages/webm-duration-fix/src/upstream/**',
       '**/test-results/**',
       'spikes/**',
     ],

@@ -1,15 +1,16 @@
-import { createHash } from 'node:crypto';
-
 import { describe, expect, it } from 'vitest';
 
-import fixWebmDuration from '../src/upstream/index.js';
-import Decoder from '../src/upstream/ebml/EBMLDecoder.js';
-import { ebmlBlock } from '../src/upstream/ebml/tools.js';
+import { finalizeWebmBytes, TruncatedDataError } from '../src/index.js';
+import { decodeUnsigned } from '../src/bytes.js';
+import { WEBM_IDS, type EbmlElement } from '../src/ebml.js';
+import { parseWebm } from '../src/parser.js';
 import {
   missingDurationFixture,
   multiByteSizesFixture,
   multipleClustersFixture,
   sanitizedRegressionFixture,
+  unknownElementsFixture,
+  unknownSizeClustersFixture,
   type Fixture,
 } from './fixtures.js';
 
@@ -23,27 +24,86 @@ interface Element {
   value?: number | string;
 }
 
-const WEBM_TYPE = 'audio/webm;codecs=opus';
+const NAMES = new Map<number, string>([
+  [WEBM_IDS.segment, 'Segment'],
+  [WEBM_IDS.info, 'Info'],
+  [WEBM_IDS.tracks, 'Tracks'],
+  [WEBM_IDS.cluster, 'Cluster'],
+  [WEBM_IDS.duration, 'Duration'],
+  [WEBM_IDS.seekHead, 'SeekHead'],
+  [WEBM_IDS.seek, 'Seek'],
+  [WEBM_IDS.seekId, 'SeekID'],
+  [WEBM_IDS.seekPosition, 'SeekPosition'],
+  [WEBM_IDS.cues, 'Cues'],
+  [WEBM_IDS.cuePoint, 'CuePoint'],
+  [WEBM_IDS.cueTrackPositions, 'CueTrackPositions'],
+  [WEBM_IDS.cueClusterPosition, 'CueClusterPosition'],
+  [WEBM_IDS.cueTime, 'CueTime'],
+  [WEBM_IDS.cueTrack, 'CueTrack'],
+  [WEBM_IDS.timecode, 'Timecode'],
+  [WEBM_IDS.simpleBlock, 'SimpleBlock'],
+  [0x86, 'CodecID'],
+  [0x63a2, 'CodecPrivate'],
+  [0xb5, 'SamplingFrequency'],
+  [0x9f, 'Channels'],
+]);
+
+const UNSIGNED_IDS = new Set<number>([
+  WEBM_IDS.seekPosition,
+  WEBM_IDS.cueClusterPosition,
+  WEBM_IDS.cueTime,
+  WEBM_IDS.cueTrack,
+  WEBM_IDS.timecode,
+  0x9f,
+]);
+
+function valueOf(element: EbmlElement): number | string | undefined {
+  if (UNSIGNED_IDS.has(element.id)) return decodeUnsigned(element.data);
+  if (element.id === WEBM_IDS.duration) {
+    return new DataView(
+      element.data.buffer,
+      element.data.byteOffset,
+      element.data.byteLength,
+    ).getFloat64(0);
+  }
+  if (element.id === 0x86) return new TextDecoder('ascii').decode(element.data);
+  if (element.id === 0xb5) {
+    return new DataView(
+      element.data.buffer,
+      element.data.byteOffset,
+      element.data.byteLength,
+    ).getFloat64(0);
+  }
+  return undefined;
+}
+
+function flatten(element: EbmlElement, output: Element[]): void {
+  const value = valueOf(element);
+  const item: Element = {
+    data: element.data,
+    dataStart: element.dataStart,
+    name: NAMES.get(element.id) ?? `0x${element.id.toString(16)}`,
+    tagStart: element.tagStart,
+    unknownSize: element.unknownSize,
+    ...(value === undefined ? {} : { value }),
+  };
+  output.push(item);
+  if (element.children !== undefined) {
+    for (const child of element.children) flatten(child, output);
+    output.push({ ...item, isEnd: true });
+  }
+}
 
 function parse(bytes: Uint8Array): Element[] {
-  return new Decoder().decode(
-    bytes.buffer.slice(
-      bytes.byteOffset,
-      bytes.byteOffset + bytes.byteLength,
-    ) as ArrayBuffer,
-  ) as Element[];
+  const parsed = parseWebm(bytes);
+  const output: Element[] = [];
+  flatten(parsed.header, output);
+  flatten(parsed.segment, output);
+  return output;
 }
 
 async function repair(bytes: Uint8Array): Promise<Uint8Array> {
-  const input = bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  ) as ArrayBuffer;
-  const repaired = await fixWebmDuration(
-    new Blob([input], { type: WEBM_TYPE }),
-  );
-  expect(repaired.type).toBe(WEBM_TYPE);
-  return new Uint8Array(await repaired.arrayBuffer());
+  return (await finalizeWebmBytes(bytes)).bytes;
 }
 
 function starts(elements: Element[], name: string): Element[] {
@@ -76,11 +136,8 @@ function blockPayloads(elements: Element[]): Uint8Array[] {
     if (element.data === undefined) {
       throw new Error('SimpleBlock was decoded without data.');
     }
-    const frame = ebmlBlock(Buffer.from(element.data)).frames[0];
-    if (frame === undefined) {
-      throw new Error('SimpleBlock was decoded without a frame.');
-    }
-    return Uint8Array.from(frame);
+    const trackLength = Math.clz32(element.data[0] ?? 0) - 24 + 1;
+    return element.data.slice(trackLength + 3);
   });
 }
 
@@ -92,6 +149,26 @@ function assertBytesEqual(
   actual.forEach((bytes, index) => {
     expect(bytes).toEqual(expected[index]);
   });
+}
+
+function containsBytes(haystack: Uint8Array, needle: Uint8Array): boolean {
+  return haystack.some((_, offset) =>
+    needle.every((byte, index) => haystack[offset + index] === byte),
+  );
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join(
+    '',
+  );
+}
+
+async function sha256(bytes: Uint8Array): Promise<string> {
+  return bytesToHex(
+    new Uint8Array(
+      await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)),
+    ),
+  );
 }
 
 function assertPreservedMetadata(
@@ -134,7 +211,7 @@ function assertSeekReferences(elements: Element[]): void {
   expect(seekIds).toHaveLength(3);
   expect(seekPositions).toHaveLength(3);
   seekIds.forEach((seekId, index) => {
-    const hex = Buffer.from(seekId.data ?? []).toString('hex');
+    const hex = bytesToHex(seekId.data ?? new Uint8Array());
     const target = namesById.get(hex);
     expect(target).toBeDefined();
     expect(seekPositions[index]?.value).toBe(actualStarts.get(target ?? ''));
@@ -198,6 +275,20 @@ describe('webm-duration-fix v1.0.4 upstream characterization', () => {
     await assertCharacterizedRepair(fixture);
   });
 
+  it('preserves opaque metadata elements byte-for-byte', async () => {
+    const fixture = unknownElementsFixture();
+    const output = await assertCharacterizedRepair(fixture);
+    for (const element of fixture.preservedElements ?? []) {
+      expect(containsBytes(output, element)).toBe(true);
+    }
+  });
+
+  it('recognizes consecutive unknown-size streaming Clusters', async () => {
+    const fixture = unknownSizeClustersFixture();
+    const output = await assertCharacterizedRepair(fixture);
+    expect(starts(parse(output), 'Cluster')).toHaveLength(2);
+  });
+
   it('matches the sanitized 20,818-timecode regression semantics', async () => {
     const fixture = sanitizedRegressionFixture();
     const input = parse(fixture.bytes);
@@ -206,7 +297,7 @@ describe('webm-duration-fix v1.0.4 upstream characterization', () => {
     expect(starts(input, 'Cues')).toHaveLength(0);
 
     const output = await assertCharacterizedRepair(fixture);
-    expect(createHash('sha256').update(output).digest('hex')).toBe(
+    expect(await sha256(output)).toBe(
       'e5b1b1999272d04493de28326b30571ad50f78c6988db596d19036f9776b937d',
     );
   });
@@ -219,15 +310,13 @@ describe('webm-duration-fix v1.0.4 upstream characterization', () => {
     expect(twice).toEqual(alreadyFinalizedFixture);
   });
 
-  it('rejects malformed input but currently rewrites a truncated stream', async () => {
-    await expect(repair(Uint8Array.of(0))).rejects.toThrow(
-      'Unrepresentable length',
-    );
+  it('rejects malformed and truncated streams explicitly', async () => {
+    await expect(repair(Uint8Array.of(0))).rejects.toMatchObject({
+      code: 'invalid-ebml',
+    });
 
     const valid = missingDurationFixture().bytes;
     const truncated = valid.slice(0, -8);
-    const rewritten = await repair(truncated);
-    expect(blockPayloads(parse(rewritten))).toHaveLength(1);
-    expect(rewritten.slice(-12)).toEqual(truncated.slice(-12));
+    await expect(repair(truncated)).rejects.toBeInstanceOf(TruncatedDataError);
   });
 });

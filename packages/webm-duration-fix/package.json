@@ -16,15 +16,9 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "lint": "eslint src test --ignore-pattern src/upstream --max-warnings 0",
+    "lint": "eslint src test --max-warnings 0",
     "test": "vitest run --root ../.. packages/webm-duration-fix/test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
-  "dependencies": {
-    "buffer": "6.0.3",
-    "ebml-block": "1.1.2",
-    "events": "3.3.0",
-    "int64-buffer": "1.0.1"
   },
   "license": "MIT"
 }
