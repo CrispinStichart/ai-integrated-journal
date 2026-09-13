@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 
-import type { RecordingResource } from '@journal/contracts';
+import {
+  MAX_AUDIO_RANGE_BYTES,
+  type RecordingResource,
+} from '@journal/contracts';
 import { silentLogger } from '@journal/observability';
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
@@ -98,6 +101,31 @@ function app(recordingService: RecordingService) {
     logger: silentLogger,
     recordingService,
   });
+}
+
+function audioService(byteSize: number): RecordingService {
+  const recordingService = service();
+  const audioRecording = {
+    ...durableRecording,
+    byteSize: String(byteSize),
+  };
+  vi.mocked(recordingService.getUpload).mockResolvedValue({
+    recording: audioRecording,
+    acceptedIndexes: [0],
+  });
+  vi.mocked(recordingService.openAudio).mockImplementation(
+    async (_ownerId, _recordingId, range) => ({
+      recording: audioRecording,
+      stream: new ReadableStream({
+        start(controller) {
+          const length = Number((range.endExclusive ?? 0n) - range.start);
+          if (length > 0) controller.enqueue(new Uint8Array(length));
+          controller.close();
+        },
+      }),
+    }),
+  );
+  return recordingService;
 }
 
 const createBody = {
@@ -283,12 +311,146 @@ describe('Recording upload API', () => {
     );
   });
 
-  it('[CAP-005][RET-002] serves only bounded byte ranges with playback metadata', async () => {
-    const recordingService = service();
-    vi.mocked(recordingService.getUpload).mockResolvedValueOnce({
-      recording: durableRecording,
-      acceptedIndexes: [0],
+  it('[CAP-005][RET-002] serves an empty recording and a recording exactly at the response limit as complete representations', async () => {
+    const emptyService = audioService(0);
+    const empty = await request(app(emptyService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .expect(200);
+    expect(empty.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-length': '0',
     });
+    expect(empty.headers['content-range']).toBeUndefined();
+    expect(emptyService.openAudio).toHaveBeenCalledWith(
+      OWNER_ID,
+      RECORDING_ID,
+      { start: 0n, endExclusive: 0n },
+    );
+
+    const exactService = audioService(MAX_AUDIO_RANGE_BYTES);
+    const exact = await request(app(exactService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .expect(200);
+    expect(exact.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-length': String(MAX_AUDIO_RANGE_BYTES),
+    });
+    expect(exact.headers['content-range']).toBeUndefined();
+  });
+
+  it('[CAP-005][RET-002] bounds a no-range response one byte over the limit and supports resuming to the declared total', async () => {
+    const total = MAX_AUDIO_RANGE_BYTES + 1;
+    const recordingService = audioService(total);
+    const first = await request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .expect(206);
+    expect(first.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-length': String(MAX_AUDIO_RANGE_BYTES),
+      'content-range': `bytes 0-${String(MAX_AUDIO_RANGE_BYTES - 1)}/${String(total)}`,
+    });
+
+    const second = await request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .set('range', `bytes=${String(MAX_AUDIO_RANGE_BYTES)}-`)
+      .expect(206);
+    expect(second.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-length': '1',
+      'content-range': `bytes ${String(MAX_AUDIO_RANGE_BYTES)}-${String(MAX_AUDIO_RANGE_BYTES)}/${String(total)}`,
+    });
+    expect(recordingService.openAudio).toHaveBeenNthCalledWith(
+      1,
+      OWNER_ID,
+      RECORDING_ID,
+      { start: 0n, endExclusive: BigInt(MAX_AUDIO_RANGE_BYTES) },
+    );
+    expect(recordingService.openAudio).toHaveBeenNthCalledWith(
+      2,
+      OWNER_ID,
+      RECORDING_ID,
+      {
+        start: BigInt(MAX_AUDIO_RANGE_BYTES),
+        endExclusive: BigInt(total),
+      },
+    );
+    expect(first.body).toHaveLength(MAX_AUDIO_RANGE_BYTES);
+    expect(second.body).toHaveLength(1);
+  });
+
+  it('[CAP-005][RET-002] caps open-ended ranges and preserves explicit and suffix range semantics', async () => {
+    const total = MAX_AUDIO_RANGE_BYTES * 2 + 10;
+    const recordingService = audioService(total);
+    const openEnded = await request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .set('range', 'bytes=1-')
+      .expect(206);
+    expect(openEnded.headers).toMatchObject({
+      'content-length': String(MAX_AUDIO_RANGE_BYTES),
+      'content-range': `bytes 1-${String(MAX_AUDIO_RANGE_BYTES)}/${String(total)}`,
+    });
+
+    const suffix = await request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .set('range', 'bytes=-5')
+      .expect(206);
+    expect(suffix.headers).toMatchObject({
+      'accept-ranges': 'bytes',
+      'content-length': '5',
+      'content-range': `bytes ${String(total - 5)}-${String(total - 1)}/${String(total)}`,
+    });
+
+    const explicit = await request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .set('range', 'bytes=2-4')
+      .expect(206);
+    expect(explicit.headers).toMatchObject({
+      'content-length': '3',
+      'content-range': `bytes 2-4/${String(total)}`,
+    });
+  });
+
+  it('[CAP-005][RET-002] rejects invalid, multi-part, and oversized explicit ranges with the declared total', async () => {
+    const total = MAX_AUDIO_RANGE_BYTES + 1;
+    const recordingService = audioService(total);
+    for (const value of [
+      `bytes=${String(total)}-`,
+      'bytes=5-4',
+      'bytes=0-1,4-5',
+      `bytes=0-${String(MAX_AUDIO_RANGE_BYTES)}`,
+    ]) {
+      const invalid = await request(app(recordingService))
+        .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+        .set('authorization', 'Bearer valid')
+        .set('range', value)
+        .expect(416);
+      expect(invalid.headers).toMatchObject({
+        'accept-ranges': 'bytes',
+        'content-range': `bytes */${String(total)}`,
+      });
+      expect(invalid.body.code).toBe('range_not_satisfiable');
+    }
+    expect(recordingService.openAudio).not.toHaveBeenCalled();
+
+    const emptyService = audioService(0);
+    const emptyRange = await request(app(emptyService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid')
+      .set('range', 'bytes=0-0')
+      .expect(416);
+    expect(emptyRange.headers['content-range']).toBe('bytes */0');
+    expect(emptyService.openAudio).not.toHaveBeenCalled();
+  });
+
+  it('[CAP-005][RET-002] serves an explicit bounded range with playback metadata', async () => {
+    const recordingService = audioService(5);
     const response = await request(app(recordingService))
       .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
       .set('authorization', 'Bearer valid')
@@ -297,23 +459,19 @@ describe('Recording upload API', () => {
       .expect(206);
     expect(response.headers['content-range']).toBe('bytes 0-4/5');
     expect(response.headers['accept-ranges']).toBe('bytes');
-    expect(Buffer.from(response.body).toString()).toBe('audio');
+    expect(response.body).toHaveLength(5);
     expect(recordingService.openAudio).toHaveBeenCalledWith(
       OWNER_ID,
       RECORDING_ID,
       { start: 0n, endExclusive: 5n },
     );
-
-    vi.mocked(recordingService.getUpload).mockResolvedValueOnce({
-      recording: durableRecording,
-      acceptedIndexes: [0],
-    });
     const unsatisfiable = await request(app(recordingService))
       .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
       .set('authorization', 'Bearer valid')
       .set('range', 'bytes=10-20')
       .expect(416);
     expect(unsatisfiable.body.code).toBe('range_not_satisfiable');
+    expect(unsatisfiable.headers['content-range']).toBe('bytes */5');
   });
 
   it('[RET-004][RET-006][SEC-008] soft-deletes and restores audio independently', async () => {

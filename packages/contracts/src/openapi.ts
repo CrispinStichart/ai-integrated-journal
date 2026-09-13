@@ -549,11 +549,29 @@ export function createOpenApiDocument(): Record<string, unknown> {
             },
           ],
           responses: {
+            '200': {
+              description:
+                'Complete audio representation when it fits in one bounded response',
+              headers: {
+                'Accept-Ranges': { schema: { const: 'bytes' } },
+                'Content-Length': { schema: { type: 'integer' } },
+              },
+              content: {
+                'audio/*': {
+                  schema: {
+                    type: 'string',
+                    contentMediaType: 'application/octet-stream',
+                  },
+                },
+              },
+            },
             '206': {
-              description: 'Bounded audio byte range',
+              description:
+                'Bounded audio byte range. If Content-Range does not end at the declared total, request the next range beginning at the prior end plus one.',
               headers: {
                 'Accept-Ranges': { schema: { const: 'bytes' } },
                 'Content-Range': { schema: { type: 'string' } },
+                'Content-Length': { schema: { type: 'integer' } },
               },
               content: {
                 'audio/*': {
@@ -565,7 +583,13 @@ export function createOpenApiDocument(): Record<string, unknown> {
               },
             },
             '410': problemResponse('Audio recoverably deleted'),
-            '416': problemResponse('Range not satisfiable'),
+            '416': {
+              ...problemResponse('Range not satisfiable'),
+              headers: {
+                'Accept-Ranges': { schema: { const: 'bytes' } },
+                'Content-Range': { schema: { type: 'string' } },
+              },
+            },
           },
         },
         delete: {

@@ -1070,8 +1070,31 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Complete audio representation when it fits in one bounded response",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "audio/*": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream"
+                }
+              }
+            }
+          },
           "206": {
-            "description": "Bounded audio byte range",
+            "description": "Bounded audio byte range. If Content-Range does not end at the declared total, request the next range beginning at the prior end plus one.",
             "headers": {
               "Accept-Ranges": {
                 "schema": {
@@ -1081,6 +1104,11 @@
               "Content-Range": {
                 "schema": {
                   "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
                 }
               }
             },
@@ -1109,6 +1137,18 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                }
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

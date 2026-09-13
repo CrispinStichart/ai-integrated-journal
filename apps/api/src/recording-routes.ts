@@ -122,7 +122,6 @@ function parseRange(
   value: string | undefined,
   total: bigint,
 ): { start: bigint; endExclusive: bigint } {
-  if (total === 0n) return { start: 0n, endExclusive: 0n };
   if (value === undefined) {
     const endExclusive =
       total < BigInt(MAX_AUDIO_RANGE_BYTES)
@@ -130,6 +129,7 @@ function parseRange(
         : BigInt(MAX_AUDIO_RANGE_BYTES);
     return { start: 0n, endExclusive };
   }
+  if (total === 0n) throw new BlobRangeNotSatisfiableError();
   const match = /^bytes=(\d*)-(\d*)$/.exec(value);
   if (match === null || (match[1] === '' && match[2] === ''))
     throw new BlobRangeNotSatisfiableError();
@@ -142,7 +142,10 @@ function parseRange(
     endExclusive = total;
   } else {
     start = BigInt(match[1] ?? '0');
-    const inclusiveEnd = match[2] === '' ? total - 1n : BigInt(match[2] ?? '0');
+    const inclusiveEnd =
+      match[2] === ''
+        ? start + BigInt(MAX_AUDIO_RANGE_BYTES) - 1n
+        : BigInt(match[2] ?? '0');
     if (inclusiveEnd < start || start >= total)
       throw new BlobRangeNotSatisfiableError();
     endExclusive = inclusiveEnd >= total ? total : inclusiveEnd + 1n;
@@ -416,19 +419,30 @@ export function registerRecordingRoutes(
         status.recording.byteSize === undefined
           ? 0n
           : BigInt(status.recording.byteSize);
-      const range = parseRange(request.get('range'), total);
+      response.set('accept-ranges', 'bytes');
+      let range;
+      try {
+        range = parseRange(request.get('range'), total);
+      } catch (error) {
+        if (error instanceof BlobRangeNotSatisfiableError)
+          response.set('content-range', `bytes */${String(total)}`);
+        throw error;
+      }
       const opened = await service.openAudio(owner.ownerId, params.id, range);
-      response.status(total === 0n ? 200 : 206);
+      const isPartial =
+        request.get('range') !== undefined ||
+        range.start !== 0n ||
+        range.endExclusive !== total;
+      response.status(isPartial ? 206 : 200);
       response.set({
-        'accept-ranges': 'bytes',
         'cache-control': 'private, no-store',
         'content-length': String(range.endExclusive - range.start),
         'content-type': opened.recording.mimeType,
-        ...(total === 0n
-          ? {}
-          : {
+        ...(isPartial
+          ? {
               'content-range': `bytes ${String(range.start)}-${String(range.endExclusive - 1n)}/${String(total)}`,
-            }),
+            }
+          : {}),
       });
       for await (const bytes of opened.stream) {
         if (!response.write(bytes)) await once(response, 'drain');
@@ -533,7 +547,8 @@ export function sendRecordingError(
     return true;
   }
   if (error instanceof BlobRangeNotSatisfiableError) {
-    response.set('content-range', 'bytes */*');
+    if (!response.hasHeader('content-range'))
+      response.set('content-range', 'bytes */*');
     sendProblem(request, response, {
       code: 'range_not_satisfiable',
       status: 416,
