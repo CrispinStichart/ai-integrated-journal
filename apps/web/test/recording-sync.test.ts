@@ -714,10 +714,22 @@ describe('recording synchronization', () => {
     expect(dependencies.upload).not.toHaveBeenCalled();
     expect(dependencies.finalize).toHaveBeenCalledWith(
       RECORDING_ID,
-      expect.not.objectContaining({ durationMilliseconds: expect.anything() }),
+      expect.objectContaining({
+        chunkCount: '2',
+        totalBytes: '6',
+        finalSha256: hex(encoder.encode('onetwo')),
+        manifestSha256: hex(
+          encoder.encode(
+            `0:3:${hex(encoder.encode('one'))}\n1:3:${hex(encoder.encode('two'))}\n`,
+          ),
+        ),
+      }),
       'csrf-token',
       expect.anything(),
     );
+    expect(
+      vi.mocked(dependencies.finalize).mock.calls[0]?.[1],
+    ).not.toHaveProperty('durationMilliseconds');
   });
 
   it('[CAP-003][CAP-006] resumes prepared and retryable-failed server states but does nothing offline', async () => {

@@ -31,7 +31,7 @@
     "test:pre-commit": "node --test scripts/pre-commit.test.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "corepack pnpm --filter @journal/web build && playwright test",
+    "test:e2e": "corepack pnpm --filter @journal/webm-duration-fix build && corepack pnpm --filter @journal/web build && playwright test",
     "test:infrastructure": "vitest run --config vitest.infrastructure.config.ts",
     "test:operations": "node --test scripts/operations.test.mjs",
     "typecheck": "corepack pnpm -r --parallel run typecheck",

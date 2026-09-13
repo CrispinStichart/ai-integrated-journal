@@ -15,9 +15,19 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'chromium',
+      testMatch: /audio-playback\.spec\.ts/u,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'firefox',
       testIgnore: /accessibility-mobile\.spec\.ts/u,
       use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      testMatch: /audio-playback\.spec\.ts/u,
+      use: { ...devices['Desktop Safari'] },
     },
     {
       name: 'firefox-mobile-viewport',

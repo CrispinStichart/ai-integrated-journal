@@ -138,6 +138,8 @@ This unit integrates only the package validated in work unit 1.
 
 ### 5. Add integration and browser coverage
 
+> Scope note (2026-09-13): Work unit 2, task 2 was canceled. The dependent already-durable zero-duration playback case is therefore intentionally omitted from task 5. Coverage here must not add ephemeral full-download repair or object URL helpers; the remaining new-recording, pass-through, sync, range, and browser cases remain in scope.
+
 - Unit-test WebM detection, pass-through behavior, deterministic re-chunking, duration selection, cleanup, cancellation, and error mapping.
 - Extend sync tests to prove finalized bytes and hashes are uploaded, original checkpoints remain until durable confirmation, retries are idempotent, and Ogg/default formats are unchanged.
 - Extend API route tests for bounded multi-range retrieval and correct HTTP status and headers.
