@@ -157,6 +157,7 @@ describe('recording browser API', () => {
     expect(recordingAudioUrl(IDS.recording)).toBe(
       `/api/v1/recordings/${IDS.recording}/audio`,
     );
+    expect(recordingAudioUrl(IDS.recording)).not.toMatch(/^blob:/);
   });
 
   it('[CAP-006] exposes stable problem detail and fallback errors for safe retry decisions', async () => {
@@ -209,5 +210,37 @@ describe('recording browser API', () => {
       status: 503,
       code: 'unknown',
     });
+  });
+
+  it('[CAP-003][CAP-006][SEC-001] forwards cancellation without changing authenticated integrity headers', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = uploadRecordingChunk(
+      IDS.recording,
+      2,
+      CHECKSUM,
+      new Uint8Array([4, 5, 6]).buffer,
+      'csrf-token',
+      controller.signal,
+    );
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/recordings/${IDS.recording}/chunks/2`,
+      expect.objectContaining({
+        credentials: 'same-origin',
+        signal: controller.signal,
+        headers: expect.objectContaining({
+          'idempotency-key': `chunk-${IDS.recording}-2`,
+          'x-content-sha256': CHECKSUM,
+          'x-csrf-token': 'csrf-token',
+        }),
+      }),
+    );
   });
 });

@@ -4,7 +4,10 @@ import {
   type CreateRecordingRequest,
   type RecordingResource,
 } from '@journal/contracts';
-import { finalizeWebmBytes } from '@journal/webm-duration-fix';
+import {
+  finalizeWebmBytes,
+  MAX_WEBM_INPUT_BYTES,
+} from '@journal/webm-duration-fix';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { readonly, ref } from 'vue';
@@ -62,6 +65,15 @@ class RecordingFinalizationError extends Error {
   }
 }
 
+class RecordingFinalizationSizeError extends Error {
+  constructor() {
+    super(
+      `This WebM is too large to finalize safely in this browser (maximum ${String(MAX_WEBM_INPUT_BYTES / 1024 / 1024)} MiB). Your local recording is still available.`,
+    );
+    this.name = 'RecordingFinalizationSizeError';
+  }
+}
+
 export interface RecordingSyncDependencies {
   readonly storage: JournalIndexedDb;
   readonly now: () => Date;
@@ -78,10 +90,12 @@ export interface RecordingSyncDependencies {
   readonly create: (
     input: CreateRecordingRequest,
     csrfToken: string,
+    signal?: AbortSignal,
   ) => Promise<RecordingResource>;
   readonly status: (
     recordingId: string,
     after?: number,
+    signal?: AbortSignal,
   ) => Promise<UploadStatus>;
   readonly upload: typeof uploadRecordingChunk;
   readonly finalize: typeof finalizeRecording;
@@ -137,6 +151,13 @@ function retryInformation(error: unknown): {
       code: 'audio_finalization_failed',
       message: error.message,
       safe: true,
+    };
+  }
+  if (error instanceof RecordingFinalizationSizeError) {
+    return {
+      code: 'audio_finalization_too_large',
+      message: error.message,
+      safe: false,
     };
   }
   if (error instanceof RecordingApiError) {
@@ -206,6 +227,7 @@ export class RecordingSyncController {
   #ownerId: string | undefined;
   #csrfToken: string | undefined;
   #syncing: Promise<void> | undefined;
+  #sessionAbort = new AbortController();
 
   readonly recordings = readonly(this.#recordings);
 
@@ -214,9 +236,32 @@ export class RecordingSyncController {
   }
 
   async initialize(ownerId: string, csrfToken: string): Promise<void> {
+    if (
+      this.#ownerId !== undefined &&
+      (this.#ownerId !== ownerId || this.#csrfToken !== csrfToken)
+    )
+      await this.clearSession();
     this.#ownerId = ownerId;
     this.#csrfToken = csrfToken;
+    if (this.#sessionAbort.signal.aborted)
+      this.#sessionAbort = new AbortController();
     await this.refresh();
+  }
+
+  /** Stops in-flight plaintext work and requests without deleting checkpoints. */
+  async cancel(): Promise<void> {
+    this.#sessionAbort.abort();
+    await this.#syncing;
+    if (this.#ownerId !== undefined) this.#sessionAbort = new AbortController();
+  }
+
+  /** Cancels stale authenticated work before browser storage or auth is cleared. */
+  async clearSession(): Promise<void> {
+    this.#ownerId = undefined;
+    this.#csrfToken = undefined;
+    this.#sessionAbort.abort();
+    await this.#syncing;
+    this.#recordings.value = [];
   }
 
   async refresh(): Promise<void> {
@@ -234,13 +279,15 @@ export class RecordingSyncController {
     )
       return;
     if (this.#syncing !== undefined) return this.#syncing;
-    this.#syncing = this.#resumePending().finally(() => {
+    const signal = this.#sessionAbort.signal;
+    this.#syncing = this.#resumePending(signal).finally(() => {
       this.#syncing = undefined;
     });
     return this.#syncing;
   }
 
   async retry(recordingId: string): Promise<void> {
+    await this.cancel();
     const recording = await this.#requireOwned(recordingId);
     if (recording.state === 'failed' && recording.retrySafe !== true)
       throw new Error(
@@ -256,7 +303,7 @@ export class RecordingSyncController {
     Reflect.deleteProperty(updated, 'syncErrorMessage');
     await this.#dependencies.storage.putRecording(updated);
     await this.refresh();
-    await this.#syncOne(recordingId);
+    await this.#syncOne(recordingId, this.#sessionAbort.signal);
   }
 
   async move(recordingId: string, journalDate: string): Promise<void> {
@@ -285,8 +332,9 @@ export class RecordingSyncController {
     await this.refresh();
   }
 
-  async #resumePending(): Promise<void> {
+  async #resumePending(signal: AbortSignal): Promise<void> {
     await this.refresh();
+    signal.throwIfAborted();
     const pending = this.#recordings.value.filter(
       (recording) =>
         (recording.state === 'saved_locally' ||
@@ -301,7 +349,8 @@ export class RecordingSyncController {
       while (cursor < pending.length) {
         const recording = pending[cursor];
         cursor += 1;
-        if (recording !== undefined) await this.#syncOne(recording.recordingId);
+        if (recording !== undefined)
+          await this.#syncOne(recording.recordingId, signal);
       }
     };
     await Promise.all(
@@ -313,11 +362,12 @@ export class RecordingSyncController {
     await this.refresh();
   }
 
-  async #syncOne(recordingId: string): Promise<void> {
+  async #syncOne(recordingId: string, signal: AbortSignal): Promise<void> {
     const csrfToken = this.#csrfToken;
     if (csrfToken === undefined || !this.#dependencies.online()) return;
     let recording = await this.#requireOwned(recordingId);
     try {
+      signal.throwIfAborted();
       recording = await this.#save({
         ...recording,
         state: 'uploading',
@@ -327,7 +377,9 @@ export class RecordingSyncController {
         const remote = await this.#dependencies.create(
           createRequest(recording),
           csrfToken,
+          signal,
         );
+        signal.throwIfAborted();
         recording = await this.#save({
           ...recording,
           serverCreated: true,
@@ -335,29 +387,44 @@ export class RecordingSyncController {
         });
       }
 
-      const status = await this.#dependencies.status(recordingId);
+      const status = await this.#dependencies.status(
+        recordingId,
+        undefined,
+        signal,
+      );
+      signal.throwIfAborted();
       recording = await this.#save({
         ...recording,
         serverCreated: true,
         serverPersistenceState: status.recording.persistenceState,
       });
+      signal.throwIfAborted();
       if (status.recording.persistenceState === 'durable') {
-        await this.#confirmDurable(recordingId);
+        await this.#confirmDurable(recordingId, signal);
         return;
       }
       if (status.recording.persistenceState === 'prepared') {
         const retried = await this.#dependencies.retryFinalization(
           recordingId,
           csrfToken,
+          signal,
         );
+        signal.throwIfAborted();
         if (retried.persistenceState !== 'durable')
           throw new Error('Durable audio confirmation was not received.');
-        await this.#confirmDurable(recordingId);
+        await this.#confirmDurable(recordingId, signal);
         return;
       }
 
-      const representation = await this.#prepareUpload(recording);
-      await this.#uploadMissing(recording, representation, status, csrfToken);
+      const representation = await this.#prepareUpload(recording, signal);
+      signal.throwIfAborted();
+      await this.#uploadMissing(
+        recording,
+        representation,
+        status,
+        csrfToken,
+        signal,
+      );
       const finalized = await this.#dependencies.finalize(
         recordingId,
         {
@@ -371,11 +438,14 @@ export class RecordingSyncController {
             : { durationMilliseconds: recording.durationMilliseconds }),
         },
         csrfToken,
+        signal,
       );
+      signal.throwIfAborted();
       if (finalized.persistenceState !== 'durable')
         throw new Error('Durable audio confirmation was not received.');
-      await this.#confirmDurable(recordingId);
+      await this.#confirmDurable(recordingId, signal);
     } catch (error) {
+      if (signal.aborted) return;
       const retry = retryInformation(error);
       await this.#save({
         ...recording,
@@ -392,11 +462,17 @@ export class RecordingSyncController {
     representation: UploadRepresentation,
     initial: UploadStatus,
     csrfToken: string,
+    signal: AbortSignal,
   ): Promise<void> {
-    const accepted = this.#acceptedIndexes(recording.recordingId, initial);
+    const accepted = this.#acceptedIndexes(
+      recording.recordingId,
+      initial,
+      signal,
+    );
     let nextAccepted = await accepted.next();
     let uploaded = 0;
     for (let index = 0; index < representation.chunks.length; index += 1) {
+      signal.throwIfAborted();
       while (!nextAccepted.done && nextAccepted.value < index)
         nextAccepted = await accepted.next();
       if (!nextAccepted.done && nextAccepted.value === index) {
@@ -414,7 +490,9 @@ export class RecordingSyncController {
         chunk.sha256,
         plaintext,
         csrfToken,
+        signal,
       );
+      signal.throwIfAborted();
       uploaded += 1;
       recording = await this.#save({
         ...recording,
@@ -426,26 +504,34 @@ export class RecordingSyncController {
   async *#acceptedIndexes(
     recordingId: string,
     initial: UploadStatus,
+    signal: AbortSignal,
   ): AsyncGenerator<number> {
     let page = initial;
     while (true) {
       yield* page.acceptedIndexes;
       if (page.nextAfter === undefined) return;
-      page = await this.#dependencies.status(recordingId, page.nextAfter);
+      page = await this.#dependencies.status(
+        recordingId,
+        page.nextAfter,
+        signal,
+      );
+      signal.throwIfAborted();
     }
   }
 
   async #prepareUpload(
     recording: LocalRecordingRecord,
+    signal: AbortSignal,
   ): Promise<UploadRepresentation> {
-    const localChunks = await this.#localUploadChunks(recording);
+    const localChunks = await this.#localUploadChunks(recording, signal);
     const first = localChunks[0];
-    if (first === undefined) return this.#summarize(localChunks);
+    if (first === undefined) return this.#summarize(localChunks, signal);
     const decryptedPrefix = new Map<number, Uint8Array>();
     const signature = new Uint8Array(EBML_SIGNATURE.byteLength);
     let signatureBytes = 0;
     for (const chunk of localChunks) {
       if (signatureBytes === signature.byteLength) break;
+      signal.throwIfAborted();
       const plaintext = new Uint8Array(await chunk.plaintext());
       decryptedPrefix.set(chunk.index, plaintext);
       const length = Math.min(
@@ -456,18 +542,31 @@ export class RecordingSyncController {
       signatureBytes += length;
     }
     if (!isWebmRecording(recording.mimeType, signature))
-      return this.#summarize(localChunks);
+      return this.#summarize(localChunks, signal);
 
-    const totalBytes = Number(BigInt(recording.totalBytes));
-    if (!Number.isSafeInteger(totalBytes)) {
+    let declaredBytes: bigint;
+    try {
+      declaredBytes = BigInt(recording.totalBytes);
+    } catch (error) {
+      throw new RecordingFinalizationError(error);
+    }
+    const checkpointBytes = localChunks.reduce(
+      (total, chunk) => total + BigInt(chunk.byteSize),
+      0n,
+    );
+    if (checkpointBytes !== declaredBytes) {
       throw new RecordingFinalizationError(
-        new Error('The local recording size is not a safe integer.'),
+        new Error('Audio checkpoint bytes do not match the local manifest.'),
       );
     }
+    if (declaredBytes < 0n || declaredBytes > BigInt(MAX_WEBM_INPUT_BYTES))
+      throw new RecordingFinalizationSizeError();
+    const totalBytes = Number(declaredBytes);
     const complete = new Uint8Array(totalBytes);
     let offset = 0;
     try {
       for (const chunk of localChunks) {
+        signal.throwIfAborted();
         const plaintext =
           decryptedPrefix.get(chunk.index) ??
           new Uint8Array(await chunk.plaintext());
@@ -483,43 +582,58 @@ export class RecordingSyncController {
           'Audio checkpoint bytes do not match the local manifest.',
         );
       const result = await this.#dependencies.finalizeWebm(complete);
-      if (!result.changed) return this.#summarize(localChunks);
-      const protectedChunks = await Promise.all(
-        splitFinalizedBytes(result.bytes).map(async (bytes, index) => {
-          const protectedChunk = await this.#dependencies.protectChunk(
-            recording.recordingId,
-            index,
-            new Blob([Uint8Array.from(bytes)], { type: recording.mimeType }),
+      signal.throwIfAborted();
+      if (!result.changed) return this.#summarize(localChunks, signal);
+      if (result.bytes.byteLength > MAX_WEBM_INPUT_BYTES)
+        throw new RecordingFinalizationSizeError();
+      const protectedChunks: UploadChunk[] = [];
+      let index = 0;
+      for (
+        let start = 0;
+        start < result.bytes.byteLength;
+        start += MAX_AUDIO_CHUNK_BYTES
+      ) {
+        signal.throwIfAborted();
+        const bytes = result.bytes.subarray(
+          start,
+          start + MAX_AUDIO_CHUNK_BYTES,
+        );
+        const protectedChunk = await this.#dependencies.protectChunk(
+          recording.recordingId,
+          index,
+          new Blob([Uint8Array.from(bytes)], { type: recording.mimeType }),
+        );
+        signal.throwIfAborted();
+        if (
+          protectedChunk.byteSize !== bytes.byteLength ||
+          protectedChunk.byteSize > MAX_AUDIO_CHUNK_BYTES
+        )
+          throw new Error(
+            `A finalized audio chunk violated the protocol bound at index ${index}.`,
           );
-          if (
-            protectedChunk.byteSize !== bytes.byteLength ||
-            protectedChunk.byteSize > MAX_AUDIO_CHUNK_BYTES
-          )
-            throw new Error(
-              `A finalized audio chunk violated the protocol bound at index ${index}.`,
-            );
-          const encrypted: EncryptedRecordingChunkRecord = {
-            recordingId: recording.recordingId,
-            index,
-            ownerId: recording.ownerId,
-            schemaVersion: 1,
-            byteSize: protectedChunk.byteSize,
-            sha256: protectedChunk.sha256,
-            mimeType: recording.mimeType,
-            capturedAt: recording.capturedAt,
-            nonce: protectedChunk.nonce,
-            ciphertext: protectedChunk.ciphertext,
-          };
-          return {
-            index,
-            byteSize: protectedChunk.byteSize,
-            sha256: protectedChunk.sha256,
-            plaintext: () => this.#dependencies.decryptChunk(encrypted),
-          } satisfies UploadChunk;
-        }),
-      );
-      return this.#summarize(protectedChunks);
+        const encrypted: EncryptedRecordingChunkRecord = {
+          recordingId: recording.recordingId,
+          index,
+          ownerId: recording.ownerId,
+          schemaVersion: 1,
+          byteSize: protectedChunk.byteSize,
+          sha256: protectedChunk.sha256,
+          mimeType: recording.mimeType,
+          capturedAt: recording.capturedAt,
+          nonce: protectedChunk.nonce,
+          ciphertext: protectedChunk.ciphertext,
+        };
+        protectedChunks.push({
+          index,
+          byteSize: protectedChunk.byteSize,
+          sha256: protectedChunk.sha256,
+          plaintext: () => this.#dependencies.decryptChunk(encrypted),
+        } satisfies UploadChunk);
+        index += 1;
+      }
+      return this.#summarize(protectedChunks, signal);
     } catch (error) {
+      if (error instanceof RecordingFinalizationSizeError) throw error;
       if (error instanceof DOMException && error.name === 'OperationError')
         throw error;
       throw new RecordingFinalizationError(error);
@@ -528,13 +642,16 @@ export class RecordingSyncController {
 
   async #localUploadChunks(
     recording: LocalRecordingRecord,
+    signal: AbortSignal,
   ): Promise<UploadChunk[]> {
     const chunks: UploadChunk[] = [];
     for (let index = 0; index < recording.nextChunkIndex; index += 1) {
+      signal.throwIfAborted();
       const chunk = await this.#dependencies.storage.getRecordingChunk(
         recording.recordingId,
         index,
       );
+      signal.throwIfAborted();
       if (chunk === undefined)
         throw new Error(`Audio checkpoint is missing at index ${index}.`);
       chunks.push({
@@ -549,15 +666,18 @@ export class RecordingSyncController {
 
   async #summarize(
     chunks: readonly UploadChunk[],
+    signal: AbortSignal,
   ): Promise<UploadRepresentation> {
     const manifest = sha256.create();
     const final = sha256.create();
     let totalBytes = 0n;
     for (const chunk of chunks) {
+      signal.throwIfAborted();
       manifest.update(
         encoder.encode(`${chunk.index}:${chunk.byteSize}:${chunk.sha256}\n`),
       );
       final.update(new Uint8Array(await chunk.plaintext()));
+      signal.throwIfAborted();
       totalBytes += BigInt(chunk.byteSize);
     }
     return {
@@ -568,11 +688,16 @@ export class RecordingSyncController {
     };
   }
 
-  async #confirmDurable(recordingId: string): Promise<void> {
+  async #confirmDurable(
+    recordingId: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
     await this.#dependencies.storage.confirmRecordingDurable(
       recordingId,
       this.#dependencies.now().toISOString(),
     );
+    signal.throwIfAborted();
     await this.refresh();
   }
 
@@ -602,6 +727,8 @@ export function useRecordingSyncController() {
     recordings: recordingSyncController.recordings,
     initialize: (ownerId: string, csrfToken: string) =>
       recordingSyncController.initialize(ownerId, csrfToken),
+    cancel: () => recordingSyncController.cancel(),
+    clearSession: () => recordingSyncController.clearSession(),
     refresh: () => recordingSyncController.refresh(),
     resume: () => recordingSyncController.resume(),
     retry: (recordingId: string) => recordingSyncController.retry(recordingId),

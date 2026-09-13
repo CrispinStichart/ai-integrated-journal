@@ -77,15 +77,18 @@ void auth.initialize().then(resumeOfflineWork);
 
 async function logout(): Promise<void> {
   try {
+    await recordingSync.clearSession();
     await offline.logout();
     await auth.logout();
   } catch {
     ui.announce('Logout failed. Please try again.');
+    void resumeOfflineWork();
   }
 }
 
 watch(online, (available, wasAvailable) => {
   if (available && !wasAvailable) void resumeOfflineWork();
+  if (!available && wasAvailable) void recordingSync.cancel();
 });
 
 watch(visibility, (value) => {
@@ -107,6 +110,8 @@ async function registerPasskey(): Promise<void> {
 watch(
   () => route.fullPath,
   async () => {
+    // Recording sync is application-scoped so encrypted recovery survives
+    // navigation; only session and connectivity changes cancel plaintext work.
     ui.closeNavigation();
     ui.announce(`${String(route.meta.title ?? 'Journal')} page loaded`);
     await nextTick();

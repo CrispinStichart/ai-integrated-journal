@@ -49,6 +49,7 @@ function mutationHeaders(csrfToken: string, key: string): HeadersInit {
 export async function createRecording(
   input: CreateRecordingRequest,
   csrfToken: string,
+  signal?: AbortSignal,
 ): Promise<RecordingResource> {
   const parsed = createRecordingRequestSchema.parse(input);
   const result = recordingMutationResponseSchema.parse(
@@ -60,19 +61,25 @@ export async function createRecording(
           'content-type': 'application/json',
         },
         body: JSON.stringify(parsed),
+        ...(signal === undefined ? {} : { signal }),
       })
     ).json(),
   );
   return result.recording;
 }
 
-export async function getRecordingUpload(recordingId: string, after?: number) {
+export async function getRecordingUpload(
+  recordingId: string,
+  after?: number,
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({ limit: '1000' });
   if (after !== undefined) query.set('after', String(after));
   return recordingUploadStatusSchema.parse(
     await (
       await request(
         `/api/v1/recordings/${recordingId}/upload?${query.toString()}`,
+        signal === undefined ? undefined : { signal },
       )
     ).json(),
   );
@@ -84,6 +91,7 @@ export async function uploadRecordingChunk(
   checksum: string,
   bytes: ArrayBuffer,
   csrfToken: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   recordingChunkUploadResponseSchema.parse(
     await (
@@ -95,6 +103,7 @@ export async function uploadRecordingChunk(
           'x-content-sha256': checksum,
         },
         body: bytes,
+        ...(signal === undefined ? {} : { signal }),
       })
     ).json(),
   );
@@ -104,6 +113,7 @@ export async function finalizeRecording(
   recordingId: string,
   input: FinalizeRecordingRequest,
   csrfToken: string,
+  signal?: AbortSignal,
 ): Promise<RecordingResource> {
   const parsed = finalizeRecordingRequestSchema.parse(input);
   const result = recordingMutationResponseSchema.parse(
@@ -115,6 +125,7 @@ export async function finalizeRecording(
           'content-type': 'application/json',
         },
         body: JSON.stringify(parsed),
+        ...(signal === undefined ? {} : { signal }),
       })
     ).json(),
   );
@@ -124,12 +135,14 @@ export async function finalizeRecording(
 export async function retryRecordingFinalization(
   recordingId: string,
   csrfToken: string,
+  signal?: AbortSignal,
 ): Promise<RecordingResource> {
   const result = recordingMutationResponseSchema.parse(
     await (
       await request(`/api/v1/recordings/${recordingId}/retry`, {
         method: 'POST',
         headers: mutationHeaders(csrfToken, `retry-${recordingId}`),
+        ...(signal === undefined ? {} : { signal }),
       })
     ).json(),
   );

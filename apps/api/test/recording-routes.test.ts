@@ -516,4 +516,38 @@ describe('Recording upload API', () => {
       correlationId: CORRELATION_ID,
     });
   });
+
+  it('[CAP-005][CAP-006] cancels the bounded source stream when the audio client disconnects', async () => {
+    let cancelSource!: () => void;
+    const cancelled = new Promise<void>((resolve) => {
+      cancelSource = resolve;
+    });
+    const recordingService = audioService(10);
+    vi.mocked(recordingService.openAudio).mockResolvedValue({
+      recording: { ...durableRecording, byteSize: '10' },
+      stream: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(Uint8Array.of(1));
+        },
+        cancel() {
+          cancelSource();
+        },
+      }),
+    });
+
+    const download = request(app(recordingService))
+      .get(`/api/v1/recordings/${RECORDING_ID}/audio`)
+      .set('authorization', 'Bearer valid');
+    const pending = download.then(
+      () => undefined,
+      () => undefined,
+    );
+    await vi.waitFor(() =>
+      expect(recordingService.openAudio).toHaveBeenCalledOnce(),
+    );
+    download.abort();
+
+    await expect(cancelled).resolves.toBeUndefined();
+    await pending;
+  });
 });

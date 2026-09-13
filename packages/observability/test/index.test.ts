@@ -39,4 +39,32 @@ describe('@journal/observability content-safe logging', () => {
     expect(output).not.toContain('private credential');
     expect(output).not.toContain('private authorization');
   });
+
+  it('denies media, decrypted bytes, object URLs, and content-derived identifiers', () => {
+    let output = '';
+    const destination = new Writable({
+      write(chunk, _encoding, callback) {
+        output += String(chunk);
+        callback();
+      },
+    });
+    const logger = createContentSafeLogger({
+      destination,
+      service: 'recording-privacy-test',
+    });
+
+    logger.info({
+      bytes: 'private-media-bytes',
+      decryptedData: 'private-decrypted-data',
+      objectUrl: 'blob:private-object-url',
+      sha256: 'content-derived-identifier',
+      correlationId: 'safe-correlation-id',
+    });
+
+    expect(output).toContain('safe-correlation-id');
+    expect(output).not.toContain('private-media-bytes');
+    expect(output).not.toContain('private-decrypted-data');
+    expect(output).not.toContain('blob:private-object-url');
+    expect(output).not.toContain('content-derived-identifier');
+  });
 });

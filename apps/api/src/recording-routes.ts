@@ -155,6 +155,33 @@ function parseRange(
   return { start, endExclusive };
 }
 
+async function sendAudioStream(
+  response: Response,
+  stream: ReadableStream<Uint8Array>,
+): Promise<void> {
+  const reader = stream.getReader();
+  let disconnected = false;
+  let cancellation: Promise<void> | undefined;
+  const cancelOnClose = () => {
+    disconnected = true;
+    cancellation = reader.cancel().catch(() => undefined);
+  };
+  response.once('close', cancelOnClose);
+  try {
+    while (!disconnected) {
+      const next = await reader.read();
+      if (next.done || disconnected) break;
+      if (!response.write(next.value))
+        await Promise.race([once(response, 'drain'), once(response, 'close')]);
+    }
+    if (!disconnected) response.end();
+  } finally {
+    response.off('close', cancelOnClose);
+    await cancellation;
+    reader.releaseLock();
+  }
+}
+
 export function registerRecordingRoutes(
   app: Express,
   dependencies: ApiDependencies,
@@ -444,10 +471,7 @@ export function registerRecordingRoutes(
             }
           : {}),
       });
-      for await (const bytes of opened.stream) {
-        if (!response.write(bytes)) await once(response, 'drain');
-      }
-      response.end();
+      await sendAudioStream(response, opened.stream);
     }),
   );
 

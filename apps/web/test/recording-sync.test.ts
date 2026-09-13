@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { MAX_AUDIO_CHUNK_BYTES } from '@journal/contracts';
+import { MAX_WEBM_INPUT_BYTES } from '@journal/webm-duration-fix';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -201,6 +202,7 @@ describe('recording synchronization', () => {
       hex(encoder.encode('two')),
       expect.anything(),
       'csrf-token',
+      expect.anything(),
     );
     expect(
       (vi.mocked(dependencies.upload).mock.calls[0]?.[3] as ArrayBuffer)
@@ -285,6 +287,7 @@ describe('recording synchronization', () => {
       hex(encoder.encode('two')),
       expect.anything(),
       'new-csrf-token',
+      expect.anything(),
     );
     expect(
       (uploadAfterReopen.mock.calls[0]?.[3] as ArrayBuffer).byteLength,
@@ -362,6 +365,7 @@ describe('recording synchronization', () => {
       hex(finalizedBytes),
       expect.any(ArrayBuffer),
       'csrf-token',
+      expect.anything(),
     );
     expect(
       hex(
@@ -383,6 +387,7 @@ describe('recording synchronization', () => {
         ),
       }),
       'csrf-token',
+      expect.anything(),
     );
     expect(
       await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
@@ -436,6 +441,7 @@ describe('recording synchronization', () => {
       hex(original),
       expect.anything(),
       'csrf-token',
+      expect.anything(),
     );
   });
 
@@ -482,6 +488,153 @@ describe('recording synchronization', () => {
     expect(
       await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
     ).toHaveLength(1);
+  });
+
+  it('[CAP-003][CAP-006] rejects oversized WebM before whole-file allocation or finalization', async () => {
+    const original = Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 1);
+    const { controller, dependencies, store } = harness({
+      status: vi.fn().mockResolvedValue({
+        recording: remote('uploading'),
+        acceptedIndexes: [],
+      }),
+    });
+    await store.putRecording(
+      localRecording({ nextChunkIndex: 0, totalBytes: '0' }),
+    );
+    await store.commitRecordingChunk(
+      RECORDING_ID,
+      {
+        recordingId: RECORDING_ID,
+        index: 0,
+        ownerId: OWNER_ID,
+        schemaVersion: 1,
+        byteSize: MAX_WEBM_INPUT_BYTES + 1,
+        sha256: hex(original),
+        mimeType: 'audio/webm',
+        capturedAt: NOW,
+        nonce: 'test-only',
+        ciphertext: original.buffer.slice(0),
+      },
+      NOW,
+    );
+    await store.putRecording(
+      localRecording({
+        nextChunkIndex: 1,
+        totalBytes: String(MAX_WEBM_INPUT_BYTES + 1),
+      }),
+    );
+    await controller.initialize(OWNER_ID, 'csrf-token');
+    await controller.resume();
+
+    expect(dependencies.finalizeWebm).not.toHaveBeenCalled();
+    expect(dependencies.protectChunk).not.toHaveBeenCalled();
+    expect(dependencies.upload).not.toHaveBeenCalled();
+    await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
+      state: 'failed',
+      retrySafe: false,
+      syncErrorCode: 'audio_finalization_too_large',
+      syncErrorMessage:
+        'This WebM is too large to finalize safely in this browser (maximum 128 MiB). Your local recording is still available.',
+    });
+    expect(
+      await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toHaveLength(1);
+  });
+
+  it('[CAP-003][CAP-006][SEC-001] aborts stale session requests and retains encrypted checkpoints on logout', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const create = vi.fn(
+      async (
+        _input: Parameters<RecordingSyncDependencies['create']>[0],
+        _csrfToken: string,
+        signal?: AbortSignal,
+      ) => {
+        requestSignal = signal;
+        return await new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      },
+    );
+    const { controller, dependencies, store } = harness({ create });
+    await populate(store);
+    await controller.initialize(OWNER_ID, 'csrf-token');
+
+    const resuming = controller.resume();
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce());
+    await controller.clearSession();
+    await resuming;
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(controller.recordings.value).toEqual([]);
+    expect(dependencies.status).not.toHaveBeenCalled();
+    expect(dependencies.upload).not.toHaveBeenCalled();
+    expect(dependencies.finalize).not.toHaveBeenCalled();
+    await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
+      state: 'uploading',
+      retrySafe: true,
+    });
+    expect(
+      await store.listRecordingChunks(OWNER_ID, RECORDING_ID),
+    ).toHaveLength(2);
+  });
+
+  it('[CAP-003][CAP-006] gives retry a fresh cancellation scope after interrupting an in-flight upload', async () => {
+    const signals: AbortSignal[] = [];
+    const upload = vi
+      .fn()
+      .mockImplementationOnce(
+        async (
+          _recordingId: string,
+          _index: number,
+          _checksum: string,
+          _bytes: ArrayBuffer,
+          _csrfToken: string,
+          signal?: AbortSignal,
+        ) => {
+          if (signal === undefined) throw new Error('Missing abort signal');
+          signals.push(signal);
+          await new Promise<never>((_resolve, reject) => {
+            signal.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true },
+            );
+          });
+        },
+      )
+      .mockImplementationOnce(
+        async (
+          _recordingId: string,
+          _index: number,
+          _checksum: string,
+          _bytes: ArrayBuffer,
+          _csrfToken: string,
+          signal?: AbortSignal,
+        ) => {
+          if (signal === undefined) throw new Error('Missing abort signal');
+          signals.push(signal);
+        },
+      );
+    const { controller, store } = harness({ upload });
+    await populate(store);
+    await controller.initialize(OWNER_ID, 'csrf-token');
+
+    const resuming = controller.resume();
+    await vi.waitFor(() => expect(upload).toHaveBeenCalledOnce());
+    await controller.retry(RECORDING_ID);
+    await resuming;
+
+    expect(signals).toHaveLength(2);
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+    await expect(store.getRecording(RECORDING_ID)).resolves.toMatchObject({
+      state: 'transcription_pending',
+      serverPersistenceState: 'durable',
+    });
   });
 
   it('[CAP-003][CAP-006] preserves checkpoints and suppresses unsafe retry after a checksum conflict', async () => {
@@ -563,6 +716,7 @@ describe('recording synchronization', () => {
       RECORDING_ID,
       expect.not.objectContaining({ durationMilliseconds: expect.anything() }),
       'csrf-token',
+      expect.anything(),
     );
   });
 
