@@ -10,6 +10,7 @@ import { computed, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
 import AppDialog from '../components/AppDialog.vue';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import AppStatus from '../components/AppStatus.vue';
 import { createUuidV7 } from '../journal/api';
 import { listProcessors } from '../processor/api';
@@ -205,17 +206,12 @@ function canCancel(batch: ReprocessingBatch): boolean {
 
 <template>
   <section class="space-y-8" aria-labelledby="activity-title">
-    <header>
-      <p class="text-sm font-semibold text-base-content/60">Processing</p>
-      <h1 id="activity-title" class="text-3xl font-bold tracking-tight">
-        Reprocessing activity
-      </h1>
-      <p class="mt-2 max-w-3xl text-base-content/70">
-        Preview historical impact, pin the processor semantics, then monitor or
-        cancel the resulting work. Reprocessing creates new immutable runs and
-        never replaces manual authority.
-      </p>
-    </header>
+    <AppPageHeader
+      title-id="activity-title"
+      eyebrow="Processing"
+      title="Reprocessing activity"
+      description="Preview historical impact, pin the processor semantics, then monitor or cancel the resulting work. Reprocessing creates new immutable runs and never replaces manual authority."
+    />
 
     <div v-if="error" class="alert alert-error" role="alert">{{ error }}</div>
     <div v-if="feedback" class="alert alert-success" role="status">

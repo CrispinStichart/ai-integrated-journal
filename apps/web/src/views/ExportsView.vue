@@ -4,6 +4,7 @@ import { useIntervalFn } from '@vueuse/core';
 import { computed, onMounted, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import {
   createPortableExport,
   exportDownloadUrl,
@@ -90,20 +91,12 @@ onMounted(refresh);
 
 <template>
   <section aria-labelledby="exports-title" class="space-y-8">
-    <header>
-      <p class="mb-2 text-sm font-medium text-base-content/60">Portability</p>
-      <h1
-        id="exports-title"
-        class="text-3xl font-bold tracking-tight sm:text-4xl"
-      >
-        Exports
-      </h1>
-      <p class="mt-3 max-w-3xl text-base-content/70">
-        Create a point-in-time ZIP with versioned JSON Lines, readable Journal
-        Day Markdown, checksums, stable relationships, provenance, authority,
-        and retention state.
-      </p>
-    </header>
+    <AppPageHeader
+      title-id="exports-title"
+      eyebrow="Portability"
+      title="Exports"
+      description="Create a point-in-time ZIP with versioned JSON Lines, readable Journal Day Markdown, checksums, stable relationships, provenance, authority, and retention state."
+    />
 
     <div class="card card-border bg-base-100">
       <div class="card-body">

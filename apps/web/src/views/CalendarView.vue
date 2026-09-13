@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/vue-query';
 import type { JournalDaySummary } from '@journal/contracts';
 import { computed, ref } from 'vue';
 
+import AppPageHeader from '../components/AppPageHeader.vue';
 import { listJournalDays } from '../journal/api';
 import { displayJournalDate, localJournalDate } from '../journal/date';
 
@@ -68,17 +69,12 @@ async function loadMore(): Promise<void> {
 
 <template>
   <section aria-labelledby="calendar-title">
-    <p class="mb-2 text-sm font-medium text-base-content/60">Your journal</p>
-    <h1
-      id="calendar-title"
-      class="text-3xl font-bold tracking-tight sm:text-4xl"
-    >
-      Calendar
-    </h1>
-    <p class="mt-3 max-w-2xl text-base-content/70">
-      Browse past, present, or future Journal Days. Counts reflect separate,
-      independently recoverable contributions.
-    </p>
+    <AppPageHeader
+      title-id="calendar-title"
+      eyebrow="Your journal"
+      title="Calendar"
+      description="Browse past, present, or future Journal Days. Counts reflect separate, independently recoverable contributions."
+    />
 
     <div class="card card-border mt-8 bg-base-100">
       <div class="card-body gap-5 p-4 sm:p-6">

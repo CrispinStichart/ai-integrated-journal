@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import NudgePreferencesCard from '../components/NudgePreferencesCard.vue';
 import { createUuidV7 } from '../journal/api';
 import {
@@ -227,28 +228,18 @@ async function publish(): Promise<void> {
 
 <template>
   <section aria-labelledby="processors-title" class="space-y-8">
-    <header>
-      <p class="mb-2 text-sm font-medium text-base-content/60">Journal</p>
-      <div
-        class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-      >
-        <div>
-          <h1
-            id="processors-title"
-            class="text-3xl font-bold tracking-tight sm:text-4xl"
-          >
-            Processors
-          </h1>
-          <p class="mt-3 max-w-3xl text-base-content/70">
-            Manage safe, immutable processor versions. Enabling a processor
-            affects future work only; historical versions remain inspectable.
-          </p>
-        </div>
+    <AppPageHeader
+      title-id="processors-title"
+      eyebrow="Journal"
+      title="Processors"
+      description="Manage safe, immutable processor versions. Enabling a processor affects future work only; historical versions remain inspectable."
+    >
+      <template #actions>
         <button class="btn" type="button" @click="beginCreate">
           New processor
         </button>
-      </div>
-    </header>
+      </template>
+    </AppPageHeader>
 
     <div class="alert alert-info" role="note">
       <span

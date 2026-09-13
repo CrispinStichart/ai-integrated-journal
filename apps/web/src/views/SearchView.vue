@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/vue-query';
 import { computed, reactive, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import { listProcessors } from '../processor/api';
 import {
   askGroundedAnswer,
@@ -176,17 +177,12 @@ function label(value: string): string {
 
 <template>
   <section aria-labelledby="search-title">
-    <p class="text-xs font-semibold uppercase text-base-content/60">
-      Exact-revision retrieval
-    </p>
-    <h1 id="search-title" class="mt-1 text-3xl font-bold sm:text-4xl">
-      Search
-    </h1>
-    <p class="mt-3 max-w-3xl text-base-content/70">
-      Search current journal sources and selected derived layers. Hybrid search
-      combines local word matching with optional semantic similarity without
-      mixing incompatible embedding models.
-    </p>
+    <AppPageHeader
+      title-id="search-title"
+      eyebrow="Exact-revision retrieval"
+      title="Search"
+      description="Search current journal sources and selected derived layers. Hybrid search combines local word matching with optional semantic similarity without mixing incompatible embedding models."
+    />
 
     <form
       class="mt-6 space-y-5"

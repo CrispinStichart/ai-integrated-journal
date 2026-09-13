@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router';
 
 import AudioContributionCard from '../components/AudioContributionCard.vue';
 import AppDialog from '../components/AppDialog.vue';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import ArtifactReviewPanel from '../components/ArtifactReviewPanel.vue';
 import ContributionCard from '../components/ContributionCard.vue';
 import NudgeDigestCard from '../components/NudgeDigestCard.vue';
@@ -557,17 +558,12 @@ await loadPending();
 
 <template>
   <section :aria-labelledby="`journal-day-${journalDate}`">
-    <div
-      class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
+    <AppPageHeader
+      :title-id="`journal-day-${journalDate}`"
+      eyebrow="Journal day"
+      :title="dayTitle"
     >
-      <div>
-        <p class="mb-2 text-sm font-medium text-base-content/60">Journal Day</p>
-        <h1
-          :id="`journal-day-${journalDate}`"
-          class="text-3xl font-bold tracking-tight sm:text-4xl"
-        >
-          {{ dayTitle }}
-        </h1>
+      <template #meta>
         <p v-if="date === undefined" class="mt-1 text-base-content/70">
           {{ displayJournalDate(journalDate) }}
         </p>
@@ -588,25 +584,27 @@ await loadPending();
         >
           Delete Journal Day permanently
         </button>
-      </div>
+      </template>
 
-      <form
-        class="flex items-end gap-2"
-        aria-label="Choose a Journal Day"
-        @submit.prevent="selectDate"
-      >
-        <label class="fieldset grow sm:grow-0">
-          <span class="fieldset-legend">Go to date</span>
-          <input
-            v-model="selectedDate"
-            type="date"
-            class="input w-full"
-            required
-          />
-        </label>
-        <button class="btn" type="submit">Go</button>
-      </form>
-    </div>
+      <template #actions>
+        <form
+          class="flex items-end gap-2"
+          aria-label="Choose a Journal Day"
+          @submit.prevent="selectDate"
+        >
+          <label class="fieldset grow sm:grow-0">
+            <span class="fieldset-legend">Go to date</span>
+            <input
+              v-model="selectedDate"
+              type="date"
+              class="input w-full"
+              required
+            />
+          </label>
+          <button class="btn" type="submit">Go</button>
+        </form>
+      </template>
+    </AppPageHeader>
 
     <nav
       class="mt-5 flex items-center justify-between"

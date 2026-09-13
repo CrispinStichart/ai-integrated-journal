@@ -6,6 +6,7 @@ import { computed, ref } from 'vue';
 
 import { useAuthentication } from '../auth';
 import AppDialog from '../components/AppDialog.vue';
+import AppPageHeader from '../components/AppPageHeader.vue';
 import { createUuidV7 } from '../journal/api';
 import { listMemories, mutateMemory } from '../memory/api';
 
@@ -106,16 +107,12 @@ function typeLabel(value: string): string {
 
 <template>
   <section aria-labelledby="memories-title">
-    <p class="text-xs font-semibold uppercase text-base-content/60">
-      AI context
-    </p>
-    <h1 id="memories-title" class="mt-1 text-3xl font-bold sm:text-4xl">
-      Memories & rules
-    </h1>
-    <p class="mt-3 max-w-3xl text-base-content/70">
-      Only memories you explicitly approve can affect future processing. Every
-      rule remains visible, scoped, revisioned, and under your control.
-    </p>
+    <AppPageHeader
+      title-id="memories-title"
+      eyebrow="AI context"
+      title="Memories & rules"
+      description="Only memories you explicitly approve can affect future processing. Every rule remains visible, scoped, revisioned, and under your control."
+    />
 
     <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end">
       <label class="fieldset min-w-0 flex-1">

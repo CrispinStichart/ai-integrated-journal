@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { computed, reactive, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 
+import AppPageHeader from '../components/AppPageHeader.vue';
 import NudgePreferencesCard from '../components/NudgePreferencesCard.vue';
 import { useAuthentication } from '../auth';
 import { createUuidV7 } from '../journal/api';
@@ -245,19 +246,12 @@ async function revokeSession(sessionId: string): Promise<void> {
 
 <template>
   <section aria-labelledby="settings-title" class="space-y-8">
-    <header>
-      <p class="mb-2 text-sm font-medium text-base-content/60">Journal</p>
-      <h1
-        id="settings-title"
-        class="text-3xl font-bold tracking-tight sm:text-4xl"
-      >
-        Settings
-      </h1>
-      <p class="mt-3 max-w-3xl text-base-content/70">
-        Control what stays local, what an external provider may receive, and how
-        long recoverable material remains.
-      </p>
-    </header>
+    <AppPageHeader
+      title-id="settings-title"
+      eyebrow="Journal"
+      title="Settings"
+      description="Control what stays local, what an external provider may receive, and how long recoverable material remains."
+    />
 
     <div
       v-if="query.isLoading.value"
