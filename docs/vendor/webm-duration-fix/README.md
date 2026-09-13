@@ -1,6 +1,6 @@
 # Internal `webm-duration-fix` package
 
-`@journal/webm-duration-fix` is a private workspace package for bounded, in-memory repair of WebM duration and seek metadata. Work unit 1 does not wire it into recording, synchronization, upload, or playback; its only current consumers are its package tests.
+`@journal/webm-duration-fix` is a private workspace package for bounded, in-memory repair of WebM duration and seek metadata. The recording synchronization controller uses its byte API for new WebM captures before upload; package tests remain the direct characterization and security-boundary consumers.
 
 ## API
 
@@ -22,3 +22,9 @@ The package root exports two finalizers:
 - Idempotence is guaranteed by the characterization suite for this package's deterministic finalized representation, not for every independently authored valid WebM.
 
 The operative resource ceilings and caller responsibilities are documented in [`RESOURCE-LIMITS.md`](RESOURCE-LIMITS.md). Source origin, retained license records, all deliberate local differences, and the required update procedure are documented in [`PROVENANCE.md`](PROVENANCE.md). The fork and local changes are MIT-licensed; the original notice and the upstream GitHub-MIT/npm-ISC discrepancy are preserved rather than normalized away.
+
+## Application integration
+
+The web synchronization boundary requires both a normalized WebM MIME type and the EBML signature before calling `finalizeWebmBytes`. It reconstructs the ordered encrypted checkpoints only after capture has stopped, rejects WebM input over the package's 128 MiB hard limit, and uploads deterministic protected chunks of at most 8 MiB from the returned representation. The original recovery checkpoints remain in IndexedDB until server durability is confirmed. A finalization failure is visible and leaves those checkpoints available for a safe retry; non-WebM and unchanged WebM recordings remain on the incremental pass-through path.
+
+This integration does not repair an already-durable object at playback time. Existing malformed recordings remain immutable and may still expose an infinite native duration. No full-download repair, repaired-media object URL, or persistent playback derivative is present.

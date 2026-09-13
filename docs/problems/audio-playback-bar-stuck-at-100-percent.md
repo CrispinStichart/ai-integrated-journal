@@ -2,12 +2,14 @@
 
 ## Status
 
-Investigation is complete. Implementation is intentionally split into two independently reviewable work units:
+Investigation and the retained implementation are complete. Implementation was split into two independently reviewable work units:
 
 1. Vendor and modernize `webm-duration-fix` without changing application behavior.
-2. Use the validated vendored package to repair WebM recordings and fix playback.
+2. Use the validated vendored package to finalize new WebM recordings before upload and correct bounded range delivery. The proposed already-durable playback repair was canceled.
 
 Each work unit should be validated and committed separately. The second must not begin until the first has established equivalent behavior, documented licensing, and adequate test coverage.
+
+Work unit 2 validation is recorded in [`webm-playback-validation.md`](../webm-playback-validation.md). Task 2 was canceled and the original private-recording diagnostic was waived, as detailed below.
 
 ## Problem and root cause
 
@@ -22,11 +24,11 @@ The investigation confirmed this with an affected recording:
 - Chromium exposed its duration as `Infinity` even when the API returned the complete file with the correct `Content-Length`.
 - Repairing the container produced a finite duration of about 20.8 seconds without re-encoding the Opus audio.
 
-The behavior originates in the WebM-first MIME selection and timesliced `MediaRecorder` capture in [`capture-controller.ts`](../../apps/web/src/recording/capture-controller.ts). There is also a related delivery issue in [`recording-routes.ts`](../../apps/api/src/recording-routes.ts): an open-ended range for a recording larger than `MAX_AUDIO_RANGE_BYTES` is rejected instead of being served as a bounded partial response. That issue does not cause the reproduced 20-second failure, but it must be handled for reliable playback and legacy repair of longer recordings.
+The behavior originates in the WebM-first MIME selection and timesliced `MediaRecorder` capture in [`capture-controller.ts`](../../apps/web/src/recording/capture-controller.ts). There is also a related delivery issue in [`recording-routes.ts`](../../apps/api/src/recording-routes.ts): an open-ended range for a recording larger than `MAX_AUDIO_RANGE_BYTES` is rejected instead of being served as a bounded partial response. That issue does not cause the reproduced 20-second failure, but it must be handled for reliable playback and other bounded consumers of longer recordings.
 
 ## Decision
 
-Vendor the implementation from `webm-duration-fix` v1.0.4, currently represented by upstream commit `87a71bf304c8cb4fbf19248ed5663e6aff9524ac`, into a private workspace package. First preserve and characterize its behavior, then update it to this repository's TypeScript, module, lint, and test standards. In a separate work unit, use it client-side to finalize WebM container metadata before durable upload and to provide a compatibility path for existing affected recordings.
+Vendor the implementation from `webm-duration-fix` v1.0.4, currently represented by upstream commit `87a71bf304c8cb4fbf19248ed5663e6aff9524ac`, into a private workspace package. First preserve and characterize its behavior, then update it to this repository's TypeScript, module, lint, and test standards. In a separate work unit, use it client-side to finalize WebM container metadata before durable upload. Existing durable recordings remain immutable; the proposed ephemeral compatibility path was canceled on 2026-09-13 and was not retained.
 
 The repair applies only to WebM. Ogg, MP4, or another browser-selected format must pass through unchanged. Opus frames must never be transcoded. The duration written to the WebM should be calculated from the encoded block timeline, which is the playback authority, rather than copied from the wall-clock duration stored by the application.
 
@@ -115,7 +117,9 @@ This unit integrates only the package validated in work unit 1.
 - Pass non-WebM recordings through the existing sync path unchanged. Pass an already-valid WebM through without unnecessary rewriting when the package reports no repair is needed.
 - If WebM finalization fails, surface a recoverable sync error and retain the local recording; do not mark the malformed representation durable.
 
-### 2. Support already-durable affected recordings
+### 2. Support already-durable affected recordings — canceled
+
+> Canceled on 2026-09-13. No full-download repair, repaired-media object URL, or related cleanup helper is retained. The bullets below record the rejected implementation plan for historical context only and are not completion requirements.
 
 - Because durable objects are immutable, do not overwrite existing uploads. On playback of an affected WebM, fetch the authenticated original in bounded ranges, assemble it client-side, and repair it ephemerally.
 - Create an object URL from the repaired `Blob` for the native `<audio>` element. Revoke the URL whenever the recording changes, the view unmounts, playback preparation fails, or the user logs out.
@@ -126,7 +130,7 @@ This unit integrates only the package validated in work unit 1.
 ### 3. Correct range delivery for long recordings
 
 - Update the recording route so no-range and open-ended requests larger than `MAX_AUDIO_RANGE_BYTES` return a valid bounded `206 Partial Content` response with correct `Content-Range`, `Content-Length`, and `Accept-Ranges` headers rather than rejection or an ambiguous partial `200`.
-- Ensure the legacy client continues requesting subsequent bounded ranges until the declared total length is reached.
+- Preserve standard range semantics so native playback and other authorized bounded consumers can request subsequent ranges until the declared total length is reached. Do not add a full-download legacy repair client.
 - Cover boundary cases: empty content, exactly the maximum range, one byte over it, suffix ranges, invalid ranges, and a recording spanning multiple requests.
 
 ### 4. Preserve failure and privacy guarantees
@@ -143,21 +147,21 @@ This unit integrates only the package validated in work unit 1.
 - Unit-test WebM detection, pass-through behavior, deterministic re-chunking, duration selection, cleanup, cancellation, and error mapping.
 - Extend sync tests to prove finalized bytes and hashes are uploaded, original checkpoints remain until durable confirmation, retries are idempotent, and Ogg/default formats are unchanged.
 - Extend API route tests for bounded multi-range retrieval and correct HTTP status and headers.
-- Add playback tests for both a newly finalized recording and an already-durable zero-duration WebM. Assert a finite media duration, a meaningful total-length display, seeking, and a playhead that advances from zero to completion.
+- Add playback tests for a newly finalized recording. Assert a finite media duration, a meaningful total-length display, seeking, and a playhead that advances from zero to completion. The already-durable zero-duration case is omitted with canceled task 2.
 - Exercise current Chromium, Firefox, and WebKit browser projects. Include WebM capture/playback where supported and verify non-WebM pass-through in the fallback path.
-- Manually verify the original affected recording locally without committing or logging private content.
+- The user waived the unavailable private original-recording diagnostic. Do not search for or require its bytes; no result is claimed.
 
 ### 6. Validate and deliver the unit
 
 - Run affected package and application unit/integration tests, browser tests, type checking, linting, formatting, and production builds.
 - Verify offline capture and crash recovery before upload, online synchronization, long-recording range retrieval, playback cleanup, and logout cleanup.
-- Update operational or architecture documentation to describe client-side WebM finalization and the legacy full-download cost.
+- Update operational or architecture documentation to describe client-side WebM finalization, its bounded whole-file memory cost, and the absence of legacy full-download repair.
 - Commit the application integration separately from the vendored-library unit.
 
 ## Completion criteria
 
-- New WebM recordings contain finite, internally consistent duration and seek metadata before they become durable.
-- Existing affected WebM recordings play through native controls with a finite total duration and working seek bar via the compatibility path.
+- New WebM recordings within the supported finalizer limit contain finite, internally consistent duration and seek metadata before they become durable.
+- Existing affected WebM recordings remain immutable and are not repaired by this work unit; historical repair requires separately authorized derived assets.
 - Ogg, MP4, unknown, and already-valid media are not corrupted or unnecessarily transformed.
 - Encoded Opus blocks are byte-for-byte preserved; no audio is re-encoded.
 - Failed repair never loses the recoverable local recording or finalizes a malformed upload.

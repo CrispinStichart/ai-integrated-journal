@@ -15,11 +15,11 @@ The application must distinguish an application-imposed limit from exhaustion of
 
 ### Meaning of no maximum
 
-There is no validation rule, schema constraint, timer, aggregate byte counter, or UI behavior that rejects a recording because its total duration, total byte size, or number of chunks exceeds an application maximum. Counters use overflow-safe integer representations and APIs paginate any collection whose size grows with the recording.
+Capture, checkpoint storage, and the pass-through upload protocol do not reject a recording because its total duration, total byte size, or number of chunks exceeds an application maximum. Counters use overflow-safe integer representations and APIs paginate any collection whose size grows with the recording. The current client-side WebM finalizer is the documented exception: WebM input over 128 MiB remains locally recoverable but cannot complete synchronization.
 
 Finite storage exhaustion may stop capture or defer an operation. That is a visible resource failure, not a recording-length policy. Freeing or adding storage and retrying must not require discarding the persisted prefix.
 
-Defaults in this ADR are versioned configuration except the invariant that a logical recording is never assembled in memory. Operators may reduce a per-operation bound, but may not configure an aggregate recording cap.
+Defaults in this ADR are versioned configuration. Incremental capture and pass-through formats never assemble a logical recording in memory. New WebM synchronization currently has one explicit exception: metadata finalization assembles at most 128 MiB in the browser and refuses a larger WebM without deleting its local checkpoints. This is a known implementation limit, not a claim that browser resources are unbounded.
 
 ### Capture and transport units
 
@@ -30,6 +30,14 @@ Defaults in this ADR are versioned configuration except the invariant that a log
 - Audio reads use HTTP byte ranges capped at 8 MiB per response. Playback and export consumers request or stream successive ranges; they never use a whole-recording response as an in-memory fallback.
 
 These defaults may be changed only as one coherent protocol version: advertised client and server limits must agree, and reducing a limit cannot make already staged units unreadable or unfinalizable.
+
+### Client-side WebM finalization
+
+After capture stops, synchronization identifies WebM only when the normalized MIME type and EBML signature agree. It decrypts the complete ordered checkpoint sequence into a bounded in-memory buffer, calculates duration and seek metadata from the encoded block timeline without transcoding, and deterministically re-chunks a changed result into protected upload units of at most 8 MiB. Hashes and the upload manifest describe the finalized representation. An already-valid WebM and every non-WebM format retain their original checkpoint representation.
+
+The finalizer's hard input ceiling is 128 MiB. Its memory and startup cost grow with the recording and can temporarily include the complete input, finalized output, and protected upload representation. Input above the ceiling or any parse/finalization failure becomes a visible synchronization error; the malformed representation is not finalized on the server and all original encrypted checkpoints remain available. Checkpoints are removed only after the server confirms the finalized representation durable. Logout and connectivity cancellation abort in-flight requests and plaintext work but retain encrypted recovery data under ADR-0009.
+
+Already-durable recordings are immutable and are not downloaded in full or repaired ephemerally during playback. The authenticated audio route supplies bounded 8 MiB `200`/`206` responses with standard range metadata, but range delivery alone does not correct malformed WebM metadata. Repairing historical objects would require a separately authorized derived-playback-asset migration.
 
 ### Incremental manifest
 
@@ -66,11 +74,11 @@ Local finalization may temporarily require the complete final byte size in addit
 
 ### Bounded-memory pipelines
 
-Capture, upload, checksum calculation, finalization, playback, transcription handoff, export, backup, restore, and integrity verification operate over `Blob` slices, cursors, async iterables, streams, or bounded temporary files with backpressure. A provider adapter that requires a complete seekable file may use an owner-only temporary file; it may not buffer the recording in process memory. Provider duration/size limits fail only that optional run, remain visible as a capability error, and never prevent source durability, playback, export, or a retry with another provider.
+Except for the bounded client-side WebM finalization described above, capture, upload, checksum calculation, finalization, playback, transcription handoff, export, backup, restore, and integrity verification operate over `Blob` slices, cursors, async iterables, streams, or bounded temporary files with backpressure. A provider adapter that requires a complete seekable file may use an owner-only temporary file; it may not buffer the recording in process memory. Provider duration/size limits fail only that optional run, remain visible as a capability error, and never prevent source durability, playback, export, or a retry with another provider.
 
 Generated archive formats may have per-entry or total-size format limits. Export and backup implementations must select ZIP64 or another documented streamable format whose relevant limits exceed the underlying platform, and must fail explicitly rather than truncate or omit audio.
 
-Memory use is bounded by configured concurrency and per-unit stream buffers, not by logical recording size. All stream producers honor backpressure and all abort/error paths close handles and remove only their unpublished temporary output.
+Outside the WebM exception, memory use is bounded by configured concurrency and per-unit stream buffers, not by logical recording size. WebM synchronization is instead bounded by the 128 MiB input ceiling and has proportional temporary memory use. All stream producers honor backpressure and all abort/error paths close handles and remove only their unpublished temporary output.
 
 ### Status, observability, and verification
 
@@ -102,4 +110,4 @@ Tests use synthetic generated bytes and content-free fixtures and include the ap
 - Sending one whole recording or one complete chunk list in a request moves the aggregate limit into HTTP parsing and process memory.
 - Evicting unconfirmed capture under pressure trades a visible resource error for silent source loss.
 - Continuing after an uncommitted IndexedDB write creates a gap while implying the recording is recoverable.
-- Loading a complete file for hashing, playback, provider upload, export, or backup violates the same invariant at a later stage.
+- Loading a complete file for hashing, playback, provider upload, export, or backup violates the incremental-resource policy. The narrowly bounded WebM metadata finalizer is the documented exception, not precedent for whole-file playback or server processing.
