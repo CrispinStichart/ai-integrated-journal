@@ -5,6 +5,7 @@ import {
   writeVariableSize,
 } from './bytes.js';
 import { InvalidEbmlError } from './errors.js';
+import { MAX_WEBM_METADATA_BYTES } from './limits.js';
 import { WEBM_IDS, type EbmlElement } from './ebml.js';
 
 export interface EncodedElement {
@@ -21,18 +22,29 @@ export function idBytes(id: number): Uint8Array {
     values.unshift(remaining % 256);
     remaining = Math.floor(remaining / 256);
   }
+  if (values.length > 4 || (values[0] ?? 0) === 0) {
+    throw new InvalidEbmlError('EBML element IDs cannot exceed four bytes.');
+  }
   return Uint8Array.from(values);
 }
 
-export function encodeElement(id: number, data: Uint8Array): Uint8Array {
-  return concatBytes([idBytes(id), writeVariableSize(data.byteLength), data]);
+export function encodeElement(
+  id: number,
+  data: Uint8Array,
+  maximumBytes = MAX_WEBM_METADATA_BYTES,
+): Uint8Array {
+  return concatBytes(
+    [idBytes(id), writeVariableSize(data.byteLength), data],
+    maximumBytes,
+  );
 }
 
 export function encodeMaster(
   id: number,
   children: readonly Uint8Array[],
+  maximumBytes = MAX_WEBM_METADATA_BYTES,
 ): Uint8Array {
-  return encodeElement(id, concatBytes(children));
+  return encodeElement(id, concatBytes(children, maximumBytes), maximumBytes);
 }
 
 export function encodeUnknownSizeMaster(id: number): Uint8Array {
@@ -43,7 +55,10 @@ export function encodeUnknownSizeMaster(id: number): Uint8Array {
 }
 
 export function copyElement(element: EbmlElement): Uint8Array {
-  return concatBytes([element.idBytes, element.sizeBytes, element.data]);
+  return concatBytes(
+    [element.idBytes, element.sizeBytes, element.data],
+    MAX_WEBM_METADATA_BYTES,
+  );
 }
 
 export function encodeDuration(duration: number): Uint8Array {

@@ -1,5 +1,5 @@
 import { decodeUnsigned } from './bytes.js';
-import { InvalidEbmlError } from './errors.js';
+import { InvalidEbmlError, NumericOverflowError } from './errors.js';
 import { WEBM_IDS, type EbmlElement, type ParsedWebm } from './ebml.js';
 
 export interface CuePoint {
@@ -33,8 +33,17 @@ function parseBlockHeader(data: Uint8Array): {
     throw new InvalidEbmlError('Block header is truncated.');
   }
   let track = first & (0xff >> trackLength);
-  for (let index = 1; index < trackLength; index += 1)
+  for (let index = 1; index < trackLength; index += 1) {
     track = track * 256 + (data[index] ?? 0);
+    if (!Number.isSafeInteger(track)) {
+      throw new NumericOverflowError(
+        'Block track number exceeds the safe integer range.',
+      );
+    }
+  }
+  if (track === 0 || track === 2 ** (7 * trackLength) - 1) {
+    throw new InvalidEbmlError('Block has an invalid track number.');
+  }
   const view = new DataView(data.buffer, data.byteOffset + trackLength, 2);
   return { timecode: view.getInt16(0), track };
 }
@@ -101,9 +110,15 @@ export function calculateWebmMetadata(parsed: ParsedWebm): WebmMetadataPlan {
         firstRelevantBlock = block;
     }
     if (firstRelevantBlock !== undefined) {
+      const cueTime = clusterTime + firstRelevantBlock.timecode;
+      if (!Number.isSafeInteger(cueTime) || cueTime < 0) {
+        throw new NumericOverflowError(
+          'WebM cue time is outside the safe range.',
+        );
+      }
       cues.push({
         clusterPosition: cluster.tagStart,
-        time: clusterTime + firstRelevantBlock.timecode,
+        time: cueTime,
         track: cueTrack,
       });
     }
@@ -116,12 +131,22 @@ export function calculateWebmMetadata(parsed: ParsedWebm): WebmMetadataPlan {
       : cueTrack;
   const selected = lastTwo.get(durationTrack) ?? [0, 0];
   const frameDurationNanoseconds = (selected[1] - selected[0]) * timecodeScale;
-  const duration = Math.floor(
-    ((lastClusterTime + selected[1]) * timecodeScale +
-      frameDurationNanoseconds -
-      (codecDelays.get(durationTrack) ?? 0)) /
-      timecodeScale,
-  );
+  const lastTimestampNanoseconds =
+    (lastClusterTime + selected[1]) * timecodeScale;
+  const durationNanoseconds =
+    lastTimestampNanoseconds +
+    frameDurationNanoseconds -
+    (codecDelays.get(durationTrack) ?? 0);
+  if (
+    !Number.isSafeInteger(frameDurationNanoseconds) ||
+    !Number.isSafeInteger(lastTimestampNanoseconds) ||
+    !Number.isSafeInteger(durationNanoseconds)
+  ) {
+    throw new NumericOverflowError(
+      'Calculated WebM duration exceeds the safe integer range.',
+    );
+  }
+  const duration = Math.floor(durationNanoseconds / timecodeScale);
   if (!Number.isSafeInteger(duration) || duration < 0)
     throw new InvalidEbmlError('Calculated WebM duration is invalid.');
   return {

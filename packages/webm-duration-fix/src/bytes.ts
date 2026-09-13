@@ -3,6 +3,7 @@ import {
   NumericOverflowError,
   TruncatedDataError,
 } from './errors.js';
+import { assertBoundedSize } from './limits.js';
 
 export interface VariableInteger {
   readonly length: number;
@@ -10,13 +11,12 @@ export interface VariableInteger {
   readonly value: number;
 }
 
-export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
+export function concatBytes(
+  parts: readonly Uint8Array[],
+  maximumBytes = Number.MAX_SAFE_INTEGER,
+): Uint8Array {
   const length = parts.reduce((total, part) => total + part.byteLength, 0);
-  if (!Number.isSafeInteger(length)) {
-    throw new NumericOverflowError(
-      'Combined byte length is not a safe integer.',
-    );
-  }
+  assertBoundedSize(length, maximumBytes, 'Combined output');
   const result = new Uint8Array(length);
   let offset = 0;
   for (const part of parts) {
@@ -33,10 +33,25 @@ function vintLength(first: number, label: string): number {
   return Math.clz32(first) - 24 + 1;
 }
 
+function assertReadableOffset(
+  bytes: Uint8Array,
+  offset: number,
+  label: string,
+): void {
+  if (
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > bytes.byteLength
+  ) {
+    throw new InvalidEbmlError(`EBML ${label} has an impossible offset.`);
+  }
+}
+
 export function readElementId(
   bytes: Uint8Array,
   offset: number,
 ): VariableInteger {
+  assertReadableOffset(bytes, offset, 'element ID');
   const first = bytes[offset];
   if (first === undefined) {
     throw new TruncatedDataError('WebM input ends inside an element ID.');
@@ -62,6 +77,7 @@ export function readElementSize(
   bytes: Uint8Array,
   offset: number,
 ): VariableInteger {
+  assertReadableOffset(bytes, offset, 'element size');
   const first = bytes[offset];
   if (first === undefined) {
     throw new TruncatedDataError('WebM input ends inside an element size.');

@@ -8,7 +8,8 @@ import {
   encodeUnsignedElement,
   idBytes,
 } from './encoder.js';
-import { InvalidEbmlError } from './errors.js';
+import { InvalidEbmlError, NumericOverflowError } from './errors.js';
+import { assertBoundedSize, type ResourceLimits } from './limits.js';
 import { WEBM_IDS, type EbmlElement, type ParsedWebm } from './ebml.js';
 import {
   calculateWebmMetadata,
@@ -66,7 +67,20 @@ function encodeCues(cues: readonly CuePoint[], offset: number): Uint8Array {
 function encodeMetadata(
   parsed: ParsedWebm,
   plan: WebmMetadataPlan,
+  maximumMetadataBytes: number,
 ): Uint8Array {
+  const retainedSourceBytes = plan.retainedLevelOneElements.reduce(
+    (total, element) => total + element.dataEnd - element.tagStart,
+    parsed.header.dataEnd -
+      parsed.header.tagStart +
+      (plan.info.dataEnd - plan.info.tagStart) +
+      (plan.tracks.dataEnd - plan.tracks.tagStart),
+  );
+  assertBoundedSize(
+    retainedSourceBytes,
+    maximumMetadataBytes,
+    'WebM retained metadata',
+  );
   const header = copyElement(parsed.header);
   const segmentPrefix = encodeUnknownSizeMaster(WEBM_IDS.segment);
   const info = encodeInfo(plan.info, plan.duration);
@@ -88,6 +102,14 @@ function encodeMetadata(
       retained.reduce((sum, item) => sum + item.byteLength, 0);
     const metadataSize = cuesStart + cuesSize;
     const difference = metadataSize - originalMetadataSize;
+    if (
+      !Number.isSafeInteger(infoStart) ||
+      !Number.isSafeInteger(tracksStart) ||
+      !Number.isSafeInteger(cuesStart) ||
+      !Number.isSafeInteger(difference)
+    ) {
+      throw new InvalidEbmlError('WebM metadata has impossible offsets.');
+    }
     seekHead = encodeSeekHead(infoStart, tracksStart, cuesStart);
     cues = encodeCues(plan.cues, difference - parsed.segment.dataStart);
     seekHeadSize = seekHead.byteLength;
@@ -97,28 +119,34 @@ function encodeMetadata(
     if (iteration === 9)
       throw new InvalidEbmlError('WebM metadata offsets did not converge.');
   }
-  return concatBytes([
-    header,
-    segmentPrefix,
-    seekHead,
-    info,
-    tracks,
-    ...retained,
-    cues,
-  ]);
+  return concatBytes(
+    [header, segmentPrefix, seekHead, info, tracks, ...retained, cues],
+    maximumMetadataBytes,
+  );
 }
 
-export function finalizeContainer(input: Uint8Array): {
+export function finalizeContainer(
+  input: Uint8Array,
+  limits: ResourceLimits,
+): {
   readonly bytes: Uint8Array;
   readonly changed: boolean;
 } {
-  const parsed = parseWebm(input);
+  const parsed = parseWebm(input, {
+    maximumMetadataBytes: limits.maximumMetadataBytes,
+  });
   const plan = calculateWebmMetadata(parsed);
-  const metadata = encodeMetadata(parsed, plan);
-  const bytes = concatBytes([
-    metadata,
-    input.subarray(plan.firstClusterOffset),
-  ]);
+  const metadata = encodeMetadata(parsed, plan, limits.maximumMetadataBytes);
+  const maximumOutputBytes = input.byteLength + limits.maximumMetadataBytes;
+  if (!Number.isSafeInteger(maximumOutputBytes)) {
+    throw new NumericOverflowError(
+      'WebM output size exceeds the safe integer range.',
+    );
+  }
+  const bytes = concatBytes(
+    [metadata, input.subarray(plan.firstClusterOffset)],
+    maximumOutputBytes,
+  );
   const changed =
     bytes.byteLength !== input.byteLength ||
     bytes.some((byte, index) => byte !== input[index]);
