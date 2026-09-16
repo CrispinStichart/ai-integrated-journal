@@ -251,3 +251,5 @@ export {
   type CanonicalJobInput,
   type QueueAttemptDisposition,
 } from './queue-runtime.js';
+
+export * from './provider-execution-repository.js';

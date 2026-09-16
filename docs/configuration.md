@@ -27,7 +27,7 @@ corepack pnpm local:start -- --check
 | `LOG_LEVEL` | `info` | API, worker | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `silent`. Higher verbosity does not authorize content or secrets in logs. |
 | `AUTH_ORIGIN` | `http://localhost:5173` | API authentication | Exact browser origin. Plain HTTP is accepted only for localhost browser secure-context behavior; every non-local origin requires HTTPS. |
 | `WEBAUTHN_RP_ID` | `localhost` | API authentication | Must exactly match the hostname in `AUTH_ORIGIN`. |
-| `AI_CREDENTIAL_ENCRYPTION_KEY` | Unset | API settings | Optional 43-character base64url encoding of 256 random bits. It enables write-only encrypted provider credential storage; it does not install or enable a provider adapter. Keep it outside journal data, exports, and backups. |
+| `AI_CREDENTIAL_ENCRYPTION_KEY` | Unset | API and worker | Optional 43-character base64url encoding of 256 random bits. It enables encrypted provider credential writes in the API and decryption in the worker. OpenAI is registered but requires owner enablement, disclosure acceptance, an API credential, and capability model IDs in Settings. Keep it outside journal data, exports, and backups. |
 | `BACKUP_REPOSITORY_DIR` | All three backup keys unset | API, worker, backup tool | Absolute encrypted restic repository path, preferably on another device/filesystem. |
 | `BACKUP_PASSWORD_FILE` | All three backup keys unset | API, worker, backup tool | Absolute owner-only restic password-file path. `backup:init` creates it with mode `0600`; store a separate recovery copy. |
 | `BACKUP_STAGING_DIR` | All three backup keys unset | API, worker, backup tool | Absolute owner-only staging path. It must not overlap the repository or live blobs. |
@@ -40,7 +40,7 @@ Generate the provider encryption key without printing it into shell history as a
 node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Paste the output into the protected `.env`, then restart the API. Changing or losing this deployment key makes existing provider credential ciphertext unreadable; journal sources and prior results remain intact.
+Paste the output into the protected `.env`, then restart the API and worker with the same key. Changing or losing this deployment key makes existing provider credential ciphertext unreadable; journal sources and prior results remain intact.
 
 ## Restore-only keys
 
@@ -59,3 +59,11 @@ Restore also needs the three backup keys. Database credentials are passed in the
 The authenticated **Settings** page stores versioned owner policy in PostgreSQL, not `.env`: journal timezone, independent material/audio grace periods, original audio and provider-raw retention, nudge quiet hours and daily limits, backup schedule enablement, provider disclosure acceptance, capability model IDs, provider enablement, and write-only credentials. See [settings-and-privacy.md](settings-and-privacy.md).
 
 Backups exclude all credentials, session material, recovery codes, and the provider encryption key. Exports exclude credentials and include provider raw bodies only after a separate explicit selection. Environment errors, logs, and health output must never reproduce secret values.
+
+## OpenAI setup
+
+Open **Settings → OpenAI**, enter an API key, set `structured_generation` to a Responses-compatible text model and `speech_to_text` to `gpt-transcribe`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, or `whisper-1`, accept the disclosure, and enable the provider. There are no automatic model defaults. Text models must support JSON-schema output and the job parameters; built-in jobs use `temperature: 0`.
+
+Whisper requests word and segment timestamps. GPT transcription leaves unavailable timing, confidence, and language metadata unknown. Supported audio containers are MP3, MP4/M4A, MPEG/MPGA, WAV, and WebM, with a 25,000,000-byte limit per recording. The adapter does not split or transcode audio. Each request has a two-minute timeout and supports job cancellation.
+
+The worker rereads settings for every operation. Disabling OpenAI, removing its credential, or changing its disclosure prevents subsequent requests; it does not revoke an already-sent request. API keys are supplied only from encrypted owner settings, never from job configuration. Structured text requests use `store: false`; this does not eliminate all provider retention. See [OpenAI's data controls](https://developers.openai.com/api/docs/guides/your-data). Embeddings remain unavailable, so search retains its existing lexical fallback.

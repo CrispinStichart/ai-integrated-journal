@@ -37,9 +37,9 @@ import {
 const RAW_RESPONSE_RETENTION = 'days_30' satisfies RawResponseRetention;
 const RAW_RESPONSE_RETENTION_MILLISECONDS = 30 * 24 * 60 * 60 * 1_000;
 
-export type SpeechProviderResolver = () => Promise<
-  CapabilityResolution<SpeechToTextProvider>
->;
+export type SpeechProviderResolver = (
+  canonical: CanonicalTranscriptionInput,
+) => Promise<CapabilityResolution<SpeechToTextProvider>>;
 
 class PipelineFailure extends Error {
   public constructor(
@@ -156,7 +156,7 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
     try {
       await this.#repository.markRunning(runId, this.now());
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      const resolution = await this.resolveProvider();
+      const resolution = await this.resolveProvider(canonical);
       if (resolution.status === 'unavailable') {
         throw new PipelineFailure(resolution.reason, false);
       }
@@ -175,6 +175,7 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
         },
         context: canonical.run.requestedContext,
         configuration: canonical.run.requestedConfiguration as JsonObject,
+        signal,
       });
       if (
         !Number.isSafeInteger(result.operation.processingTimeMs) ||
@@ -254,6 +255,9 @@ export class TranscriptionJobHandler implements CanonicalJobHandler<CanonicalTra
       throw new QueueJobError(
         failure.retryable ? 'transient' : 'permanent',
         'Transcription attempt failed.',
+        error instanceof AiProviderOperationError
+          ? error.retryAfterMilliseconds
+          : undefined,
       );
     }
   }
@@ -267,6 +271,7 @@ export async function registerTranscriptionConsumer(input: {
 }): Promise<string> {
   return registerQueueWorker({
     boss: input.boss,
+    database: input.database,
     handler: new TranscriptionJobHandler(
       input.database,
       input.boss,

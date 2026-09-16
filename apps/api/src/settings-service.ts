@@ -1,10 +1,8 @@
 import {
-  createCipheriv,
-  createHash,
-  createHmac,
-  randomBytes,
-} from 'node:crypto';
-
+  createProviderCredentialCipher as createSharedProviderCredentialCipher,
+  providerDisclosureVersion,
+  type ProviderCredentialCipher,
+} from '@journal/ai';
 import type { AiProviderDescriptor } from '@journal/ai';
 import type {
   ProviderCapability,
@@ -16,7 +14,6 @@ import type {
 import {
   SettingsRepository,
   settingsRequestHash,
-  type EncryptedProviderCredential,
   type JournalDatabase,
 } from '@journal/database';
 import { parseIanaTimezone } from '@journal/domain';
@@ -28,68 +25,19 @@ export class SettingsValidationError extends Error {
   }
 }
 
-export interface ProviderCredentialCipher {
-  encrypt(
-    ownerId: string,
-    providerId: string,
-    value: string,
-  ): EncryptedProviderCredential;
-  fingerprint(value: string): string;
-}
-
+// Preserve the API service's validation error contract while sharing the cipher.
 export function createProviderCredentialCipher(
-  base64UrlKey: string,
+  key: string,
 ): ProviderCredentialCipher {
-  const key = Buffer.from(base64UrlKey, 'base64url');
-  if (key.byteLength !== 32)
+  try {
+    return createSharedProviderCredentialCipher(key);
+  } catch {
     throw new SettingsValidationError(
       'Provider credential encryption requires a 256-bit key.',
     );
-  return {
-    encrypt(ownerId, providerId, value) {
-      const nonce = randomBytes(12);
-      const cipher = createCipheriv('aes-256-gcm', key, nonce);
-      cipher.setAAD(
-        Buffer.from(`provider-credential:v1:${ownerId}:${providerId}`),
-      );
-      const ciphertext = Buffer.concat([
-        cipher.update(value, 'utf8'),
-        cipher.final(),
-        cipher.getAuthTag(),
-      ]);
-      return {
-        ciphertext: ciphertext.toString('base64url'),
-        nonce: nonce.toString('base64url'),
-        encryptionVersion: 1,
-      };
-    },
-    fingerprint(value) {
-      return createHmac('sha256', key)
-        .update('provider-credential-idempotency:v1:')
-        .update(value)
-        .digest('hex');
-    },
-  };
+  }
 }
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object')
-    return `{${Object.entries(value as Readonly<Record<string, unknown>>)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`)
-      .join(',')}}`;
-  return JSON.stringify(value);
-}
-
-export function providerDisclosureVersion(
-  descriptor: AiProviderDescriptor,
-): string {
-  return createHash('sha256')
-    .update(canonicalJson(descriptor.disclosure))
-    .digest('hex');
-}
+export { providerDisclosureVersion };
 
 export interface SettingsService {
   get(ownerId: string): Promise<SettingsResource>;

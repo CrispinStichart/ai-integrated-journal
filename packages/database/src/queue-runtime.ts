@@ -197,6 +197,7 @@ export class QueueJobError extends Error {
   public constructor(
     public readonly disposition: QueueAttemptDisposition,
     message: string,
+    public readonly retryAfterMilliseconds?: number,
   ) {
     super(message);
     this.name = 'QueueJobError';
@@ -225,6 +226,7 @@ export interface CanonicalJobHandler<Input> {
 export async function registerQueueWorker<Input>(input: {
   readonly boss: PgBoss;
   readonly handler: CanonicalJobHandler<Input>;
+  readonly database?: DatabaseClient;
   readonly queueName: Exclude<QueueName, 'journal.dead-letter'>;
 }): Promise<string> {
   const definition = queueDefinitions[input.queueName];
@@ -272,6 +274,56 @@ export async function registerQueueWorker<Input>(input: {
             return {
               id: job.id,
               output: { code: 'canceled' },
+              status: 'completed' as const,
+            };
+          }
+          if (
+            disposition === 'transient' &&
+            error instanceof QueueJobError &&
+            error.retryAfterMilliseconds !== undefined &&
+            error.retryAfterMilliseconds > 0 &&
+            input.database !== undefined
+          ) {
+            // Settle and defer atomically: no other worker can fetch the retry
+            // between failure settlement and applying the provider's delay.
+            const retryAt = new Date(
+              Date.now() +
+                Math.max(
+                  error.retryAfterMilliseconds,
+                  (definition.queueOptions.retryDelay ?? 0) * 1000,
+                ),
+            );
+            await input.database.database.transaction(async (transaction) => {
+              const db = fromDrizzle(transaction, sql);
+              await input.boss.fail(
+                input.queueName,
+                job.id,
+                { code: 'transient_failure' },
+                { db },
+              );
+              const settled = await input.boss.getJobById(
+                input.queueName,
+                job.id,
+                { db },
+              );
+              if (settled?.state === 'retry') {
+                await input.boss.update(input.queueName, undefined, {
+                  id: job.id,
+                  startAfter: new Date(
+                    Math.max(
+                      retryAt.getTime(),
+                      new Date(settled.startAfter).getTime(),
+                    ),
+                  ),
+                  db,
+                });
+              }
+            });
+            // pg-boss completes only active jobs. This job is already settled
+            // (retry or terminal failure), so the automatic completion is a no-op.
+            return {
+              id: job.id,
+              output: { code: 'retry_deferred' },
               status: 'completed' as const,
             };
           }

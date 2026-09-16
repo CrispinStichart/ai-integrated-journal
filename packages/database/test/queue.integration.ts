@@ -271,4 +271,54 @@ describe('WORKER pg-boss foundation', () => {
     expect(loads.get('synthetic_canonical_cancel')).toBe(1);
     await boss.offWork(queueNames.maintenance, { wait: true });
   }, 30_000);
+  it('atomically defers provider retries without completing the job or resetting retry limits', async () => {
+    const queueName = queueNames.cleanup;
+    const jobId = '019c5b90-0000-7000-8000-000000000319';
+    let attempts = 0;
+    const started = Date.now();
+    const workerId = await registerQueueWorker({
+      boss,
+      database: client,
+      queueName,
+      handler: {
+        load: async () => ({ state: 'runnable', input: {} }),
+        execute: async () => {
+          attempts++;
+          throw new QueueJobError(
+            'transient',
+            'Provider rate limited.',
+            60_000,
+          );
+        },
+      },
+    });
+    try {
+      await boss.send(
+        queueName,
+        createQueueJobPayload({
+          identifiers: { runId: jobId },
+          operation: 'synthetic_retry_delay',
+          queueName,
+        }),
+        { id: jobId, retryDelay: 0, retryLimit: 2 },
+      );
+      boss.notifyWorker(workerId);
+      await waitFor(
+        async () =>
+          (await boss.getJobById(queueName, jobId))?.state === 'retry',
+      );
+      const job = await boss.getJobById(queueName, jobId);
+      expect(job?.output).toEqual({ code: 'transient_failure' });
+      expect(job?.startAfter.getTime()).toBeGreaterThanOrEqual(
+        started + 60_000,
+      );
+      expect(job?.retryLimit).toBe(2);
+      expect(job?.output).toEqual({ code: 'transient_failure' });
+      expect(attempts).toBe(1);
+      expect(await boss.fetch(queueName)).toEqual([]);
+    } finally {
+      await boss.offWork(queueName, { wait: true });
+      await boss.cancel(queueName, jobId);
+    }
+  });
 });

@@ -8,3 +8,6 @@ export * from './structured-generation.js';
 
 /** Identifies the owning workspace package without exposing implementation paths. */
 export const aiPackageName = '@journal/ai' as const;
+
+export * from './provider-security.js';
+export * from './openai.js';

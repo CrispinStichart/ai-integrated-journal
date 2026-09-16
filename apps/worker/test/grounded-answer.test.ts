@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import {
   AiProviderOperationError,
+  createOpenAiProviderFactory,
   type JsonValue,
   type StructuredGenerationRequest,
 } from '@journal/ai';
@@ -165,6 +166,61 @@ function available(
 }
 
 describe('grounded-answer worker', () => {
+  it('validates and persists an OpenAI grounded response using the existing schema', async () => {
+    const repo = repository();
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              status: 'completed',
+              content: [
+                {
+                  type: 'output_text',
+                  text: JSON.stringify({
+                    status: 'answered',
+                    answer: 'You took a morning walk.',
+                    citationIds: [CITATION_ID],
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+    const adapter = await createOpenAiProviderFactory({
+      fetch: fetcher,
+    }).create({
+      apiKey: 'test-key',
+      models: { structured_generation: 'test-model' },
+    });
+    const port = adapter.structured_generation;
+    if (!port) throw new Error('Expected text provider');
+    const handler = new GroundedAnswerJobHandler(
+      {} as DatabaseClient,
+      blobStore(),
+      async () => ({
+        status: 'available',
+        port,
+      }),
+      repo,
+    );
+    await handler.execute(canonical, new AbortController().signal);
+    expect(repo.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'succeeded',
+        synthesis: 'You took a morning walk.',
+        provider: expect.objectContaining({ id: 'openai' }),
+      }),
+    );
+    expect(
+      JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)).text.format.strict,
+    ).toBe(false);
+  });
+
   it('[SEARCH-003][SEARCH-004][SEARCH-007][MODEL-001][MODEL-002][SEC-005] generates only from reloaded bounded evidence and persists validated lineage', async () => {
     const repo = repository();
     const provider = available();

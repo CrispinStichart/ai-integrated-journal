@@ -11,7 +11,10 @@ import {
 } from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
 import { LocalBlobStore } from '@journal/storage';
-import { AiProviderFactoryRegistry } from '@journal/ai';
+import {
+  AiProviderFactoryRegistry,
+  createOpenAiProviderFactory,
+} from '@journal/ai';
 
 import { createApiApp } from './app.js';
 import { AuthenticationService } from './auth.js';
@@ -43,7 +46,9 @@ const logger = createContentSafeLogger({
 });
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const boss = createQueueClient(config.databaseUrl);
-const providers = new AiProviderFactoryRegistry();
+const providers = new AiProviderFactoryRegistry([
+  createOpenAiProviderFactory(),
+]);
 const credentialCipher =
   config.credentialEncryptionKey === undefined
     ? undefined

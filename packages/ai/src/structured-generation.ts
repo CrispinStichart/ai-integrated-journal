@@ -30,6 +30,7 @@ export type StructuredGenerationRequest<T extends JsonValue> = Readonly<{
   outputSchema: StructuredOutputSchema<T>;
   prompt: PromptSnapshot;
   configuration: JsonObject;
+  signal?: AbortSignal;
 }>;
 
 export type StructuredGenerationResult<T extends JsonValue> = Readonly<{

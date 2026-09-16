@@ -24,6 +24,7 @@ export type SpeechToTextRequest = Readonly<{
   audio: SpeechAudioInput;
   context: readonly SpeechContextItem[];
   configuration: JsonObject;
+  signal?: AbortSignal;
 }>;
 
 export type TranscriptTiming =

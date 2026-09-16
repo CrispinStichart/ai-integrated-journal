@@ -1,3 +1,4 @@
+import { OwnerProviderResolver } from '../src/provider-resolver.js';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,8 +7,15 @@ import path from 'node:path';
 import {
   AiProviderFactoryRegistry,
   AiProviderOperationError,
+  createOpenAiProviderFactory,
+  createProviderCredentialCipher,
+  openAiDescriptor,
+  providerDisclosureVersion,
 } from '@journal/ai';
 import {
+  ProviderExecutionRepository,
+  providerConfigurations,
+  providerCredentials,
   appendCorrectedTranscriptRevision,
   contributions,
   createDatabaseClient,
@@ -915,5 +923,153 @@ describe('TRANSCRIPT asynchronous transcription pipeline', () => {
       status: 'succeeded',
       predecessorRunId: failedCleanup?.id,
     });
+  });
+  it('executes OpenAI transcription and cleanup using persisted owner credentials', async () => {
+    const openAiRecordingId = createUuidV7<'recording'>();
+    const openAiAudioKey = `audio/${openAiRecordingId}/original.audio`;
+    await blobs.putImmutable(bytes(audio), { key: openAiAudioKey });
+    const openAiContributionId = createUuidV7<'contribution'>();
+    await client.database.insert(contributions).values({
+      id: openAiContributionId,
+      journalDayId: dayId,
+      authorId: ownerId,
+      sourceType: 'recording',
+      capturedAt: now,
+      capturedTimezone: 'UTC',
+      journalTimezone: 'UTC',
+      journalDateAssignment: 'default',
+    });
+    await client.database.insert(recordings).values({
+      id: openAiRecordingId,
+      contributionId: openAiContributionId,
+      mimeType: 'audio/webm',
+      finalByteSize: BigInt(audio.byteLength),
+      finalSha256: sha256(audio),
+      finalBlobKey: openAiAudioKey,
+      persistenceState: 'durable',
+    });
+    const cipher = createProviderCredentialCipher(
+      Buffer.alloc(32, 4).toString('base64url'),
+    );
+    await client.database.insert(providerConfigurations).values({
+      ownerId,
+      providerId: 'openai',
+      enabled: true,
+      models: {
+        speech_to_text: 'whisper-1',
+        structured_generation: 'text-test',
+      },
+      disclosureVersion: providerDisclosureVersion(openAiDescriptor),
+      disclosureAcceptedAt: now,
+    });
+    await client.database.insert(providerCredentials).values({
+      ownerId,
+      providerId: 'openai',
+      ...cipher.encrypt(ownerId, 'openai', 'test-secret'),
+    });
+    const requests: string[] = [];
+    const speechRaw =
+      ' { "text": "OpenAI journal", "segments": [{"text":"OpenAI journal","start":0,"end":1}], "language":"english" } ';
+    const textRaw = JSON.stringify({
+      status: 'completed',
+      output: [
+        {
+          type: 'message',
+          status: 'completed',
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({ cleanedText: 'OpenAI journal.' }),
+            },
+          ],
+        },
+      ],
+    });
+    const registry = new AiProviderFactoryRegistry([
+      createOpenAiProviderFactory({
+        fetch: async (url, init) => {
+          requests.push(String(url));
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer test-secret',
+          });
+          return new Response(
+            String(url).endsWith('transcriptions') ? speechRaw : textRaw,
+            { headers: { 'content-type': 'application/json' } },
+          );
+        },
+      }),
+    ]);
+    const repository = new ProviderExecutionRepository(client.database);
+    expect(
+      await repository.get(createUuidV7<'other-owner'>(), 'openai'),
+    ).toBeUndefined();
+    expect(await repository.get(ownerId, 'other-provider')).toBeUndefined();
+    expect(await repository.journalDayOwner(dayId)).toBe(ownerId);
+    const resolver = new OwnerProviderResolver(repository, registry, cipher);
+    const run = await inTransaction(client.database, (transaction) =>
+      enqueueTranscriptionRun({
+        boss,
+        transaction,
+        recordingId: openAiRecordingId,
+        now,
+      }),
+    );
+    const handler = new TranscriptionJobHandler(
+      client,
+      boss,
+      blobs,
+      (canonical) =>
+        resolver.forRecording(
+          canonical.recording.id,
+          canonical.run.requestedConfiguration,
+          'speech_to_text',
+        ),
+    );
+    if (!queuedPayload) throw new Error('Expected queued transcription');
+    const canonical = await handler.load(queuedPayload);
+    if (!canonical.input) throw new Error('Expected runnable transcription');
+    await handler.execute(canonical.input, new AbortController().signal);
+    const [persisted] = await client.database
+      .select()
+      .from(transcriptionRuns)
+      .where(eq(transcriptionRuns.id, run.id));
+    expect(persisted).toMatchObject({
+      status: 'succeeded',
+      provider: { id: 'openai' },
+      model: { id: 'whisper-1' },
+    });
+    if (!persisted?.rawResponseId) throw new Error('Expected raw response');
+    expect(
+      new TextDecoder().decode(
+        (
+          await new BlobRawResponseStore(client.database, blobs).open(
+            persisted.rawResponseId,
+          )
+        ).body,
+      ),
+    ).toBe(speechRaw);
+    const cleanup = new TranscriptCleanupJobHandler(client, blobs, (input) =>
+      resolver.forRecording(
+        input.run.recordingId,
+        input.run.requestedConfiguration,
+        'structured_generation',
+      ),
+    );
+    const cleanupCanonical = await cleanup.load(queuedPayload);
+    if (!cleanupCanonical.input) throw new Error('Expected runnable cleanup');
+    await cleanup.execute(cleanupCanonical.input, new AbortController().signal);
+    const [cleaned] = await client.database
+      .select()
+      .from(transcriptCleanupRuns)
+      .where(eq(transcriptCleanupRuns.id, cleanupCanonical.input.run.id));
+    expect(cleaned).toMatchObject({
+      status: 'succeeded',
+      provider: { id: 'openai' },
+      model: { id: 'text-test' },
+    });
+    expect(requests).toEqual([
+      'https://api.openai.com/v1/audio/transcriptions',
+      'https://api.openai.com/v1/responses',
+    ]);
   });
 });

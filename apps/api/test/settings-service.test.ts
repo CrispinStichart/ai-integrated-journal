@@ -1,3 +1,7 @@
+import {
+  createOpenAiProviderFactory,
+  AiProviderFactoryRegistry,
+} from '@journal/ai';
 import type { AiProviderDescriptor } from '@journal/ai';
 import type { UpdateProviderSettingsRequest } from '@journal/contracts';
 import type {
@@ -131,6 +135,36 @@ function service(input?: {
 }
 
 describe('settings service privacy and policy', () => {
+  it('discovers OpenAI with both capabilities and no automatic enablement or model selection', async () => {
+    const registry = new AiProviderFactoryRegistry([
+      createOpenAiProviderFactory(),
+    ]);
+    const instance = new PostgresSettingsService(
+      {} as JournalDatabase,
+      registry.listProviders(),
+      false,
+      createProviderCredentialCipher(KEY),
+      undefined,
+      () => NOW,
+      repository(),
+    );
+    const settings = await instance.get(OWNER_ID);
+    expect(settings.providers).toEqual([
+      expect.objectContaining({
+        id: 'openai',
+        capabilities: ['structured_generation', 'speech_to_text'],
+        enabled: false,
+        models: {},
+        credentialConfigured: false,
+        credentialStorageAvailable: true,
+        disclosure: expect.objectContaining({
+          external: true,
+          contentRecipient: 'OpenAI',
+        }),
+      }),
+    ]);
+  });
+
   it('[SEC-003][SEC-006] encrypts credentials with authenticated randomized ciphertext and a stable secret fingerprint', () => {
     expect(() => createProviderCredentialCipher('too-short')).toThrow(
       SettingsValidationError,

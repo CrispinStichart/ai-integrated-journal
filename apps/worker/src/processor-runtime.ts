@@ -296,6 +296,7 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
               templateHash: canonical.run.promptTemplateHash,
             },
             configuration: canonical.run.requestedConfiguration as JsonObject,
+            signal,
           }),
           signal,
         );
@@ -378,6 +379,9 @@ export class ProcessorJobHandler implements CanonicalJobHandler<CanonicalProcess
       throw new QueueJobError(
         failure.retryable ? 'transient' : 'permanent',
         'Processor attempt failed.',
+        error instanceof AiProviderOperationError
+          ? error.retryAfterMilliseconds
+          : undefined,
       );
     }
   }

@@ -86,9 +86,9 @@ const cleanupOutputSchema: StructuredOutputSchema<CleanupOutput> =
     },
   });
 
-export type StructuredProviderResolver = () => Promise<
-  CapabilityResolution<StructuredGenerationProvider>
->;
+export type StructuredProviderResolver = (
+  canonical: CanonicalTranscriptCleanupInput,
+) => Promise<CapabilityResolution<StructuredGenerationProvider>>;
 
 class CleanupPipelineFailure extends Error {
   public constructor(
@@ -202,7 +202,7 @@ export class TranscriptCleanupJobHandler implements CanonicalJobHandler<Canonica
       ) {
         throw new CleanupPipelineFailure('unsupported_cleanup_prompt', false);
       }
-      const resolution = await this.resolveProvider();
+      const resolution = await this.resolveProvider(canonical);
       if (resolution.status === 'unavailable') {
         throw new CleanupPipelineFailure(resolution.reason, false);
       }
@@ -217,6 +217,7 @@ export class TranscriptCleanupJobHandler implements CanonicalJobHandler<Canonica
         outputSchema: cleanupOutputSchema,
         prompt: TRANSCRIPT_CLEANUP_PROMPT,
         configuration: canonical.run.requestedConfiguration as JsonObject,
+        signal,
       });
       if (
         !Number.isSafeInteger(result.operation.processingTimeMs) ||
@@ -288,6 +289,9 @@ export class TranscriptCleanupJobHandler implements CanonicalJobHandler<Canonica
       throw new QueueJobError(
         failure.retryable ? 'transient' : 'permanent',
         'Transcript cleanup attempt failed.',
+        error instanceof AiProviderOperationError
+          ? error.retryAfterMilliseconds
+          : undefined,
       );
     }
   }
@@ -301,6 +305,7 @@ export async function registerTranscriptCleanupConsumer(input: {
 }): Promise<string> {
   return registerQueueWorker({
     boss: input.boss,
+    database: input.database,
     handler: new TranscriptCleanupJobHandler(
       input.database,
       input.blobs,

@@ -245,7 +245,11 @@ importers:
         specifier: 7.0.0
         version: 7.0.0
 
-  packages/ai: {}
+  packages/ai:
+    devDependencies:
+      '@types/node':
+        specifier: 26.2.0
+        version: 26.2.0
 
   packages/config:
     dependencies:

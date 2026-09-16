@@ -13,7 +13,9 @@ node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('b
 # AI_CREDENTIAL_ENCRYPTION_KEY=<the generated value>
 ```
 
-The API encrypts each value with AES-256-GCM, a fresh nonce, and owner/provider authenticated context before persistence. Keep the deployment key outside the journal and backup corpus. Losing or changing it requires replacing stored provider credentials. Credential values, ciphertext, and secret fingerprints are excluded from audit metadata and application logs.
+OpenAI is available for structured text generation and audio transcription; configure its capability model IDs and API credential before enabling it. See [OpenAI setup](configuration.md#openai-setup) for model and upload requirements.
+
+The API and worker must share `AI_CREDENTIAL_ENCRYPTION_KEY`. The worker checks the current owner settings and disclosure before decrypting the selected credential for each operation. The API encrypts each value with AES-256-GCM, a fresh nonce, and owner/provider authenticated context before persistence. Keep the deployment key outside the journal and backup corpus. Losing or changing it requires replacing stored provider credentials. Credential values, ciphertext, and secret fingerprints are excluded from audit metadata and application logs.
 
 ## Time, retention, nudges, export, and backup
 

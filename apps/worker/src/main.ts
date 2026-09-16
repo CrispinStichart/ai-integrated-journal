@@ -1,7 +1,16 @@
+import { OwnerProviderResolver } from './provider-resolver.js';
 import { loadConfig } from '@journal/config';
-import { createDatabaseClient, createQueueClient } from '@journal/database';
+import {
+  createDatabaseClient,
+  createQueueClient,
+  ProviderExecutionRepository,
+} from '@journal/database';
 import { createContentSafeLogger } from '@journal/observability';
-import { AiProviderFactoryRegistry } from '@journal/ai';
+import {
+  AiProviderFactoryRegistry,
+  createOpenAiProviderFactory,
+  createProviderCredentialCipher,
+} from '@journal/ai';
 import { LocalBlobStore } from '@journal/storage';
 
 import { registerTranscriptionConsumer } from './transcription-pipeline.js';
@@ -22,7 +31,16 @@ const logger = createContentSafeLogger({
 });
 const database = createDatabaseClient({ connectionString: config.databaseUrl });
 const boss = createQueueClient(config.databaseUrl);
-const providers = new AiProviderFactoryRegistry();
+const providers = new AiProviderFactoryRegistry([
+  createOpenAiProviderFactory(),
+]);
+const providerResolver = new OwnerProviderResolver(
+  new ProviderExecutionRepository(database.database),
+  providers,
+  config.credentialEncryptionKey === undefined
+    ? undefined
+    : createProviderCredentialCipher(config.credentialEncryptionKey),
+);
 const blobs = new LocalBlobStore(config.blobDataDirectory);
 boss.on('error', (error: Error) => {
   logger.error({ errorType: error.name }, 'Queue runtime error');
@@ -37,9 +55,10 @@ const worker = new WorkerRuntime({
       boss: queue,
       database,
       blobs,
-      resolveProvider: () =>
-        providers.resolve(
-          { providerId: 'unconfigured', enabled: false, settings: {} },
+      resolveProvider: (canonical) =>
+        providerResolver.forRecording(
+          canonical.recording.id,
+          canonical.run.requestedConfiguration,
           'speech_to_text',
         ),
     });
@@ -47,9 +66,10 @@ const worker = new WorkerRuntime({
       boss: queue,
       database,
       blobs,
-      resolveProvider: () =>
-        providers.resolve(
-          { providerId: 'unconfigured', enabled: false, settings: {} },
+      resolveProvider: (canonical) =>
+        providerResolver.forRecording(
+          canonical.run.recordingId,
+          canonical.run.requestedConfiguration,
           'structured_generation',
         ),
     });
@@ -57,9 +77,10 @@ const worker = new WorkerRuntime({
       boss: queue,
       database,
       blobs,
-      resolveProvider: () =>
-        providers.resolve(
-          { providerId: 'unconfigured', enabled: false, settings: {} },
+      resolveProvider: (canonical) =>
+        providerResolver.forJournalDay(
+          canonical.run.targetJournalDayId,
+          canonical.run.requestedConfiguration,
           'structured_generation',
         ),
     });
@@ -78,15 +99,9 @@ const worker = new WorkerRuntime({
       database,
       blobs,
       resolveProvider: (canonical) =>
-        providers.resolve(
-          {
-            providerId: String(
-              canonical.answer.requestedConfiguration.providerId ??
-                'unconfigured',
-            ),
-            enabled: false,
-            settings: {},
-          },
+        providerResolver.resolve(
+          canonical.answer.ownerId,
+          canonical.answer.requestedConfiguration,
           'structured_generation',
         ),
     });

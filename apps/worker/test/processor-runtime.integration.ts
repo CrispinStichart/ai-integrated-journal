@@ -6,6 +6,7 @@ import path from 'node:path';
 import {
   AiProviderFactoryRegistry,
   AiProviderOperationError,
+  createOpenAiProviderFactory,
 } from '@journal/ai';
 import type { ProcessorDefinitionDraft } from '@journal/contracts';
 import {
@@ -994,5 +995,73 @@ describe('WORKER generic processor runtime', () => {
         .from(processorResults)
         .where(eq(processorResults.runId, run.id)),
     ).toEqual([]);
+  });
+  it('executes an OpenAI processor with the existing optional evidence schema', async () => {
+    const run = await inTransaction(client.database, (transaction) =>
+      enqueueProcessorRun({
+        transaction,
+        boss,
+        processorVersionId: versionId,
+        target: { scope: 'journal_day', journalDayId: dayId },
+        requestedConfiguration: { temperature: 0, testRun: 'openai' },
+        now,
+      }),
+    );
+    const adapter = await createOpenAiProviderFactory({
+      fetch: async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.text.format.strict).toBe(false);
+        expect(
+          body.text.format.schema.properties.evidence.items.properties
+            .audioRange,
+        ).toBeDefined();
+        expect(
+          body.text.format.schema.properties.evidence.items.required,
+        ).not.toContain('audioRange');
+        return new Response(
+          JSON.stringify({
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                status: 'completed',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: JSON.stringify({
+                      completeness: 'complete',
+                      payload: { items: [] },
+                      evidence: [],
+                    }),
+                  },
+                ],
+              },
+            ],
+          }),
+        );
+      },
+    }).create({
+      apiKey: 'test-key',
+      models: { structured_generation: 'test-model' },
+    });
+    const port = adapter.structured_generation;
+    if (!port) throw new Error('Expected text port');
+    const handler = new ProcessorJobHandler(client, blobs, async () => ({
+      status: 'available',
+      port,
+    }));
+    if (!queued) throw new Error('Expected processor job');
+    const canonical = await handler.load(queued);
+    if (!canonical.input) throw new Error('Expected canonical processor');
+    await handler.execute(canonical.input, new AbortController().signal);
+    const [result] = await client.database
+      .select()
+      .from(processorRuns)
+      .where(eq(processorRuns.id, run.id));
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      provider: { id: 'openai' },
+      model: { id: 'test-model' },
+    });
   });
 });

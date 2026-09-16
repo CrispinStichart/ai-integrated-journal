@@ -169,6 +169,7 @@ export class GroundedAnswerJobHandler implements CanonicalJobHandler<CanonicalGr
           templateHash: answer.promptTemplateHash,
         },
         configuration: GROUNDED_ANSWER_CONFIGURATION,
+        signal,
       });
       const output = validateGroundedAnswerOutput(
         result.data,
@@ -221,6 +222,14 @@ export class GroundedAnswerJobHandler implements CanonicalJobHandler<CanonicalGr
         now: capturedAt,
       });
     } catch (error) {
+      if (
+        signal.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      )
+        throw new QueueJobError(
+          'canceled',
+          'Grounded-answer generation was canceled.',
+        );
       const permanent =
         error instanceof AiProviderOperationError
           ? !error.retryable
@@ -237,6 +246,9 @@ export class GroundedAnswerJobHandler implements CanonicalJobHandler<CanonicalGr
       throw new QueueJobError(
         permanent ? 'permanent' : 'transient',
         'Grounded-answer generation failed.',
+        error instanceof AiProviderOperationError
+          ? error.retryAfterMilliseconds
+          : undefined,
       );
     }
   }
@@ -250,6 +262,7 @@ export function registerGroundedAnswerConsumer(input: {
 }): Promise<string> {
   return registerQueueWorker({
     boss: input.boss,
+    database: input.database,
     queueName: queueNames.groundedAnswers,
     handler: new GroundedAnswerJobHandler(
       input.database,
